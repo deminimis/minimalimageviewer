@@ -91,7 +91,7 @@ Minimal Image Viewer excels in size, privacy, and format support, leveraging WIC
 
 ## Installation and Usage
 
-1. See the release page for single .exe, or build yourself (instructions below). 
+1. See the [release page](https://github.com/deminimis/minimalimageviewer/releases) for single .exe, or build yourself (instructions below). 
 
 2. **Controls**:
    - **Open**: Ctrl+O or right-click → "Open Image".
