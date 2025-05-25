@@ -43,7 +43,6 @@ Minimal Image Viewer is designed for OpSec-sensitive environments, prioritizing 
 
 - **Offline Operation**:
   - No network activity or telemetry, ensuring complete data privacy and suitability for air-gapped systems.
-  - Ideal for forensic, archival, or secure photography workflows.
 
 - **Minimal Attack Surface**:
   - Compact codebase (~700 lines) facilitates manual audits and reduces vulnerability risks.
