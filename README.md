@@ -158,7 +158,11 @@ Minimal Image Viewer is architected for high performance, minimal resource usage
 
 ## Contributing
 
-Contributions are welcome. To contribute:
+Contributions are welcome. The next goal will be video support, retaining minimalist function with play, pause, and a slider, with wide support for different videos. 
+
+
+
+To contribute:
 
 1. Fork the repository.
 2. Create a feature branch (`git checkout -b feature/YourFeature`).
