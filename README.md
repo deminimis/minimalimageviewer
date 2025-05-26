@@ -103,7 +103,11 @@ Minimal Image Viewer excels in size, privacy, and format support, leveraging WIC
    - **Move/Resize**: Drag window or edges (non-full-screen).
    - **Exit**: Esc or right-click → "Exit."
 
-3. If you are having difficulties setting as your main image viewer, see [setting as default viwer](https://github.com/deminimis/minimalimageviewer/blob/main/Instructions/Default%20Viewer.md). 
+3. If you are having difficulties setting as your main image viewer, see [setting as default viwer](https://github.com/deminimis/minimalimageviewer/blob/main/Instructions/Default%20Viewer.md).
+
+## To-Do
+- [ ] Move picture indepedently inside the window.
+- [ ] Video support, retaining minimalist function with play, pause, and a slider, with wide support for different types of videos.
 
 ## Technical Highlights
 
@@ -160,7 +164,7 @@ Minimal Image Viewer is architected for high performance, minimal resource usage
 
 ## Contributing
 
-Contributions are welcome. The next goal will be video support, retaining minimalist function with play, pause, and a slider, with wide support for different videos. 
+Contributions are welcome. 
 
 
 
