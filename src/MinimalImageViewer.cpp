@@ -8,6 +8,7 @@
 #include <string>
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -31,7 +32,10 @@ bool isFullScreen = false;
 IWICImagingFactory* wicFactory = nullptr;
 LONG savedStyle = 0;
 RECT savedRect = {0};
-bool isDragging = false;
+bool isDraggingImage = false;
+float offsetX = 0.0f;
+float offsetY = 0.0f;
+POINT dragStart;
 
 // Function declarations
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -46,7 +50,11 @@ void ToggleFullScreen();
 void DeleteCurrentImage();
 void RotateImage(bool clockwise);
 void SaveImage();
+bool IsPointInImage(POINT pt, RECT clientRect);
+void RegisterFileAssociations();
+void LogError(const std::wstring& message);
 
+// Main entry point
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow) {
     // Prevent multiple instances
     HWND existingWnd = FindWindowW(L"MinimalImageViewer", nullptr);
@@ -55,7 +63,6 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
         if (IsIconic(existingWnd)) {
             ShowWindow(existingWnd, SW_RESTORE);
         }
-        // Pass command line to existing instance
         if (lpCmdLine && *lpCmdLine) {
             COPYDATASTRUCT cds;
             cds.dwData = 1;
@@ -76,12 +83,15 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
         return 1;
     }
 
+    // Register file associations
+    RegisterFileAssociations();
+
     // Register window class
     WNDCLASSEXW wcex = { sizeof(WNDCLASSEXW) };
     wcex.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
     wcex.lpfnWndProc = WndProc;
     wcex.hInstance = hInstance;
-    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(100)); // Use custom icon from resource.res
+    wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(100));
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wcex.hbrBackground = CreateSolidBrush(RGB(0, 0, 0));
     wcex.lpszClassName = L"MinimalImageViewer";
@@ -101,11 +111,34 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
 
     // Handle command line
     if (lpCmdLine && *lpCmdLine) {
-        LoadImage(lpCmdLine);
-        GetImagesInDirectory(lpCmdLine);
-        RECT clientRect;
-        GetClientRect(hWnd, &clientRect);
-        FitImageToWindow(clientRect);
+        std::wstring filePath = lpCmdLine;
+        // Trim leading/trailing whitespace
+        filePath.erase(0, filePath.find_first_not_of(L" \t\r\n"));
+        filePath.erase(filePath.find_last_not_of(L" \t\r\n") + 1);
+        // Remove quotes if present
+        if (!filePath.empty() && filePath.front() == L'"') {
+            filePath.erase(0, 1);
+        }
+        if (!filePath.empty() && filePath.back() == L'"') {
+            filePath.pop_back();
+        }
+        if (!filePath.empty()) {
+            // Convert short path to long path
+            wchar_t longPath[MAX_PATH];
+            if (GetLongPathNameW(filePath.c_str(), longPath, MAX_PATH)) {
+                filePath = longPath;
+            }
+            LogError(L"Attempting to load file from command line: " + filePath);
+            LoadImage(filePath.c_str());
+            GetImagesInDirectory(filePath.c_str());
+            RECT clientRect;
+            GetClientRect(hWnd, &clientRect);
+            FitImageToWindow(clientRect);
+        } else {
+            LogError(L"Empty or invalid file path after parsing command line.");
+        }
+    } else {
+        LogError(L"No command-line arguments provided.");
     }
 
     // Message loop
@@ -133,6 +166,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         PCOPYDATASTRUCT pcds = (PCOPYDATASTRUCT)lParam;
         if (pcds->dwData == 1) {
             wchar_t* filePath = (wchar_t*)pcds->lpData;
+            LogError(L"WM_COPYDATA received file: " + std::wstring(filePath));
             LoadImage(filePath);
             GetImagesInDirectory(filePath);
             RECT clientRect;
@@ -157,7 +191,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (hBitmap) {
             DrawImage(memDC, clientRect);
         } else {
-            // Draw "Right click to see hotkeys" when no image is loaded
             SetTextColor(memDC, RGB(255, 255, 255));
             SetBkMode(memDC, TRANSPARENT);
             HFONT hFont = CreateFontW(20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
@@ -172,8 +205,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             DeleteObject(hFont);
         }
 
-        // Copy to screen
-        BitBlt(hdc, 0, 0, clientRect.right, clientRect.bottom, memDC, 0, 0, SRCCOPY);
+        // Copy to screen, only update the invalid region
+        BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top,
+               ps.rcPaint.right - ps.rcPaint.left, ps.rcPaint.bottom - ps.rcPaint.top,
+               memDC, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
 
         // Cleanup
         SelectObject(memDC, oldBitmap);
@@ -192,10 +227,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             PreviousImage();
             break;
         case VK_UP:
-            RotateImage(true); // Clockwise
+            RotateImage(true);
             break;
         case VK_DOWN:
-            RotateImage(false); // Counterclockwise
+            RotateImage(false);
             break;
         case VK_DELETE:
             DeleteCurrentImage();
@@ -211,12 +246,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 wchar_t szFile[MAX_PATH] = {0};
                 OPENFILENAMEW ofn = { sizeof(OPENFILENAMEW) };
                 ofn.hwndOwner = hWnd;
-                // Updated filter to include more image formats
                 ofn.lpstrFilter = L"All Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2\0All Files\0*.*\0";
                 ofn.lpstrFile = szFile;
                 ofn.nMaxFile = MAX_PATH;
                 ofn.Flags = OFN_FILEMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
+                    LogError(L"Opening file via dialog: " + std::wstring(szFile));
                     LoadImage(szFile);
                     GetImagesInDirectory(szFile);
                     RECT clientRect;
@@ -271,6 +306,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         AppendMenuW(hMenu, MF_STRING, 1010, L"Rotate Clockwise (Up Arrow)");
         AppendMenuW(hMenu, MF_STRING, 1011, L"Rotate Counterclockwise (Down Arrow)");
         AppendMenuW(hMenu, MF_STRING, 1012, L"Save Image (Ctrl+S)");
+        AppendMenuW(hMenu, MF_STRING, 1013, L"Register File Associations");
         POINT pt;
         GetCursorPos(&pt);
         int cmd = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y, 0, hWnd, nullptr);
@@ -281,12 +317,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             wchar_t szFile[MAX_PATH] = {0};
             OPENFILENAMEW ofn = { sizeof(OPENFILENAMEW) };
             ofn.hwndOwner = hWnd;
-            // Updated filter to include more image formats
             ofn.lpstrFilter = L"All Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2\0All Files\0*.*\0";
             ofn.lpstrFile = szFile;
             ofn.nMaxFile = MAX_PATH;
             ofn.Flags = OFN_FILEMUSTEXIST;
             if (GetOpenFileNameW(&ofn)) {
+                LogError(L"Opening file via dialog: " + std::wstring(szFile));
                 LoadImage(szFile);
                 GetImagesInDirectory(szFile);
                 RECT clientRect;
@@ -311,6 +347,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         case 1010: RotateImage(true); break;
         case 1011: RotateImage(false); break;
         case 1012: SaveImage(); break;
+        case 1013: RegisterFileAssociations(); break;
         }
         break;
     }
@@ -320,7 +357,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         ScreenToClient(hWnd, &pt);
         RECT clientRect;
         GetClientRect(hWnd, &clientRect);
-        const int edge = 10; // Edge area for resizing
+        const int edge = 10;
 
         bool nearLeft = pt.x >= 0 && pt.x < edge;
         bool nearRight = pt.x >= clientRect.right - edge && pt.x < clientRect.right;
@@ -338,28 +375,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return HTCLIENT;
     }
     case WM_LBUTTONDOWN: {
-        if (!isFullScreen) {
-            POINT pt = { LOWORD(lParam), HIWORD(lParam) };
-            LRESULT hit = SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y));
-            if (hit == HTCLIENT) {
-                isDragging = true;
-                SetCapture(hWnd);
-                ReleaseCapture();
-                SendMessage(hWnd, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(pt.x, pt.y));
-            } else if (hit >= HTLEFT && hit <= HTBOTTOMRIGHT) {
-                isResizing = true;
-                resizeStart = { LOWORD(lParam), HIWORD(lParam) };
-                ClientToScreen(hWnd, &resizeStart);
-                GetWindowRect(hWnd, &resizeRect);
-                resizeEdge = hit;
-                SetCapture(hWnd);
-            }
-            SetFocus(hWnd); // Ensure window is focused
+        POINT pt = { LOWORD(lParam), HIWORD(lParam) };
+        LRESULT hit = SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y));
+        RECT clientRect;
+        GetClientRect(hWnd, &clientRect);
+        if (hit == HTCLIENT && hBitmap && IsPointInImage(pt, clientRect)) {
+            // Start dragging the image
+            isDraggingImage = true;
+            dragStart = pt;
+            SetCapture(hWnd);
+        } else if (hit == HTCLIENT && !isFullScreen) {
+            // Start dragging the window
+            SetCapture(hWnd);
+            ReleaseCapture();
+            SendMessage(hWnd, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(pt.x, pt.y));
+        } else if (hit >= HTLEFT && hit <= HTBOTTOMRIGHT) {
+            // Start resizing
+            isResizing = true;
+            resizeStart = { LOWORD(lParam), HIWORD(lParam) };
+            ClientToScreen(hWnd, &resizeStart);
+            GetWindowRect(hWnd, &resizeRect);
+            resizeEdge = hit;
+            SetCapture(hWnd);
         }
+        SetFocus(hWnd);
         break;
     }
     case WM_MOUSEMOVE: {
-        if (isResizing) {
+        if (isDraggingImage && hBitmap) {
+            POINT pt = { LOWORD(lParam), HIWORD(lParam) };
+            offsetX += (pt.x - dragStart.x) / zoomFactor;
+            offsetY += (pt.y - dragStart.y) / zoomFactor;
+            dragStart = pt;
+            InvalidateRect(hWnd, nullptr, FALSE);
+        } else if (isResizing) {
             POINT pt = { LOWORD(lParam), HIWORD(lParam) };
             ClientToScreen(hWnd, &pt);
             RECT newRect = resizeRect;
@@ -407,7 +456,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 if (newRect.bottom - newRect.top < minHeight) newRect.bottom = newRect.top + minHeight;
                 break;
             }
-            // Ensure window stays on screen
             HMONITOR hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
             MONITORINFO mi = { sizeof(mi) };
             GetMonitorInfo(hMonitor, &mi);
@@ -416,8 +464,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetWindowPos(hWnd, nullptr, newRect.left, newRect.top,
                          newRect.right - newRect.left, newRect.bottom - newRect.top,
                          SWP_NOZORDER | SWP_NOACTIVATE);
-            UpdateWindow(hWnd);
-            InvalidateRect(hWnd, nullptr, TRUE);
+            InvalidateRect(hWnd, nullptr, FALSE);
         } else if (!isFullScreen) {
             POINT pt = { LOWORD(lParam), HIWORD(lParam) };
             LRESULT hit = SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y));
@@ -430,15 +477,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
     case WM_LBUTTONUP: {
+        if (isDraggingImage) {
+            isDraggingImage = false;
+            ReleaseCapture();
+        }
         if (isResizing) {
             isResizing = false;
             ReleaseCapture();
-            UpdateWindow(hWnd);
-            InvalidateRect(hWnd, nullptr, TRUE);
-        }
-        if (isDragging) {
-            isDragging = false;
-            ReleaseCapture();
+            InvalidateRect(hWnd, nullptr, FALSE);
         }
         break;
     }
@@ -446,26 +492,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         RECT* pRect = (RECT*)lParam;
         if (pRect->right - pRect->left < 200) pRect->right = pRect->left + 200;
         if (pRect->bottom - pRect->top < 200) pRect->bottom = pRect->top + 200;
-        UpdateWindow(hWnd);
-        InvalidateRect(hWnd, nullptr, TRUE);
+        InvalidateRect(hWnd, nullptr, FALSE);
         return TRUE;
     }
     case WM_SIZE: {
-        UpdateWindow(hWnd);
-        InvalidateRect(hWnd, nullptr, TRUE);
+        InvalidateRect(hWnd, nullptr, FALSE);
         break;
     }
     case WM_ACTIVATE: {
         if (LOWORD(wParam) != WA_INACTIVE) {
             SetFocus(hWnd);
-            UpdateWindow(hWnd);
-            InvalidateRect(hWnd, nullptr, TRUE);
+            InvalidateRect(hWnd, nullptr, FALSE);
         }
         return 0;
     }
     case WM_SETFOCUS: {
-        UpdateWindow(hWnd);
-        InvalidateRect(hWnd, nullptr, TRUE);
+        InvalidateRect(hWnd, nullptr, FALSE);
         return 0;
     }
     case WM_DESTROY:
@@ -482,51 +524,158 @@ void LoadImage(const wchar_t* filePath) {
     if (hBitmap) DeleteObject(hBitmap);
     hBitmap = nullptr;
 
-    IWICBitmapDecoder* decoder = nullptr;
-    IWICBitmapFrameDecode* frame = nullptr;
-    IWICFormatConverter* converter = nullptr;
-
-    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (hFile == INVALID_HANDLE_VALUE) {
-        MessageBoxW(hWnd, L"Cannot open image file.", L"Error", MB_OK | MB_ICONERROR);
+    // Validate file path
+    if (!filePath || !*filePath) {
+        LogError(L"LoadImage: Invalid or empty file path.");
+        MessageBoxW(hWnd, L"Invalid or empty file path.", L"Error", MB_OK | MB_ICONERROR);
         return;
     }
 
+    // Check if file exists
+    DWORD attributes = GetFileAttributesW(filePath);
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY)) {
+        DWORD err = GetLastError();
+        wchar_t errorMsg[256];
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, errorMsg, 256, nullptr);
+        std::wstring logMsg = L"LoadImage: File does not exist or is a directory: " + std::wstring(filePath) + L" Error: " + errorMsg;
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    IWICBitmapDecoder* decoder = nullptr;
+    IWICBitmapFrameDecode* frame = nullptr;
+    IWICFormatConverter* converter = nullptr;
     IStream* stream = nullptr;
+
+    // Open file with maximum sharing
+    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        DWORD err = GetLastError();
+        wchar_t errorMsg[256];
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, errorMsg, 256, nullptr);
+        std::wstring logMsg = L"LoadImage: Failed to open file: " + std::wstring(filePath) + L" Error: " + errorMsg;
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+
     HRESULT hr = SHCreateStreamOnFileEx(filePath, STGM_READ | STGM_SHARE_DENY_NONE, 0, FALSE, nullptr, &stream);
-    if (SUCCEEDED(hr)) {
-        hr = wicFactory->CreateDecoderFromStream(stream, nullptr, WICDecodeMetadataCacheOnDemand, &decoder);
-        if (SUCCEEDED(hr)) {
-            hr = decoder->GetFrame(0, &frame);
-            if (SUCCEEDED(hr)) {
-                wicFactory->CreateFormatConverter(&converter);
-                converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
-                
-                UINT width, height;
-                frame->GetSize(&width, &height);
-                BITMAPINFO bmi = { sizeof(BITMAPINFOHEADER), (LONG)width, -(LONG)height, 1, 32, BI_RGB };
-                HDC hdc = GetDC(hWnd);
-                void* bits;
-                hBitmap = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-                ReleaseDC(hWnd, hdc);
-                
-                converter->CopyPixels(nullptr, width * 4, width * height * 4, (BYTE*)bits);
-                zoomFactor = 1.0f;
-                rotationAngle = 0;
-                RECT clientRect;
-                GetClientRect(hWnd, &clientRect);
-                FitImageToWindow(clientRect);
-            }
-        }
-        stream->Release();
-    }
     if (FAILED(hr)) {
-        MessageBoxW(hWnd, L"Failed to load image.", L"Error", MB_OK | MB_ICONERROR);
+        std::wstring logMsg = L"LoadImage: Failed to create stream for file: " + std::wstring(filePath) + L" HRESULT: 0x" + std::to_wstring(hr);
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        CloseHandle(hFile);
+        return;
     }
-    if (converter) converter->Release();
-    if (frame) frame->Release();
-    if (decoder) decoder->Release();
-    if (hFile != INVALID_HANDLE_VALUE) CloseHandle(hFile);
+
+    hr = wicFactory->CreateDecoderFromStream(stream, nullptr, WICDecodeMetadataCacheOnDemand, &decoder);
+    if (FAILED(hr)) {
+        std::wstring logMsg = L"LoadImage: Failed to create decoder for file: " + std::wstring(filePath) + L" HRESULT: 0x" + std::to_wstring(hr);
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        stream->Release();
+        CloseHandle(hFile);
+        return;
+    }
+
+    hr = decoder->GetFrame(0, &frame);
+    if (FAILED(hr)) {
+        std::wstring logMsg = L"LoadImage: Failed to get frame from decoder for file: " + std::wstring(filePath) + L" HRESULT: 0x" + std::to_wstring(hr);
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        decoder->Release();
+        stream->Release();
+        CloseHandle(hFile);
+        return;
+    }
+
+    hr = wicFactory->CreateFormatConverter(&converter);
+    if (FAILED(hr)) {
+        std::wstring logMsg = L"LoadImage: Failed to create format converter for file: " + std::wstring(filePath) + L" HRESULT: 0x" + std::to_wstring(hr);
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        frame->Release();
+        decoder->Release();
+        stream->Release();
+        CloseHandle(hFile);
+        return;
+    }
+
+    hr = converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+    if (FAILED(hr)) {
+        std::wstring logMsg = L"LoadImage: Failed to initialize converter for file: " + std::wstring(filePath) + L" HRESULT: 0x" + std::to_wstring(hr);
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        converter->Release();
+        frame->Release();
+        decoder->Release();
+        stream->Release();
+        CloseHandle(hFile);
+        return;
+    }
+
+    UINT width, height;
+    hr = frame->GetSize(&width, &height);
+    if (FAILED(hr)) {
+        std::wstring logMsg = L"LoadImage: Failed to get image size for file: " + std::wstring(filePath) + L" HRESULT: 0x" + std::to_wstring(hr);
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        converter->Release();
+        frame->Release();
+        decoder->Release();
+        stream->Release();
+        CloseHandle(hFile);
+        return;
+    }
+
+    BITMAPINFO bmi = { sizeof(BITMAPINFOHEADER), (LONG)width, -(LONG)height, 1, 32, BI_RGB };
+    HDC hdc = GetDC(hWnd);
+    void* bits;
+    hBitmap = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    ReleaseDC(hWnd, hdc);
+
+    if (!hBitmap) {
+        std::wstring logMsg = L"LoadImage: Failed to create DIB section for file: " + std::wstring(filePath);
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        converter->Release();
+        frame->Release();
+        decoder->Release();
+        stream->Release();
+        CloseHandle(hFile);
+        return;
+    }
+
+    hr = converter->CopyPixels(nullptr, width * 4, width * height * 4, (BYTE*)bits);
+    if (FAILED(hr)) {
+        std::wstring logMsg = L"LoadImage: Failed to copy pixels for file: " + std::wstring(filePath) + L" HRESULT: 0x" + std::to_wstring(hr);
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        DeleteObject(hBitmap);
+        hBitmap = nullptr;
+        converter->Release();
+        frame->Release();
+        decoder->Release();
+        stream->Release();
+        CloseHandle(hFile);
+        return;
+    }
+
+    zoomFactor = 1.0f;
+    rotationAngle = 0;
+    offsetX = 0.0f;
+    offsetY = 0.0f;
+    RECT clientRect;
+    GetClientRect(hWnd, &clientRect);
+    FitImageToWindow(clientRect);
+    LogError(L"LoadImage: Successfully loaded file: " + std::wstring(filePath));
+
+    converter->Release();
+    frame->Release();
+    decoder->Release();
+    stream->Release();
+    CloseHandle(hFile);
 }
 
 void DrawImage(HDC hdc, RECT clientRect) {
@@ -551,15 +700,15 @@ void DrawImage(HDC hdc, RECT clientRect) {
     float cosTheta = (float)cos(rad);
     float sinTheta = (float)sin(rad);
 
-    // Set up transformation to rotate around image center and place at window center
+    // Set up transformation
     SetGraphicsMode(hdc, GM_ADVANCED);
     XFORM xform = {0};
     xform.eM11 = cosTheta * zoomFactor;
     xform.eM12 = sinTheta * zoomFactor;
     xform.eM21 = -sinTheta * zoomFactor;
     xform.eM22 = cosTheta * zoomFactor;
-    xform.eDx = windowCenterX - (srcWidth / 2.0f) * cosTheta * zoomFactor + (srcHeight / 2.0f) * sinTheta * zoomFactor;
-    xform.eDy = windowCenterY - (srcWidth / 2.0f) * sinTheta * zoomFactor - (srcHeight / 2.0f) * cosTheta * zoomFactor;
+    xform.eDx = windowCenterX - (srcWidth / 2.0f) * cosTheta * zoomFactor + (srcHeight / 2.0f) * sinTheta * zoomFactor + offsetX * zoomFactor;
+    xform.eDy = windowCenterY - (srcWidth / 2.0f) * sinTheta * zoomFactor - (srcHeight / 2.0f) * cosTheta * zoomFactor + offsetY * zoomFactor;
     SetWorldTransform(hdc, &xform);
 
     // Draw image
@@ -575,13 +724,45 @@ void DrawImage(HDC hdc, RECT clientRect) {
     DeleteDC(memDC);
 }
 
+bool IsPointInImage(POINT pt, RECT clientRect) {
+    if (!hBitmap) return false;
+
+    BITMAP bm;
+    GetObject(hBitmap, sizeof(BITMAP), &bm);
+    int srcWidth = bm.bmWidth;
+    int srcHeight = bm.bmHeight;
+
+    int clientWidth = clientRect.right - clientRect.left;
+    int clientHeight = clientRect.bottom - clientRect.top;
+    float windowCenterX = clientWidth / 2.0f;
+    float windowCenterY = clientHeight / 2.0f;
+
+    double rad = rotationAngle * 3.1415926535 / 180.0;
+    float cosTheta = (float)cos(rad);
+    float sinTheta = (float)sin(rad);
+
+    // Transform mouse point to image coordinates
+    float transformedX = pt.x - (windowCenterX + offsetX * zoomFactor);
+    float transformedY = pt.y - (windowCenterY + offsetY * zoomFactor);
+
+    // Inverse rotation
+    float x = (transformedX * cosTheta + transformedY * sinTheta) / zoomFactor;
+    float y = (-transformedX * sinTheta + transformedY * cosTheta) / zoomFactor;
+
+    // Adjust to image coordinate system (origin at top-left)
+    x += srcWidth / 2.0f;
+    y += srcHeight / 2.0f;
+
+    // Check if point is within image bounds
+    return x >= 0 && x <= srcWidth && y >= 0 && y <= srcHeight;
+}
+
 bool IsImageFile(const wchar_t* filePath) {
-    // Attempt to create a WIC decoder to verify if the file is a valid image
     IWICBitmapDecoder* decoder = nullptr;
     IStream* stream = nullptr;
     bool isImage = false;
 
-    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile != INVALID_HANDLE_VALUE) {
         HRESULT hr = SHCreateStreamOnFileEx(filePath, STGM_READ | STGM_SHARE_DENY_NONE, 0, FALSE, nullptr, &stream);
         if (SUCCEEDED(hr)) {
@@ -603,7 +784,6 @@ void GetImagesInDirectory(const wchar_t* filePath) {
     wcscpy_s(folder, MAX_PATH, filePath);
     PathRemoveFileSpecW(folder);
     
-    // Use wildcard to get all files and filter by valid images
     WIN32_FIND_DATAW fd;
     wchar_t searchPath[MAX_PATH];
     swprintf_s(searchPath, MAX_PATH, L"%s\\*.*", folder);
@@ -635,6 +815,7 @@ void NextImage() {
     if (imageFiles.empty() || currentImageIndex < 0) return;
     if (currentImageIndex < (int)imageFiles.size() - 1) {
         currentImageIndex++;
+        LogError(L"NextImage: Loading file: " + imageFiles[currentImageIndex]);
         LoadImage(imageFiles[currentImageIndex].c_str());
         RECT clientRect;
         GetClientRect(hWnd, &clientRect);
@@ -646,6 +827,7 @@ void PreviousImage() {
     if (imageFiles.empty() || currentImageIndex < 0) return;
     if (currentImageIndex > 0) {
         currentImageIndex--;
+        LogError(L"PreviousImage: Loading file: " + imageFiles[currentImageIndex]);
         LoadImage(imageFiles[currentImageIndex].c_str());
         RECT clientRect;
         GetClientRect(hWnd, &clientRect);
@@ -657,7 +839,7 @@ void ZoomImage(float delta) {
     zoomFactor *= delta;
     if (zoomFactor < 0.1f) zoomFactor = 0.1f;
     if (zoomFactor > 10.0f) zoomFactor = 10.0f;
-    InvalidateRect(hWnd, nullptr, TRUE);
+    InvalidateRect(hWnd, nullptr, FALSE);
 }
 
 void FitImageToWindow(RECT clientRect) {
@@ -675,7 +857,9 @@ void FitImageToWindow(RECT clientRect) {
     }
     
     zoomFactor = min(clientWidth / imageWidth, clientHeight / imageHeight);
-    InvalidateRect(hWnd, nullptr, TRUE);
+    offsetX = 0.0f;
+    offsetY = 0.0f;
+    InvalidateRect(hWnd, nullptr, FALSE);
 }
 
 void ToggleFullScreen() {
@@ -703,16 +887,13 @@ void ToggleFullScreen() {
                      SWP_FRAMECHANGED | SWP_SHOWWINDOW);
         isFullScreen = false;
     }
-    UpdateWindow(hWnd);
-    InvalidateRect(hWnd, nullptr, TRUE);
+    InvalidateRect(hWnd, nullptr, FALSE);
 }
 
 void DeleteCurrentImage() {
     if (imageFiles.empty() || currentImageIndex < 0) return;
     
     if (MessageBoxW(hWnd, L"Are you sure you want to delete this image?", L"Confirm Delete", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-
-
         std::wstring filePath = imageFiles[currentImageIndex];
         std::vector<wchar_t> filePathBuffer(filePath.size() + 2, 0);
         wcscpy_s(filePathBuffer.data(), filePath.size() + 1, filePath.c_str());
@@ -728,18 +909,19 @@ void DeleteCurrentImage() {
             imageFiles.erase(imageFiles.begin() + currentImageIndex);
             if (imageFiles.empty()) {
                 currentImageIndex = -1;
-                InvalidateRect(hWnd, nullptr, TRUE);
+                InvalidateRect(hWnd, nullptr, FALSE);
             } else {
                 if (currentImageIndex >= (int)imageFiles.size()) currentImageIndex--;
+                LogError(L"DeleteCurrentImage: Loading next file: " + imageFiles[currentImageIndex]);
                 LoadImage(imageFiles[currentImageIndex].c_str());
                 RECT clientRect;
                 GetClientRect(hWnd, &clientRect);
                 FitImageToWindow(clientRect);
             }
         } else {
-            wchar_t errorMsg[256];
-            swprintf_s(errorMsg, L"Failed to move image to Recycle Bin. Error code: %d", result);
-            MessageBoxW(hWnd, errorMsg, L"Failed to delete image", MB_OK | MB_ICONERROR);
+            std::wstring errorMsg = L"Failed to move image to Recycle Bin. Error code: " + std::to_wstring(result);
+            LogError(errorMsg);
+            MessageBoxW(hWnd, errorMsg.c_str(), L"Failed to delete image", MB_OK | MB_ICONERROR);
         }
     }
 }
@@ -749,7 +931,7 @@ void RotateImage(bool clockwise) {
     rotationAngle += clockwise ? 90 : -90;
     if (rotationAngle >= 360) rotationAngle -= 360;
     if (rotationAngle < 0) rotationAngle += 360;
-    InvalidateRect(hWnd, nullptr, TRUE);
+    InvalidateRect(hWnd, nullptr, FALSE);
 }
 
 void SaveImage() {
@@ -758,7 +940,7 @@ void SaveImage() {
     if (hBitmap) {
         DeleteObject(hBitmap);
         hBitmap = nullptr;
-        InvalidateRect(hWnd, nullptr, TRUE);
+        InvalidateRect(hWnd, nullptr, FALSE);
     }
 
     IWICBitmapDecoder* decoder = nullptr;
@@ -770,11 +952,14 @@ void SaveImage() {
     IStream* stream = nullptr;
     HRESULT hr;
 
-    HANDLE hFile = CreateFileW(imageFiles[currentImageIndex].c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    HANDLE hFile = CreateFileW(imageFiles[currentImageIndex].c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (hFile == INVALID_HANDLE_VALUE) {
+        DWORD err = GetLastError();
         wchar_t errorMsg[256];
-        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, GetLastError(), 0, errorMsg, 256, nullptr);
-        MessageBoxW(hWnd, errorMsg, L"Cannot open image file.", MB_OK | MB_ICONERROR);
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, errorMsg, 256, nullptr);
+        std::wstring logMsg = L"SaveImage: Cannot open file: " + imageFiles[currentImageIndex] + L" Error: " + errorMsg;
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -802,11 +987,12 @@ void SaveImage() {
         if (frame) frame->Release();
         if (decoder) decoder->Release();
         if (bitmap) bitmap->Release();
-        MessageBoxW(hWnd, L"Cannot load image for saving.", L"Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot load image for saving. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
         return;
     }
 
-    // Get the original container format
     GUID containerFormat;
     hr = decoder->GetContainerFormat(&containerFormat);
     if (FAILED(hr)) {
@@ -814,7 +1000,9 @@ void SaveImage() {
         frame->Release();
         decoder->Release();
         converter->Release();
-        MessageBoxW(hWnd, L"Cannot determine original file format.", L"Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot determine original file format. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -848,7 +1036,9 @@ void SaveImage() {
             if (frame) frame->Release();
             if (decoder) decoder->Release();
             if (converter) converter->Release();
-            MessageBoxW(hWnd, L"Cannot rotate image.", L"Error", MB_OK | MB_ICONERROR);
+            std::wstring errorMsg = L"SaveImage: Cannot rotate image. HRESULT: " + std::to_wstring(hr);
+            LogError(errorMsg);
+            MessageBoxW(hWnd, errorMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
             return;
         }
     }
@@ -858,13 +1048,13 @@ void SaveImage() {
 
     hr = SHCreateStreamOnFileW(tempPath.c_str(), STGM_WRITE | STGM_CREATE, &stream);
     if (FAILED(hr)) {
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, L"Cannot create temporary file. HRESULT: 0x%08X", hr);
+        std::wstring errorMsg = L"SaveImage: Cannot create temporary file: " + tempPath + L" HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
         bitmap->Release();
         frame->Release();
         decoder->Release();
         converter->Release();
-        MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -875,9 +1065,9 @@ void SaveImage() {
         frame->Release();
         decoder->Release();
         converter->Release();
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, L"Cannot create encoder for the specified format. HRESULT: 0x%08X", hr);
-        MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot create encoder. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -889,9 +1079,9 @@ void SaveImage() {
         frame->Release();
         decoder->Release();
         converter->Release();
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, L"Cannot initialize encoder. HRESULT: 0x%08X", hr);
-        MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot initialize encoder. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -904,13 +1094,12 @@ void SaveImage() {
         frame->Release();
         decoder->Release();
         converter->Release();
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, L"Cannot create frame. HRESULT: 0x%08X", hr);
-        MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot create frame. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         return;
     }
 
-    // Apply format-specific properties (e.g., JPEG quality)
     if (containerFormat == GUID_ContainerFormatJpeg) {
         PROPBAG2 option = {0};
         option.pstrName = L"ImageQuality";
@@ -929,9 +1118,9 @@ void SaveImage() {
             frame->Release();
             decoder->Release();
             converter->Release();
-            wchar_t errorMsg[256];
-            swprintf_s(errorMsg, L"Cannot set JPEG quality. HRESULT: 0x%08X", hr);
-            MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+            std::wstring errorMsg = L"SaveImage: Cannot set JPEG quality. HRESULT: " + std::to_wstring(hr);
+            LogError(errorMsg);
+            MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
             return;
         }
     }
@@ -946,9 +1135,9 @@ void SaveImage() {
         frame->Release();
         decoder->Release();
         converter->Release();
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, L"Cannot initialize frame. HRESULT: 0x%08X", hr);
-        MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot initialize frame. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         return;
     }
     propBag->Release();
@@ -962,9 +1151,9 @@ void SaveImage() {
         frame->Release();
         decoder->Release();
         converter->Release();
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, L"Cannot write image. HRESULT: 0x%08X", hr);
-        MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot write image. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -977,9 +1166,9 @@ void SaveImage() {
         frame->Release();
         decoder->Release();
         converter->Release();
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, L"Cannot commit frame. HRESULT: 0x%08X", hr);
-        MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot commit frame. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -992,9 +1181,9 @@ void SaveImage() {
         frame->Release();
         decoder->Release();
         converter->Release();
-        wchar_t errorMsg[256];
-        swprintf_s(errorMsg, L"Cannot commit encoder. HRESULT: 0x%08X", hr);
-        MessageBoxW(hWnd, errorMsg, L"Save Error", MB_OK | MB_ICONERROR);
+        std::wstring errorMsg = L"SaveImage: Cannot commit encoder. HRESULT: " + std::to_wstring(hr);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         return;
     }
 
@@ -1016,17 +1205,125 @@ void SaveImage() {
     }
 
     if (!replaced) {
+        DWORD err = GetLastError();
         wchar_t errorMsg[256];
-        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, GetLastError(), 0, errorMsg, 256, nullptr);
-        MessageBoxW(hWnd, errorMsg, L"Cannot replace original file.", MB_OK | MB_ICONERROR);
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, errorMsg, 256, nullptr);
+        std::wstring logMsg = L"SaveImage: Cannot replace original file: " + tempPath + L" Error: " + errorMsg;
+        LogError(logMsg);
+        MessageBoxW(hWnd, logMsg.c_str(), L"Save Error", MB_OK | MB_ICONERROR);
         DeleteFileW(tempPath.c_str());
         return;
     }
 
     DeleteFileW(tempPath.c_str());
 
+    LogError(L"SaveImage: Successfully saved file: " + originalPath);
     LoadImage(originalPath.c_str());
     RECT clientRect;
     GetClientRect(hWnd, &clientRect);
     FitImageToWindow(clientRect);
+}
+
+void RegisterFileAssociations() {
+    // List of supported file extensions
+    const wchar_t* extensions[] = {
+        L".jpg", L".jpeg", L".png", L".bmp", L".gif",
+        L".tiff", L".tif", L".ico", L".webp", L".heic",
+        L".heif", L".avif", L".cr2", L".cr3", L".nef",
+        L".dng", L".arw", L".orf", L".rw2"
+    };
+    const int numExtensions = sizeof(extensions) / sizeof(extensions[0]);
+
+    // Get the executable path
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+
+    // Open registry key for the application
+    HKEY hKey;
+    LONG result = RegCreateKeyExW(HKEY_CLASSES_ROOT, L"Applications\\MinimalImageViewer.exe", 0, nullptr,
+                                  REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr);
+    if (result != ERROR_SUCCESS) {
+        std::wstring errorMsg = L"RegisterFileAssociations: Failed to create application registry key. Error: " + std::to_wstring(result);
+        LogError(errorMsg);
+        MessageBoxW(hWnd, errorMsg.c_str(), L"Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    // Set SupportedTypes
+    HKEY hSupportedTypes;
+    result = RegCreateKeyExW(hKey, L"SupportedTypes", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hSupportedTypes, nullptr);
+    if (result == ERROR_SUCCESS) {
+        for (int i = 0; i < numExtensions; ++i) {
+            RegSetValueExW(hSupportedTypes, extensions[i], 0, REG_SZ, (const BYTE*)L"", 0);
+        }
+        RegCloseKey(hSupportedTypes);
+    }
+
+    // Set shell open command
+    HKEY hShellOpen;
+    result = RegCreateKeyExW(hKey, L"shell\\open\\command", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hShellOpen, nullptr);
+    if (result == ERROR_SUCCESS) {
+        std::wstring command = L"\"" + std::wstring(exePath) + L"\" \"%1\"";
+        RegSetValueExW(hShellOpen, nullptr, 0, REG_SZ, (const BYTE*)command.c_str(), (DWORD)(command.size() + 1) * sizeof(wchar_t));
+        RegCloseKey(hShellOpen);
+    }
+    RegCloseKey(hKey);
+
+    // Register for each file extension
+    for (int i = 0; i < numExtensions; ++i) {
+        HKEY hExtKey;
+        result = RegCreateKeyExW(HKEY_CLASSES_ROOT, extensions[i], 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hExtKey, nullptr);
+        if (result == ERROR_SUCCESS) {
+            // Set OpenWithProgids
+            HKEY hOpenWith;
+            result = RegCreateKeyExW(hExtKey, L"OpenWithProgids", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hOpenWith, nullptr);
+            if (result == ERROR_SUCCESS) {
+                RegSetValueExW(hOpenWith, L"MinimalImageViewer.File", 0, REG_NONE, nullptr, 0);
+                RegCloseKey(hOpenWith);
+            }
+
+            // Set default program
+            HKEY hProgId;
+            result = RegCreateKeyExW(HKEY_CLASSES_ROOT, L"MinimalImageViewer.File", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hProgId, nullptr);
+            if (result == ERROR_SUCCESS) {
+                RegSetValueExW(hProgId, nullptr, 0, REG_SZ, (const BYTE*)L"Minimal Image Viewer File", (DWORD)(wcslen(L"Minimal Image Viewer File") + 1) * sizeof(wchar_t));
+                HKEY hShell;
+                result = RegCreateKeyExW(hProgId, L"shell\\open\\command", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hShell, nullptr);
+                if (result == ERROR_SUCCESS) {
+                    std::wstring command = L"\"" + std::wstring(exePath) + L"\" \"%1\"";
+                    RegSetValueExW(hShell, nullptr, 0, REG_SZ, (const BYTE*)command.c_str(), (DWORD)(command.size() + 1) * sizeof(wchar_t));
+                    RegCloseKey(hShell);
+                }
+                RegCloseKey(hProgId);
+            }
+            RegCloseKey(hExtKey);
+        }
+    }
+
+    // Notify Windows of association changes
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+
+    LogError(L"RegisterFileAssociations: Successfully registered file associations.");
+    MessageBoxW(hWnd, L"File associations registered successfully.", L"Success", MB_OK | MB_ICONINFORMATION);
+}
+
+void LogError(const std::wstring& message) {
+    // Get temp directory for log file
+    wchar_t tempPath[MAX_PATH];
+    GetTempPathW(MAX_PATH, tempPath);
+    std::wstring logFilePath = std::wstring(tempPath) + L"MinimalImageViewer.log";
+
+    std::wofstream logFile(logFilePath, std::ios::app);
+    if (logFile.is_open()) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        wchar_t timeStr[64];
+        swprintf_s(timeStr, L"%04d-%02d-%02d %02d:%02d:%02d.%03d",
+                   st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+        logFile << L"[" << timeStr << L"] " << message << L"\n";
+        logFile.close();
+    } else {
+        // Fallback to message box if log file cannot be written
+        MessageBoxW(nullptr, (L"Failed to write to log file: " + logFilePath + L"\n" + message).c_str(), L"Log Error", MB_OK | MB_ICONERROR);
+    }
 }
