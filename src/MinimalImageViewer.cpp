@@ -104,13 +104,18 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
     UpdateWindow(hWnd);
 
     // Handle command line
-    if (lpCmdLine && *lpCmdLine) {
-        LoadImage(lpCmdLine);
-        GetImagesInDirectory(lpCmdLine);
-        RECT clientRect;
-        GetClientRect(hWnd, &clientRect);
-        FitImageToWindow(clientRect);
-    }
+	int argc;
+	LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+	if (argv && argc > 1) {
+		LoadImage(argv[1]);
+		GetImagesInDirectory(argv[1]);
+		RECT clientRect;
+		GetClientRect(hWnd, &clientRect);
+		FitImageToWindow(clientRect);
+	}
+	LocalFree(argv);
+
+
 
     // Message loop
     MSG msg;
