@@ -4,7 +4,7 @@ _**A High-Performance, Secure, and Featherweight Image Viewer for Windows**_
 
 ### The 🏎️ FASTEST and MOST 🪶 LIGHTWEIGHT image viewer available for Windows
 
-Minimal Image Viewer is an open-source, C++-based image viewing application engineered for Windows, prioritizing performance and minimalism. With a compiled size of only ~360KB. Leveraging native Windows APIs and the Windows Imaging Component (WIC), it ensures accurate functionality. 
+Minimal Image Viewer is an open-source, C++-based image viewing application engineered for Windows, prioritizing performance and minimalism. With a compiled size of only ~330KB. Leveraging native Windows APIs and the Windows Imaging Component (WIC), it ensures accurate functionality. 
 
 ## Key Features
 
@@ -26,6 +26,7 @@ Minimal Image Viewer is an open-source, C++-based image viewing application engi
   - Saves rotated images (Ctrl+S or context menu) in their original WIC-supported format, using temporary files to ensure atomic operations.
   - Deletes images to the Recycle Bin (Delete key or context menu) for recoverable deletions.
   - Opens images with a comprehensive filter for common image formats, falling back to WIC for validation.
+  - Copy the current view to the clipboard (Ctrl+C) or paste an image/file path from the clipboard (Ctrl+V).
 
 - **Minimalist Interface**:
   - Borderless window for a distraction-free experience, with dynamic cursor feedback for resizing.
@@ -45,11 +46,10 @@ Minimal Image Viewer is an open-source, C++-based image viewing application engi
 Minimal Image Viewer is designed for OpSec-sensitive environments, prioritizing a minimal attack surface and zero telemetry.
 
 - **Offline Operation**:
-  - No network activity or telemetry, ensuring complete data privacy and suitability for air-gapped systems.
+  - No network activity or telemetry, ensuring complete data privacy.
 
 - **Minimal Attack Surface**:
-  - Compact codebase (~700 lines) facilitates manual audits and reduces vulnerability risks.
-  - Relies exclusively on hardened Windows APIs and WIC, avoiding third-party library dependencies.
+  - The modular codebase is easy to audit. It relies exclusively on hardened, native Windows APIs and WIC, avoiding third-party library dependencies.
   - Strict memory management mitigates buffer overflows and leaks, validated with static analysis tools.
 
 - **Safe File Handling**:
@@ -73,7 +73,7 @@ Minimal Image Viewer adheres to the Unix philosophy of “do one thing and do it
 
 | Feature                     | Minimal Image Viewer | Windows Photos | IrfanView | XnView |
 |-----------------------------|----------------------|----------------|-----------|--------|
-| **Executable Size**         | ~0.36 KB             | ~50 MB         | ~3 MB     | ~5 MB  |
+| **Executable Size**         | ~0.33 MB             | ~50 MB         | ~3 MB     | ~5 MB  |
 | **Dependencies**            | None (Windows APIs) | UWP Framework  | Optional Plugins | Optional Plugins |
 | **Telemetry**               | None                | Yes            | Optional  | Optional |
 | **Offline Operation**       | Yes                 | Partial        | Yes       | Yes    |
@@ -105,12 +105,14 @@ Minimal Image Viewer excels in size, privacy, and format support, leveraging WIC
    - **Full-Screen**: F11 or right-click → "Full Screen."
    - **Move/Resize**: Drag window or edges (non-full-screen).
    - **Exit**: Esc or right-click → "Exit."
+   - **Copy**: Ctrl+c.
+   - **Paste**: Ctrl+v
+  
+
 
 3. If you are having difficulties setting as your main image viewer, see [setting as default viwer](https://github.com/deminimis/minimalimageviewer/blob/main/Instructions/Default%20Viewer.md).
 
-## To-Do
-- [ ] Move picture indepedently inside the window.
-- [ ] Video support, retaining minimalist function with play, pause, and a slider, with wide support for different types of videos.
+
 
 ## Technical Highlights
 
@@ -160,7 +162,7 @@ Minimal Image Viewer is architected for high performance, minimal resource usage
   - **Visual Studio**:
     ```cmd
     rc.exe /fo resource.res resource.rc
-    cl.exe /O2 /EHsc /Fe:MinimalImageViewer.exe MinimalImageViewer.cpp resource.res /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comdlg32.lib shlwapi.lib windowscodecs.lib ole32.lib shell32.lib propsys.lib oleaut32.lib
+    cl.exe /O2 /EHsc /Fe:MinimalImageViewer.exe main.cpp ui_handlers.cpp image_drawing.cpp image_io.cpp resource.res /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comdlg32.lib shlwapi.lib windowscodecs.lib ole32.lib shell32.lib propsys.lib oleaut32.lib
     ```
 
 
