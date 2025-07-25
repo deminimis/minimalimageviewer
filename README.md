@@ -78,7 +78,7 @@ Minimal Image Viewer adheres to the Unix philosophy of “do one thing and do it
 
 | Feature                     | Minimal Image Viewer | Windows Photos | IrfanView | XnView |
 |-----------------------------|----------------------|----------------|-----------|--------|
-| **Executable Size**         | ~0.33 MB             | ~50 MB         | ~3 MB     | ~5 MB  |
+| **Executable Size**         | ~0.18 MB             | ~50 MB         | ~3 MB     | ~5 MB  |
 | **Dependencies**            | None (Windows APIs) | UWP Framework  | Optional Plugins | Optional Plugins |
 | **Telemetry**               | None                | Yes            | Optional  | Optional |
 | **Offline Operation**       | Yes                 | Partial        | Yes       | Yes    |
