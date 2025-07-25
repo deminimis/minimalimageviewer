@@ -1,4 +1,5 @@
 #include "viewer.h"
+#include <winbase.h>
 
 AppContext g_ctx;
 
@@ -13,7 +14,7 @@ void CenterImage(bool resetZoom) {
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
 
-int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmdShow) {
+int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
     HWND existingWnd = FindWindowW(L"MinimalImageViewer", nullptr);
     if (existingWnd) {
         SetForegroundWindow(existingWnd);
@@ -21,11 +22,11 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
             ShowWindow(existingWnd, SW_RESTORE);
         }
         if (lpCmdLine && *lpCmdLine) {
-            COPYDATASTRUCT cds;
+            COPYDATASTRUCT cds{};
             cds.dwData = 1;
-            cds.cbData = (DWORD)(wcslen(lpCmdLine) + 1) * sizeof(wchar_t);
+            cds.cbData = (static_cast<DWORD>(wcslen(lpCmdLine)) + 1) * sizeof(wchar_t);
             cds.lpData = lpCmdLine;
-            SendMessage(existingWnd, WM_COPYDATA, (WPARAM)hInstance, (LPARAM)&cds);
+            SendMessage(existingWnd, WM_COPYDATA, reinterpret_cast<WPARAM>(hInstance), reinterpret_cast<LPARAM>(&cds));
         }
         return 0;
     }
@@ -54,7 +55,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
     RegisterClassExW(&wcex);
 
     g_ctx.hWnd = CreateWindowW(
-        wcex.lpszClassName, 
+        wcex.lpszClassName,
         L"Minimal Image Viewer",
         WS_POPUP | WS_VISIBLE,
         CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
@@ -65,23 +66,25 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
         MessageBoxW(nullptr, L"Failed to create window.", L"Error", MB_OK | MB_ICONERROR);
         return 1;
     }
-    
-    SetWindowLongPtr(g_ctx.hWnd, GWLP_USERDATA, (LONG_PTR)&g_ctx);
+
+    SetWindowLongPtr(g_ctx.hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&g_ctx));
 
     DragAcceptFiles(g_ctx.hWnd, TRUE);
 
     ShowWindow(g_ctx.hWnd, nCmdShow);
     UpdateWindow(g_ctx.hWnd);
 
-    int argc;
+    int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv && argc > 1) {
         LoadImageFromFile(argv[1]);
         GetImagesInDirectory(argv[1]);
     }
-    LocalFree(argv);
+    if (argv) {
+        LocalFree(argv);
+    }
 
-    MSG msg;
+    MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
@@ -91,5 +94,5 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR lpCmdLine, int nCmd
     g_ctx.wicFactory = nullptr;
     CoUninitialize();
 
-    return (int)msg.wParam;
+    return static_cast<int>(msg.wParam);
 }

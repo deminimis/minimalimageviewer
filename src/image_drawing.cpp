@@ -2,13 +2,13 @@
 
 extern AppContext g_ctx;
 
-void DrawImage(HDC hdc, const RECT& clientRect) {
-    if (!g_ctx.hBitmap || IsRectEmpty(&clientRect)) return;
+void DrawImage(HDC hdc, const RECT& clientRect, const AppContext& ctx) {
+    if (!ctx.hBitmap || IsRectEmpty(&clientRect)) return;
 
     BITMAP bm;
-    GetObject(g_ctx.hBitmap, sizeof(BITMAP), &bm);
+    GetObject(ctx.hBitmap, sizeof(BITMAP), &bm);
     HDC memDC = CreateCompatibleDC(hdc);
-    SelectObject(memDC, g_ctx.hBitmap);
+    SelectObject(memDC, ctx.hBitmap);
 
     int srcWidth = bm.bmWidth;
     int srcHeight = bm.bmHeight;
@@ -17,17 +17,17 @@ void DrawImage(HDC hdc, const RECT& clientRect) {
 
     SetGraphicsMode(hdc, GM_ADVANCED);
     
-    double rad = g_ctx.rotationAngle * 3.1415926535 / 180.0;
-    float cosTheta = (float)cos(rad);
-    float sinTheta = (float)sin(rad);
+    double rad = ctx.rotationAngle * 3.1415926535 / 180.0;
+    float cosTheta = static_cast<float>(cos(rad));
+    float sinTheta = static_cast<float>(sin(rad));
 
     XFORM xform;
-    xform.eM11 = cosTheta * g_ctx.zoomFactor;
-    xform.eM12 = sinTheta * g_ctx.zoomFactor;
-    xform.eM21 = -sinTheta * g_ctx.zoomFactor;
-    xform.eM22 = cosTheta * g_ctx.zoomFactor;
-    xform.eDx = (float)clientWidth / 2 + g_ctx.offsetX - (srcWidth / 2.0f * xform.eM11 + srcHeight / 2.0f * xform.eM21);
-    xform.eDy = (float)clientHeight / 2 + g_ctx.offsetY - (srcWidth / 2.0f * xform.eM12 + srcHeight / 2.0f * xform.eM22);
+    xform.eM11 = cosTheta * ctx.zoomFactor;
+    xform.eM12 = sinTheta * ctx.zoomFactor;
+    xform.eM21 = -sinTheta * ctx.zoomFactor;
+    xform.eM22 = cosTheta * ctx.zoomFactor;
+    xform.eDx = static_cast<float>(clientWidth) / 2.0f + ctx.offsetX - (srcWidth / 2.0f * xform.eM11 + srcHeight / 2.0f * xform.eM21);
+    xform.eDy = static_cast<float>(clientHeight) / 2.0f + ctx.offsetY - (srcWidth / 2.0f * xform.eM12 + srcHeight / 2.0f * xform.eM22);
 
     SetWorldTransform(hdc, &xform);
 
@@ -49,10 +49,10 @@ void FitImageToWindow() {
     BITMAP bm;
     GetObject(g_ctx.hBitmap, sizeof(BITMAP), &bm);
     
-    float clientWidth = (float)(clientRect.right - clientRect.left);
-    float clientHeight = (float)(clientRect.bottom - clientRect.top);
-    float imageWidth = (float)bm.bmWidth;
-    float imageHeight = (float)bm.bmHeight;
+    float clientWidth = static_cast<float>(clientRect.right - clientRect.left);
+    float clientHeight = static_cast<float>(clientRect.bottom - clientRect.top);
+    float imageWidth = static_cast<float>(bm.bmWidth);
+    float imageHeight = static_cast<float>(bm.bmHeight);
 
     if (g_ctx.rotationAngle == 90 || g_ctx.rotationAngle == 270) {
         std::swap(imageWidth, imageHeight);
@@ -80,7 +80,6 @@ void RotateImage(bool clockwise) {
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
 
-
 bool IsPointInImage(POINT pt, const RECT& clientRect) {
     if (!g_ctx.hBitmap) return false;
 
@@ -100,8 +99,8 @@ bool IsPointInImage(POINT pt, const RECT& clientRect) {
     float scaledY = translatedY / g_ctx.zoomFactor;
     
     double rad = -g_ctx.rotationAngle * 3.1415926535 / 180.0;
-    float cosTheta = (float)cos(rad);
-    float sinTheta = (float)sin(rad);
+    float cosTheta = static_cast<float>(cos(rad));
+    float sinTheta = static_cast<float>(sin(rad));
 
     float unrotatedX = scaledX * cosTheta - scaledY * sinTheta;
     float unrotatedY = scaledX * sinTheta + scaledY * cosTheta;

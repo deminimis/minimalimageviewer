@@ -49,7 +49,9 @@ struct AppContext {
     bool isHoveringClose = false;
 };
 
-// --- Function Prototypes ---
+//
+// Function Prototypes
+//
 
 // main.cpp
 void CenterImage(bool resetZoom);
@@ -69,7 +71,7 @@ void HandleCopy();
 void OpenFileLocationAction();
 
 // image_drawing.cpp
-void DrawImage(HDC hdc, const RECT& clientRect);
+void DrawImage(HDC hdc, const RECT& clientRect, const AppContext& ctx);
 void FitImageToWindow();
 void ZoomImage(float factor);
 void RotateImage(bool clockwise);
