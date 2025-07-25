@@ -153,7 +153,7 @@ Minimal Image Viewer is architected for high performance, minimal resource usage
 ### Performance Optimizations
 
 - **Minimal Footprint**:
-  - Compiles to a ~360 KB executable with `/O2` optimization, requiring <10 MB runtime memory for most images.
+  - Compiles to a ~185 KB executable with `/O2` optimization, requiring <10 MB runtime memory for most images.
   - No external dependencies beyond standard Windows libraries (`user32.lib`, `gdi32.lib`, `windowscodecs.lib`, etc.).
 
 - **Resource Management**:
