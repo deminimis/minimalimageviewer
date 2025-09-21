@@ -1,5 +1,4 @@
 #pragma once
-
 #define IDI_APPICON                 101
 #define IDM_OPEN                    1001
 #define IDM_NEXT_IMG                1002
@@ -18,3 +17,6 @@
 #define IDM_COPY                    1015
 #define IDM_PASTE                   1016
 #define IDM_OPEN_LOCATION           1017
+#define IDM_START_FULLSCREEN        1018
+#define IDM_REGISTER_APP            1019
+#define IDM_UNREGISTER_APP          1020

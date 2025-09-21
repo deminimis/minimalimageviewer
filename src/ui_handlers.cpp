@@ -2,31 +2,13 @@
 
 extern AppContext g_ctx;
 
-//
-// UI Action Helpers
-//
-
 static RECT GetCloseButtonRect() {
     RECT clientRect{};
     GetClientRect(g_ctx.hWnd, &clientRect);
-    return { clientRect.right - 30, 0, clientRect.right, 20 };
+    return { clientRect.right - 40, 0, clientRect.right, 30 };
 }
 
-static void OpenFileAction() {
-    wchar_t szFile[MAX_PATH] = { 0 };
-    OPENFILENAMEW ofn = { sizeof(OPENFILENAMEW) };
-    ofn.hwndOwner = g_ctx.hWnd;
-    ofn.lpstrFilter = L"All Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2\0All Files\0*.*\0";
-    ofn.lpstrFile = szFile;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_EXPLORER;
-    if (GetOpenFileNameW(&ofn)) {
-        LoadImageFromFile(szFile);
-        GetImagesInDirectory(szFile);
-    }
-}
-
-static void ToggleFullScreen() {
+void ToggleFullScreen() {
     if (!g_ctx.isFullScreen) {
         g_ctx.savedStyle = GetWindowLong(g_ctx.hWnd, GWL_STYLE);
         GetWindowRect(g_ctx.hWnd, &g_ctx.savedRect);
@@ -49,9 +31,19 @@ static void ToggleFullScreen() {
     FitImageToWindow();
 }
 
-//
-// Message Handlers
-//
+static void OpenFileAction() {
+    wchar_t szFile[MAX_PATH] = { 0 };
+    OPENFILENAMEW ofn = { sizeof(OPENFILENAMEW) };
+    ofn.hwndOwner = g_ctx.hWnd;
+    ofn.lpstrFilter = L"All Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2\0All Files\0*.*\0";
+    ofn.lpstrFile = szFile;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_EXPLORER;
+    if (GetOpenFileNameW(&ofn)) {
+        LoadImageFromFile(szFile);
+        GetImagesInDirectory(szFile);
+    }
+}
 
 static void OnPaint(HWND hWnd) {
     PAINTSTRUCT ps{};
@@ -108,19 +100,29 @@ static void OnPaint(HWND hWnd) {
     }
 
     RECT closeRect = GetCloseButtonRect();
+    if (g_ctx.isHoveringClose) {
+        HBRUSH hBrush = CreateSolidBrush(RGB(50, 50, 50));
+        FillRect(memDC, &closeRect, hBrush);
+        DeleteObject(hBrush);
+    }
+
     HPEN hPen;
     if (g_ctx.isHoveringClose) {
-        hPen = CreatePen(PS_SOLID, 2, RGB(220, 50, 50));
+        hPen = CreatePen(PS_SOLID, 2, RGB(230, 80, 80));
     }
     else {
-        hPen = CreatePen(PS_SOLID, 1, RGB(70, 70, 70));
+        hPen = CreatePen(PS_SOLID, 2, RGB(120, 120, 120));
     }
     HPEN hOldPen = static_cast<HPEN>(SelectObject(memDC, hPen));
 
-    MoveToEx(memDC, closeRect.left + 9, closeRect.top + 6, nullptr);
-    LineTo(memDC, closeRect.right - 9, closeRect.bottom - 6);
-    MoveToEx(memDC, closeRect.right - 9, closeRect.top + 6, nullptr);
-    LineTo(memDC, closeRect.left + 9, closeRect.bottom - 6);
+    int x_center = closeRect.left + (closeRect.right - closeRect.left) / 2;
+    int y_center = closeRect.top + (closeRect.bottom - closeRect.top) / 2;
+    int size = 5;
+
+    MoveToEx(memDC, x_center - size, y_center - size, nullptr);
+    LineTo(memDC, x_center + size, y_center + size);
+    MoveToEx(memDC, x_center + size, y_center - size, nullptr);
+    LineTo(memDC, x_center - size, y_center + size);
 
     SelectObject(memDC, hOldPen);
     DeleteObject(hPen);
@@ -166,7 +168,6 @@ static void OnKeyDown(WPARAM wParam) {
     }
 }
 
-
 static void OnContextMenu(HWND hWnd, POINT pt) {
     HMENU hMenu = CreatePopupMenu();
     AppendMenuW(hMenu, MF_STRING, IDM_OPEN, L"Open Image\tCtrl+O");
@@ -192,6 +193,19 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING | (g_ctx.showFilePath ? MF_CHECKED : MF_UNCHECKED), IDM_SHOW_FILE_PATH, L"Show File Path");
+    AppendMenuW(hMenu, MF_STRING | (g_ctx.startFullScreen ? MF_CHECKED : MF_UNCHECKED), IDM_START_FULLSCREEN, L"Start full screen");
+
+    HMENU hSubMenu = CreatePopupMenu();
+    if (IsAppRegistered()) {
+        AppendMenuW(hSubMenu, MF_STRING | MF_GRAYED, IDM_REGISTER_APP, L"Set as default viewer");
+        AppendMenuW(hSubMenu, MF_STRING, IDM_UNREGISTER_APP, L"Remove default viewer");
+    }
+    else {
+        AppendMenuW(hSubMenu, MF_STRING, IDM_REGISTER_APP, L"Set as default viewer");
+        AppendMenuW(hSubMenu, MF_STRING | MF_GRAYED, IDM_UNREGISTER_APP, L"Remove default viewer");
+    }
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSubMenu, L"File Associations");
+
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_FULLSCREEN, L"Full Screen\tF11");
     AppendMenuW(hMenu, MF_STRING, IDM_DELETE_IMG, L"Delete Image\tDelete");
@@ -221,6 +235,16 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     case IDM_SHOW_FILE_PATH:
         g_ctx.showFilePath = !g_ctx.showFilePath;
         InvalidateRect(hWnd, nullptr, FALSE);
+        break;
+    case IDM_START_FULLSCREEN:
+        g_ctx.startFullScreen = !g_ctx.startFullScreen;
+        WriteSettings();
+        break;
+    case IDM_REGISTER_APP:
+        RegisterApp();
+        break;
+    case IDM_UNREGISTER_APP:
+        UnregisterApp();
         break;
     }
 }

@@ -1,5 +1,4 @@
 #include "viewer.h"
-#include <winbase.h>
 
 AppContext g_ctx;
 
@@ -32,6 +31,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     }
 
     g_ctx.hInst = hInstance;
+    ReadSettings();
 
     if (FAILED(CoInitialize(nullptr))) {
         MessageBoxW(nullptr, L"Failed to initialize COM.", L"Error", MB_OK | MB_ICONERROR);
@@ -68,8 +68,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     }
 
     SetWindowLongPtr(g_ctx.hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&g_ctx));
-
     DragAcceptFiles(g_ctx.hWnd, TRUE);
+
+    if (g_ctx.startFullScreen) {
+        void ToggleFullScreen();
+        ToggleFullScreen();
+    }
 
     ShowWindow(g_ctx.hWnd, nCmdShow);
     UpdateWindow(g_ctx.hWnd);
@@ -93,6 +97,5 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     if (g_ctx.hBitmap) DeleteObject(g_ctx.hBitmap);
     g_ctx.wicFactory = nullptr;
     CoUninitialize();
-
     return static_cast<int>(msg.wParam);
 }

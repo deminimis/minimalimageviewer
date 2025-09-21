@@ -16,7 +16,7 @@ void DrawImage(HDC hdc, const RECT& clientRect, const AppContext& ctx) {
     int clientHeight = clientRect.bottom - clientRect.top;
 
     SetGraphicsMode(hdc, GM_ADVANCED);
-    
+
     double rad = ctx.rotationAngle * 3.1415926535 / 180.0;
     float cosTheta = static_cast<float>(cos(rad));
     float sinTheta = static_cast<float>(sin(rad));
@@ -30,7 +30,6 @@ void DrawImage(HDC hdc, const RECT& clientRect, const AppContext& ctx) {
     xform.eDy = static_cast<float>(clientHeight) / 2.0f + ctx.offsetY - (srcWidth / 2.0f * xform.eM12 + srcHeight / 2.0f * xform.eM22);
 
     SetWorldTransform(hdc, &xform);
-
     SetStretchBltMode(hdc, HALFTONE);
     BitBlt(hdc, 0, 0, srcWidth, srcHeight, memDC, 0, 0, SRCCOPY);
 
@@ -48,7 +47,7 @@ void FitImageToWindow() {
 
     BITMAP bm;
     GetObject(g_ctx.hBitmap, sizeof(BITMAP), &bm);
-    
+
     float clientWidth = static_cast<float>(clientRect.right - clientRect.left);
     float clientHeight = static_cast<float>(clientRect.bottom - clientRect.top);
     float imageWidth = static_cast<float>(bm.bmWidth);
@@ -85,7 +84,7 @@ bool IsPointInImage(POINT pt, const RECT& clientRect) {
 
     BITMAP bm;
     GetObject(g_ctx.hBitmap, sizeof(BITMAP), &bm);
-    
+
     RECT cr;
     GetClientRect(g_ctx.hWnd, &cr);
 
@@ -97,7 +96,7 @@ bool IsPointInImage(POINT pt, const RECT& clientRect) {
 
     float scaledX = translatedX / g_ctx.zoomFactor;
     float scaledY = translatedY / g_ctx.zoomFactor;
-    
+
     double rad = -g_ctx.rotationAngle * 3.1415926535 / 180.0;
     float cosTheta = static_cast<float>(cos(rad));
     float sinTheta = static_cast<float>(sin(rad));
