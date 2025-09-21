@@ -7,7 +7,7 @@
 ### The most 🪶 LIGHTWEIGHT image viewer available for Windows
 <br>
 
-Minimal Image Viewer is an open-source, C++-based image viewing application engineered for Windows, prioritizing performance and minimalism. With a compiled size of only ~185KB. Leveraging native Windows APIs and the Windows Imaging Component (WIC), it ensures accurate functionality. 
+Minimal Image Viewer is an open-source, C++-based image viewing application engineered for Windows, prioritizing performance and minimalism. With a compiled size of only ~82KB. Leveraging native Windows APIs and the Windows Imaging Component (WIC), it ensures accurate functionality. 
 <br><br><br><br>
 
 ### 💾 Download the latest version [here](https://github.com/deminimis/minimalimageviewer/releases).
@@ -80,7 +80,7 @@ Minimal Image Viewer adheres to the Unix philosophy of “do one thing and do it
 
 | Feature                     | Minimal Image Viewer | Windows Photos | IrfanView | XnView |
 |-----------------------------|----------------------|----------------|-----------|--------|
-| **Executable Size**         | ~0.18 MB             | ~50 MB         | ~3 MB     | ~5 MB  |
+| **Executable Size**         | ~0.08 MB             | ~50 MB         | ~3 MB     | ~5 MB  |
 | **Dependencies**            | None (Windows APIs) | UWP Framework  | Optional Plugins | Optional Plugins |
 | **Telemetry**               | None                | Yes            | Optional  | Optional |
 | **Offline Operation**       | Yes                 | Partial        | Yes       | Yes    |
