@@ -5,7 +5,7 @@ extern AppContext g_ctx;
 static bool IsImageFile(const wchar_t* filePath) {
     ComPtr<IWICBitmapDecoder> decoder;
     HRESULT hr = g_ctx.wicFactory->CreateDecoderFromFilename(
-        filePath, nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder
+        filePath, nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder
     );
     return SUCCEEDED(hr);
 }
@@ -17,13 +17,41 @@ void LoadImageFromFile(const wchar_t* filePath) {
     }
     g_ctx.currentFilePathOverride.clear();
 
+    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        CenterImage(true);
+        return;
+    }
+
+    DWORD dwFileSize = GetFileSize(hFile, NULL);
+    if (dwFileSize == INVALID_FILE_SIZE || dwFileSize == 0) {
+        CloseHandle(hFile);
+        CenterImage(true);
+        return;
+    }
+
+    std::vector<BYTE> fileBuffer(dwFileSize);
+    DWORD dwBytesRead = 0;
+    if (!ReadFile(hFile, fileBuffer.data(), dwFileSize, &dwBytesRead, NULL) || dwBytesRead != dwFileSize) {
+        CloseHandle(hFile);
+        CenterImage(true);
+        return;
+    }
+    CloseHandle(hFile);
+
+    ComPtr<IWICStream> stream;
+    HRESULT hr = g_ctx.wicFactory->CreateStream(&stream);
+    if (SUCCEEDED(hr)) {
+        hr = stream->InitializeFromMemory(fileBuffer.data(), fileBuffer.size());
+    }
+
     ComPtr<IWICBitmapDecoder> decoder;
+    if (SUCCEEDED(hr)) {
+        hr = g_ctx.wicFactory->CreateDecoderFromStream(stream, nullptr, WICDecodeMetadataCacheOnLoad, &decoder);
+    }
+
     ComPtr<IWICBitmapFrameDecode> frame;
     ComPtr<IWICFormatConverter> converter;
-
-    HRESULT hr = g_ctx.wicFactory->CreateDecoderFromFilename(
-        filePath, nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder
-    );
 
     if (SUCCEEDED(hr)) hr = decoder->GetFrame(0, &frame);
     if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateFormatConverter(&converter);
@@ -98,10 +126,20 @@ void GetImagesInDirectory(const wchar_t* filePath) {
 void DeleteCurrentImage() {
     if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) return;
 
-    const std::wstring& filePathToDelete = g_ctx.imageFiles[g_ctx.currentImageIndex];
+    const std::wstring filePathToDelete = g_ctx.imageFiles[g_ctx.currentImageIndex];
+    int indexToDelete = g_ctx.currentImageIndex;
+
     std::wstring msg = L"Are you sure you want to move this file to the Recycle Bin?\n\n" + filePathToDelete;
 
     if (MessageBoxW(g_ctx.hWnd, msg.c_str(), L"Confirm Delete", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+
+        if (g_ctx.hBitmap) {
+            DeleteObject(g_ctx.hBitmap);
+            g_ctx.hBitmap = nullptr;
+        }
+        InvalidateRect(g_ctx.hWnd, nullptr, TRUE);
+        UpdateWindow(g_ctx.hWnd);
+
         std::vector<wchar_t> pFromBuffer(filePathToDelete.length() + 2, 0);
         wcscpy_s(pFromBuffer.data(), pFromBuffer.size(), filePathToDelete.c_str());
 
@@ -112,14 +150,14 @@ void DeleteCurrentImage() {
         sfos.fFlags = FOF_ALLOWUNDO | FOF_SILENT | FOF_NOCONFIRMATION;
 
         if (SHFileOperationW(&sfos) == 0 && !sfos.fAnyOperationsAborted) {
-            g_ctx.imageFiles.erase(g_ctx.imageFiles.begin() + g_ctx.currentImageIndex);
+            g_ctx.imageFiles.erase(g_ctx.imageFiles.begin() + indexToDelete);
+
             if (g_ctx.imageFiles.empty()) {
-                if (g_ctx.hBitmap) DeleteObject(g_ctx.hBitmap);
-                g_ctx.hBitmap = nullptr;
                 g_ctx.currentImageIndex = -1;
                 InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
             }
             else {
+                g_ctx.currentImageIndex = indexToDelete;
                 if (g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
                     g_ctx.currentImageIndex = 0;
                 }
@@ -128,6 +166,7 @@ void DeleteCurrentImage() {
         }
         else {
             MessageBoxW(g_ctx.hWnd, L"Failed to delete the file.", L"Error", MB_OK | MB_ICONERROR);
+            LoadImageFromFile(filePathToDelete.c_str());
         }
     }
 }

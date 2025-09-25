@@ -46,6 +46,7 @@ struct AppContext {
 
 void CenterImage(bool resetZoom);
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+void ToggleFullScreen();
 void LoadImageFromFile(const wchar_t* filePath);
 void GetImagesInDirectory(const wchar_t* filePath);
 void SaveImage();

@@ -71,21 +71,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     DragAcceptFiles(g_ctx.hWnd, TRUE);
 
     if (g_ctx.startFullScreen) {
-        void ToggleFullScreen();
         ToggleFullScreen();
     }
 
     ShowWindow(g_ctx.hWnd, nCmdShow);
     UpdateWindow(g_ctx.hWnd);
 
-    int argc = 0;
-    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-    if (argv && argc > 1) {
-        LoadImageFromFile(argv[1]);
-        GetImagesInDirectory(argv[1]);
-    }
-    if (argv) {
-        LocalFree(argv);
+    if (lpCmdLine && *lpCmdLine) {
+        wchar_t filePath[MAX_PATH];
+        wcscpy_s(filePath, MAX_PATH, lpCmdLine);
+        PathUnquoteSpacesW(filePath);
+        LoadImageFromFile(filePath);
+        GetImagesInDirectory(filePath);
     }
 
     MSG msg{};

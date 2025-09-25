@@ -326,8 +326,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_COPYDATA: {
         PCOPYDATASTRUCT pcds = reinterpret_cast<PCOPYDATASTRUCT>(lParam);
         if (pcds && pcds->dwData == 1) {
-            LoadImageFromFile(static_cast<wchar_t*>(pcds->lpData));
-            GetImagesInDirectory(static_cast<wchar_t*>(pcds->lpData));
+            wchar_t filePath[MAX_PATH];
+            wcscpy_s(filePath, MAX_PATH, static_cast<wchar_t*>(pcds->lpData));
+            PathUnquoteSpacesW(filePath);
+            LoadImageFromFile(filePath);
+            GetImagesInDirectory(filePath);
         }
         return TRUE;
     }
