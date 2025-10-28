@@ -28,6 +28,7 @@ Minimal Image Viewer is an open-source, C++-based image viewing application engi
   - Smooth zoom (0.1x–10x) via Ctrl++/-, mouse wheel, or context menu, implemented with `SetWorldTransform` for GPU-friendly scaling.
   - Fits images to window (Ctrl+0 or double-click), adjusting for rotation angles.
   - Rotates images in 90° increments.
+  - **Configurable Background**: Change the background to Grey (default), Black, White, or a transparent checkerboard pattern via the right-click menu.
     
 - **Image Management**:
   - Saves rotated images (Ctrl+S or context menu) in their original WIC-supported format, using temporary files to ensure atomic operations.
@@ -114,6 +115,7 @@ Minimal Image Viewer excels in size, privacy, and format support, leveraging WIC
    - **Exit**: Esc or right-click → "Exit."
    - **Copy**: Ctrl+c.
    - **Paste**: Ctrl+v
+   - **Background Color**: Right-click → "Background Color" → [Grey/Black/White/Transparent].
   
 
 
@@ -123,32 +125,38 @@ Minimal Image Viewer excels in size, privacy, and format support, leveraging WIC
 
 ## Technical Highlights
 
-Minimal Image Viewer is architected for high performance, minimal resource usage, and robust security, leveraging native Windows technologies.
+Minimal Image Viewer is built with a modern C++/Win32 architecture using Direct2D for high-performance, hardware-accelerated rendering.
 
 ### Core Implementation
 
-- **Windows API**:
-  - Creates a borderless window, minimizing UI overhead.
-  - Implements double buffering for flicker-free rendering at 60+ FPS.
-  - Supports edge-based resizing with dynamic cursor updates, disabled in full-screen mode for seamless viewing.
+- **Direct2D / DirectWrite**:
+  - All rendering is handled by Direct2D (`ID2D1HwndRenderTarget`) for smooth, hardware-accelerated drawing. This avoids legacy GDI limitations and flicker.
+  - Text (like "Loading..." or the help prompt) is rendered using DirectWrite (`IDWriteFactory`, `IDWriteTextFormat`) for superior text clarity and positioning.
+  - Creates a checkerboard `ID2D1BitmapBrush` on the fly to render the "Transparent" background option.
 
 - **Windows Imaging Component (WIC)**:
-  - Decodes images with `IWICBitmapDecoder` and `IWICBitmapFrameDecode`, using `nullptr` GUID to support all WIC-compatible formats dynamically.
-  - Converts to `GUID_WICPixelFormat32bppPBGRA` via `IWICFormatConverter` for GDI compatibility, ensuring consistent rendering across formats.
-  - Applies rotations with `IWICBitmapFlipRotator`, leveraging hardware acceleration for 90° increments.
-  - Saves images using `IWICBitmapEncoder`, dynamically selecting the original container format (`decoder->GetContainerFormat`) to preserve file type fidelity.
-  - Validates directory files as images by attempting `IWICBitmapDecoder` creation, ensuring broad format support without hardcoded extensions.
+  - Decodes all images using `IWICImagingFactory`. This allows the app to load any format Windows supports (JPG, PNG, WebP, HEIF, AVIF, RAW, etc.) without needing custom libraries.
+  - Images are converted to a standard pixel format (`GUID_WICPixelFormat32bppPBGRA`) via `IWICFormatConverter` for compatibility with Direct2D.
+  - The WIC converter is used to create a Direct2D bitmap (`CreateBitmapFromWicBitmap`) for rendering.
+  - Saving images (including rotations) uses `IWICBitmapEncoder` to preserve the original file's container format (e.g., saving a rotated PNG as a PNG).
+
+- **Asynchronous Loading & Preloading**:
+  - To keep the UI fast and responsive, image loading is done on a separate thread (`std::thread` in `LoadImageFromFile`).
+  - A `WM_APP_IMAGE_LOADED` custom message is posted back to the main window thread when loading is complete to safely update the UI.
+  - The application pre-loads the *next* and *previous* images in the directory on background threads (`StartPreloading`) to make navigation instantaneous.
 
 - **Graphics and Transformations**:
-  - Renders images with `StretchBlt` in `HALFTONE` mode for high-quality scaling, optimized for various display DPIs.
-  - Applies zoom and rotation via `SetWorldTransform`, centering images using matrix transformations for precise positioning.
-  - Uses `CreateDIBSection` for direct pixel access, minimizing memory overhead (<10 MB for typical images).
+  - Zooming, panning (dragging), and rotation are not done by manipulating the image pixels.
+  - Instead, Direct2D's transformation matrix (`D2D1::Matrix3x2F`) is modified. The `Render` function applies a combination of `Scale`, `Rotation`, and `Translation` matrices. This is extremely fast and high-quality, as all the work is done by the GPU.
 
-- **File System Operations**:
-  - Indexes directory images with `FindFirstFileW` and `FindNextFileW` using a `*.*` wildcard, filtering via WIC’s `IsImageFile` function for format-agnostic support.
-  - Opens files with `FILE_SHARE_READ | FILE_SHARE_WRITE` and `STGM_SHARE_DENY_NONE` to prevent access conflicts, even in multi-process environments.
-  - Deletes to Recycle Bin with `SHFileOperationW` and `FOF_ALLOWUNDO`, ensuring recoverable file operations.
-  - Saves images atomically using temporary files (`MoveFileExW` with `MOVEFILE_REPLACE_EXISTING`) to handle file locks robustly.
+- **Settings and State**:
+  - Window position/size and user preferences (Start Full Screen, Background Color) are saved to a simple `settings.ini` file in the application's directory.
+  - Uses `GetPrivateProfileIntW` and `WritePrivateProfileStringW` for easy, registry-free persistence.
+
+- **File System and Shell Integration**:
+  - Supports drag-and-drop (`WM_DROPFILES`), clipboard paste (`CF_HDROP`, `CF_DIB`), and file association registration (`RegisterApp`).
+  - "Delete Image" uses `SHFileOperationW` to send files to the Recycle Bin (`FOF_ALLOWUNDO`).
+  - "Open File Location" uses `SHOpenFolderAndSelectItems` to open Explorer with the current file highlighted.
 
 ### Performance Optimizations
 
@@ -163,14 +171,12 @@ Minimal Image Viewer is architected for high performance, minimal resource usage
 
 ### Build Process
 
-- **Tools**: Microsoft C++ compiler (`cl.exe`) and Resource Compiler (`rc.exe`)).
-- **Resources**: Links `minimallogo.ico` via `resource.rc` for custom branding.
 - **Build Commands**:
-  - **Visual Studio**:
-    ```cmd
-    rc.exe /fo resource.res resource.rc
-    cl.exe /O2 /EHsc /Fe:MinimalImageViewer.exe main.cpp ui_handlers.cpp image_drawing.cpp image_io.cpp resource.res /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comdlg32.lib shlwapi.lib windowscodecs.lib ole32.lib shell32.lib propsys.lib oleaut32.lib
-    ```
+  - **Visual Studio**:
+    ```cmd
+    rc.exe /fo resource.res resource.rc
+    cl.exe /O2 /EHsc /Fe:MinimalImageViewer.exe main.cpp ui_handlers.cpp image_drawing.cpp image_io.cpp settings_handler.cpp registry_handler.cpp resource.res /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comdlg32.lib shlwapi.lib windowscodecs.lib ole32.lib shell32.lib propsys.lib oleaut32.lib d2d1.lib dwrite.lib advapi32.lib
+    ```
 
 
 
