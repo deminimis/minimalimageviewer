@@ -1,42 +1,36 @@
 #include "viewer.h"
-#include <fstream>
 #include <string>
-#include <streambuf>
 
 extern AppContext g_ctx;
 
-static std::wstring GetSettingsPath() {
-    wchar_t exePath[MAX_PATH] = { 0 };
-    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
-    PathRemoveFileSpecW(exePath);
-    PathAppendW(exePath, L"settings.json");
-    return exePath;
-}
+void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen) {
+    fullscreen = GetPrivateProfileIntW(L"Settings", L"StartFullScreen", 0, path.c_str()) == 1;
 
-void ReadSettings() {
-    std::ifstream file(GetSettingsPath());
-    if (file.is_open()) {
-        std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-        if (content.find("\"startFullScreen\": true") != std::string::npos) {
-            g_ctx.startFullScreen = true;
-        }
-        else {
-            g_ctx.startFullScreen = false;
-        }
-    }
-    else {
-        g_ctx.startFullScreen = false;
+    int bgChoice = GetPrivateProfileIntW(L"Settings", L"BackgroundColor", 0, path.c_str());
+    if (bgChoice < 0 || bgChoice > 3) bgChoice = 0;
+    g_ctx.bgColor = static_cast<BackgroundColor>(bgChoice);
+
+    rect.left = GetPrivateProfileIntW(L"Window", L"left", CW_USEDEFAULT, path.c_str());
+    rect.top = GetPrivateProfileIntW(L"Window", L"top", CW_USEDEFAULT, path.c_str());
+    rect.right = GetPrivateProfileIntW(L"Window", L"right", CW_USEDEFAULT, path.c_str());
+    rect.bottom = GetPrivateProfileIntW(L"Window", L"bottom", CW_USEDEFAULT, path.c_str());
+
+    if (rect.left == CW_USEDEFAULT || rect.top == CW_USEDEFAULT || rect.right == CW_USEDEFAULT || rect.bottom == CW_USEDEFAULT) {
+        SetRectEmpty(&rect);
     }
 }
 
-void WriteSettings() {
-    std::ofstream file(GetSettingsPath());
-    if (file.is_open()) {
-        if (g_ctx.startFullScreen) {
-            file << "{\n  \"startFullScreen\": true\n}\n";
-        }
-        else {
-            file << "{\n  \"startFullScreen\": false\n}\n";
-        }
+void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen) {
+    std::wstring fs_val = fullscreen ? L"1" : L"0";
+    WritePrivateProfileStringW(L"Settings", L"StartFullScreen", fs_val.c_str(), path.c_str());
+
+    std::wstring bg_val = std::to_wstring(static_cast<int>(g_ctx.bgColor));
+    WritePrivateProfileStringW(L"Settings", L"BackgroundColor", bg_val.c_str(), path.c_str());
+
+    if (!IsRectEmpty(&rect) && !IsIconic(g_ctx.hWnd) && !IsZoomed(g_ctx.hWnd)) {
+        WritePrivateProfileStringW(L"Window", L"left", std::to_wstring(rect.left).c_str(), path.c_str());
+        WritePrivateProfileStringW(L"Window", L"top", std::to_wstring(rect.top).c_str(), path.c_str());
+        WritePrivateProfileStringW(L"Window", L"right", std::to_wstring(rect.right).c_str(), path.c_str());
+        WritePrivateProfileStringW(L"Window", L"bottom", std::to_wstring(rect.bottom).c_str(), path.c_str());
     }
 }

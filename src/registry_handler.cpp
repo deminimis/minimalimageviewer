@@ -2,7 +2,7 @@
 
 static const wchar_t* g_progId = L"MinimalImageViewer.AssocFile.1";
 static const wchar_t* g_appName = L"MinimalImageViewer";
-static const wchar_t* g_fileExtensions[] = { L".png", L".jpg", L".jpeg", L".bmp", L".gif", L".ico", L".tif", L".tiff" };
+static const wchar_t* g_fileExtensions[] = { L".png", L".jpg", L".jpeg", L".bmp", L".gif", L".ico", L".tif", L".tiff", L".webp", L".heic", L".heif" };
 
 bool IsAppRegistered() {
     HKEY hKey;

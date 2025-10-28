@@ -2,6 +2,24 @@
 
 AppContext g_ctx;
 
+void CleanupPreloadingThreads() {
+    if (g_ctx.preloadingNextThread.joinable()) {
+        g_ctx.preloadingNextThread.join();
+    }
+    if (g_ctx.preloadingPrevThread.joinable()) {
+        g_ctx.preloadingPrevThread.join();
+    }
+}
+
+void CleanupLoadingThread() {
+    g_ctx.cancelPreloading = true;
+    CleanupPreloadingThreads();
+    if (g_ctx.loadingThread.joinable()) {
+        g_ctx.loadingThread.join();
+    }
+    g_ctx.cancelPreloading = false;
+}
+
 void CenterImage(bool resetZoom) {
     if (resetZoom) {
         g_ctx.zoomFactor = 1.0f;
@@ -10,6 +28,16 @@ void CenterImage(bool resetZoom) {
     g_ctx.offsetX = 0.0f;
     g_ctx.offsetY = 0.0f;
     FitImageToWindow();
+    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+}
+
+void SetActualSize() {
+    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+    if (!g_ctx.wicConverter) return;
+    g_ctx.zoomFactor = 1.0f;
+    g_ctx.rotationAngle = 0;
+    g_ctx.offsetX = 0.0f;
+    g_ctx.offsetY = 0.0f;
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
 
@@ -31,7 +59,18 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     }
 
     g_ctx.hInst = hInstance;
-    ReadSettings();
+
+    wchar_t exePath[MAX_PATH] = { 0 };
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+    PathRemoveFileSpecW(exePath);
+    PathAppendW(exePath, L"settings.ini");
+    g_ctx.settingsPath = exePath;
+
+    RECT startupRect;
+    ReadSettings(g_ctx.settingsPath, startupRect, g_ctx.startFullScreen);
+    if (IsRectEmpty(&startupRect)) {
+        startupRect = { CW_USEDEFAULT, CW_USEDEFAULT, 800, 600 };
+    }
 
     if (FAILED(CoInitialize(nullptr))) {
         MessageBoxW(nullptr, L"Failed to initialize COM.", L"Error", MB_OK | MB_ICONERROR);
@@ -44,21 +83,35 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         return 1;
     }
 
+    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_ctx.d2dFactory))) {
+        MessageBoxW(nullptr, L"Failed to create Direct2D Factory.", L"Error", MB_OK | MB_ICONERROR);
+        CoUninitialize();
+        return 1;
+    }
+
+    if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&g_ctx.writeFactory)))) {
+        MessageBoxW(nullptr, L"Failed to create DirectWrite Factory.", L"Error", MB_OK | MB_ICONERROR);
+        CoUninitialize();
+        return 1;
+    }
+
     WNDCLASSEXW wcex = { sizeof(WNDCLASSEXW) };
     wcex.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
     wcex.lpfnWndProc = WndProc;
     wcex.hInstance = hInstance;
     wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wcex.hbrBackground = CreateSolidBrush(RGB(0, 0, 0));
+    wcex.hbrBackground = CreateSolidBrush(RGB(30, 30, 30));
     wcex.lpszClassName = L"MinimalImageViewer";
     RegisterClassExW(&wcex);
 
     g_ctx.hWnd = CreateWindowW(
         wcex.lpszClassName,
         L"Minimal Image Viewer",
-        WS_POPUP | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
+        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        startupRect.left, startupRect.top,
+        (startupRect.left == CW_USEDEFAULT) ? 800 : (startupRect.right - startupRect.left),
+        (startupRect.top == CW_USEDEFAULT) ? 600 : (startupRect.bottom - startupRect.top),
         nullptr, nullptr, hInstance, nullptr
     );
 
@@ -82,7 +135,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         wcscpy_s(filePath, MAX_PATH, lpCmdLine);
         PathUnquoteSpacesW(filePath);
         LoadImageFromFile(filePath);
-        GetImagesInDirectory(filePath);
     }
 
     MSG msg{};
@@ -91,7 +143,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         DispatchMessage(&msg);
     }
 
-    if (g_ctx.hBitmap) DeleteObject(g_ctx.hBitmap);
+    CleanupLoadingThread();
+    g_ctx.wicConverter = nullptr;
+    g_ctx.d2dBitmap = nullptr;
+    g_ctx.textBrush = nullptr;
+    g_ctx.textFormat = nullptr;
+    g_ctx.renderTarget = nullptr;
+    g_ctx.writeFactory = nullptr;
+    g_ctx.d2dFactory = nullptr;
     g_ctx.wicFactory = nullptr;
     CoUninitialize();
     return static_cast<int>(msg.wParam);

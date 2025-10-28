@@ -13,10 +13,12 @@
 #define IDM_ROTATE_CCW              1011
 #define IDM_SAVE                    1012
 #define IDM_SAVE_AS                 1013
-#define IDM_SHOW_FILE_PATH          1014
 #define IDM_COPY                    1015
 #define IDM_PASTE                   1016
 #define IDM_OPEN_LOCATION           1017
 #define IDM_START_FULLSCREEN        1018
-#define IDM_REGISTER_APP            1019
-#define IDM_UNREGISTER_APP          1020
+#define IDM_ACTUAL_SIZE             1021
+#define IDM_BACKGROUND_GREY         1022
+#define IDM_BACKGROUND_BLACK        1023
+#define IDM_BACKGROUND_WHITE        1024
+#define IDM_BACKGROUND_TRANSPARENT  1025

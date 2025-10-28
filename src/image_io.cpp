@@ -10,49 +10,21 @@ static bool IsImageFile(const wchar_t* filePath) {
     return SUCCEEDED(hr);
 }
 
-void LoadImageFromFile(const wchar_t* filePath) {
-    if (g_ctx.hBitmap) {
-        DeleteObject(g_ctx.hBitmap);
-        g_ctx.hBitmap = nullptr;
-    }
-    g_ctx.currentFilePathOverride.clear();
-
-    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) {
-        CenterImage(true);
-        return;
-    }
-
-    DWORD dwFileSize = GetFileSize(hFile, NULL);
-    if (dwFileSize == INVALID_FILE_SIZE || dwFileSize == 0) {
-        CloseHandle(hFile);
-        CenterImage(true);
-        return;
-    }
-
-    std::vector<BYTE> fileBuffer(dwFileSize);
-    DWORD dwBytesRead = 0;
-    if (!ReadFile(hFile, fileBuffer.data(), dwFileSize, &dwBytesRead, NULL) || dwBytesRead != dwFileSize) {
-        CloseHandle(hFile);
-        CenterImage(true);
-        return;
-    }
-    CloseHandle(hFile);
-
-    ComPtr<IWICStream> stream;
-    HRESULT hr = g_ctx.wicFactory->CreateStream(&stream);
-    if (SUCCEEDED(hr)) {
-        hr = stream->InitializeFromMemory(fileBuffer.data(), fileBuffer.size());
+static ComPtr<IWICFormatConverter> LoadImageInternal(const std::wstring& filePath, bool isPreload) {
+    if (isPreload && g_ctx.cancelPreloading) {
+        return nullptr;
     }
 
     ComPtr<IWICBitmapDecoder> decoder;
-    if (SUCCEEDED(hr)) {
-        hr = g_ctx.wicFactory->CreateDecoderFromStream(stream, nullptr, WICDecodeMetadataCacheOnLoad, &decoder);
-    }
+    HRESULT hr = g_ctx.wicFactory->CreateDecoderFromFilename(
+        filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder
+    );
+    if (FAILED(hr)) return nullptr;
+
+    if (isPreload && g_ctx.cancelPreloading) return nullptr;
 
     ComPtr<IWICBitmapFrameDecode> frame;
     ComPtr<IWICFormatConverter> converter;
-
     if (SUCCEEDED(hr)) hr = decoder->GetFrame(0, &frame);
     if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateFormatConverter(&converter);
     if (SUCCEEDED(hr)) {
@@ -61,36 +33,188 @@ void LoadImageFromFile(const wchar_t* filePath) {
             nullptr, 0.f, WICBitmapPaletteTypeCustom
         );
     }
+
     if (SUCCEEDED(hr)) {
-        UINT width = 0, height = 0;
-        converter->GetSize(&width, &height);
+        return converter;
+    }
+    return nullptr;
+}
 
-        BITMAPINFO bmi = { sizeof(BITMAPINFOHEADER) };
-        bmi.bmiHeader.biWidth = width;
-        bmi.bmiHeader.biHeight = -static_cast<LONG>(height);
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB;
+void LoadImageFromFile(const std::wstring& filePath) {
+    CleanupLoadingThread();
 
-        void* bits = nullptr;
-        HDC screenDC = GetDC(nullptr);
-        g_ctx.hBitmap = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-        ReleaseDC(nullptr, screenDC);
+    g_ctx.isLoading = true;
+    g_ctx.loadingFilePath = filePath;
 
-        if (g_ctx.hBitmap && bits) {
-            hr = converter->CopyPixels(nullptr, static_cast<UINT>(width) * 4, static_cast<UINT>(width) * height * 4, static_cast<BYTE*>(bits));
+    {
+        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+        g_ctx.wicConverter = nullptr;
+        g_ctx.d2dBitmap = nullptr;
+    }
+    g_ctx.currentFilePathOverride.clear();
+    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+
+    int nextIndex = -1, prevIndex = -1, targetIndex = -1;
+    auto it = std::find_if(g_ctx.imageFiles.begin(), g_ctx.imageFiles.end(),
+        [&](const std::wstring& s) { return _wcsicmp(s.c_str(), filePath.c_str()) == 0; }
+    );
+    targetIndex = (it != g_ctx.imageFiles.end()) ? static_cast<int>(std::distance(g_ctx.imageFiles.begin(), it)) : -1;
+
+    if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
+        wchar_t folder[MAX_PATH] = { 0 };
+        wcscpy_s(folder, MAX_PATH, filePath.c_str());
+        PathRemoveFileSpecW(folder);
+        if (g_ctx.currentDirectory == folder && targetIndex != -1) {
+            nextIndex = (g_ctx.currentImageIndex + 1) % g_ctx.imageFiles.size();
+            prevIndex = (g_ctx.currentImageIndex - 1 + g_ctx.imageFiles.size()) % g_ctx.imageFiles.size();
         }
         else {
-            hr = E_OUTOFMEMORY;
+            targetIndex = -1;
         }
     }
 
-    if (FAILED(hr) && g_ctx.hBitmap) {
-        DeleteObject(g_ctx.hBitmap);
-        g_ctx.hBitmap = nullptr;
+    ComPtr<IWICFormatConverter> preloadedConverter = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+        if (targetIndex != -1 && targetIndex == nextIndex && g_ctx.preloadedNextConverter) {
+            preloadedConverter = g_ctx.preloadedNextConverter;
+            g_ctx.preloadedNextConverter = nullptr;
+        }
+        else if (targetIndex != -1 && targetIndex == prevIndex && g_ctx.preloadedPrevConverter) {
+            preloadedConverter = g_ctx.preloadedPrevConverter;
+            g_ctx.preloadedPrevConverter = nullptr;
+        }
     }
+
+    if (preloadedConverter) {
+        {
+            std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+            g_ctx.stagedWicConverter = preloadedConverter;
+        }
+        PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOADED, (WPARAM)targetIndex, 0);
+        return;
+    }
+
+    g_ctx.loadingThread = std::thread([filePath]() {
+        if (FAILED(CoInitialize(nullptr))) {
+            PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, 0);
+            return;
+        }
+
+        ComPtr<IWICFormatConverter> converter = LoadImageInternal(filePath, false);
+
+        if (!converter) {
+            PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, 0);
+            CoUninitialize();
+            return;
+        }
+
+        wchar_t folder[MAX_PATH] = { 0 };
+        wcscpy_s(folder, MAX_PATH, filePath.c_str());
+        PathRemoveFileSpecW(folder);
+
+        int foundIndex = -1;
+        if (g_ctx.currentDirectory != folder) {
+            g_ctx.currentDirectory = folder;
+            GetImagesInDirectory(filePath.c_str());
+        }
+
+        auto it = std::find_if(g_ctx.imageFiles.begin(), g_ctx.imageFiles.end(),
+            [&](const std::wstring& s) { return _wcsicmp(s.c_str(), filePath.c_str()) == 0; }
+        );
+        foundIndex = (it != g_ctx.imageFiles.end()) ? static_cast<int>(std::distance(g_ctx.imageFiles.begin(), it)) : -1;
+
+        {
+            std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+            g_ctx.stagedWicConverter = converter;
+        }
+
+        PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOADED, (WPARAM)foundIndex, 0);
+        CoUninitialize();
+        });
+}
+
+void FinalizeImageLoad(bool success, int foundIndex) {
+    g_ctx.isLoading = false;
+    if (g_ctx.loadingThread.joinable()) {
+        g_ctx.loadingThread.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+        g_ctx.d2dBitmap = nullptr;
+        if (success) {
+            g_ctx.wicConverter = g_ctx.stagedWicConverter;
+        }
+        else {
+            g_ctx.wicConverter = nullptr;
+        }
+        g_ctx.stagedWicConverter = nullptr;
+    }
+
+    if (success) {
+        g_ctx.currentImageIndex = foundIndex;
+        SetWindowTextW(g_ctx.hWnd, g_ctx.loadingFilePath.c_str());
+        StartPreloading();
+    }
+    else {
+        g_ctx.currentImageIndex = -1;
+        SetWindowTextW(g_ctx.hWnd, L"Minimal Image Viewer");
+        CleanupPreloadingThreads();
+        {
+            std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+            g_ctx.preloadedNextConverter = nullptr;
+            g_ctx.preloadedPrevConverter = nullptr;
+        }
+    }
+
     CenterImage(true);
 }
+
+void StartPreloading() {
+    CleanupPreloadingThreads();
+    {
+        std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+        g_ctx.preloadedNextConverter = nullptr;
+        g_ctx.preloadedPrevConverter = nullptr;
+    }
+
+    if (g_ctx.imageFiles.empty() || g_ctx.currentImageIndex == -1) return;
+
+    int nextIndex = (g_ctx.currentImageIndex + 1) % g_ctx.imageFiles.size();
+    int prevIndex = (g_ctx.currentImageIndex - 1 + g_ctx.imageFiles.size()) % g_ctx.imageFiles.size();
+
+    if (nextIndex == prevIndex) {
+        prevIndex = -1;
+    }
+
+    if (nextIndex != g_ctx.currentImageIndex) {
+        std::wstring nextPath = g_ctx.imageFiles[nextIndex];
+        g_ctx.preloadingNextThread = std::thread([nextPath]() {
+            if (FAILED(CoInitialize(nullptr))) return;
+            ComPtr<IWICFormatConverter> converter = LoadImageInternal(nextPath, true);
+            if (converter && !g_ctx.cancelPreloading) {
+                std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+                g_ctx.preloadedNextConverter = converter;
+            }
+            CoUninitialize();
+            });
+    }
+
+    if (prevIndex != -1 && prevIndex != g_ctx.currentImageIndex) {
+        std::wstring prevPath = g_ctx.imageFiles[prevIndex];
+        g_ctx.preloadingPrevThread = std::thread([prevPath]() {
+            if (FAILED(CoInitialize(nullptr))) return;
+            ComPtr<IWICFormatConverter> converter = LoadImageInternal(prevPath, true);
+            if (converter && !g_ctx.cancelPreloading) {
+                std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+                g_ctx.preloadedPrevConverter = converter;
+            }
+            CoUninitialize();
+            });
+    }
+}
+
 
 void GetImagesInDirectory(const wchar_t* filePath) {
     g_ctx.imageFiles.clear();
@@ -116,11 +240,6 @@ void GetImagesInDirectory(const wchar_t* filePath) {
         } while (FindNextFileW(hFind, &fd));
         FindClose(hFind);
     }
-
-    auto it = std::find_if(g_ctx.imageFiles.begin(), g_ctx.imageFiles.end(),
-        [&](const std::wstring& s) { return _wcsicmp(s.c_str(), filePath) == 0; }
-    );
-    g_ctx.currentImageIndex = (it != g_ctx.imageFiles.end()) ? static_cast<int>(std::distance(g_ctx.imageFiles.begin(), it)) : -1;
 }
 
 void DeleteCurrentImage() {
@@ -133,9 +252,19 @@ void DeleteCurrentImage() {
 
     if (MessageBoxW(g_ctx.hWnd, msg.c_str(), L"Confirm Delete", MB_YESNO | MB_ICONQUESTION) == IDYES) {
 
-        if (g_ctx.hBitmap) {
-            DeleteObject(g_ctx.hBitmap);
-            g_ctx.hBitmap = nullptr;
+        g_ctx.cancelPreloading = true;
+        CleanupPreloadingThreads();
+        {
+            std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+            g_ctx.preloadedNextConverter = nullptr;
+            g_ctx.preloadedPrevConverter = nullptr;
+        }
+        g_ctx.cancelPreloading = false;
+
+        {
+            std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+            g_ctx.wicConverter = nullptr;
+            g_ctx.d2dBitmap = nullptr;
         }
         InvalidateRect(g_ctx.hWnd, nullptr, TRUE);
         UpdateWindow(g_ctx.hWnd);
@@ -154,7 +283,9 @@ void DeleteCurrentImage() {
 
             if (g_ctx.imageFiles.empty()) {
                 g_ctx.currentImageIndex = -1;
+                g_ctx.currentDirectory.clear();
                 InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+                SetWindowTextW(g_ctx.hWnd, L"Minimal Image Viewer");
             }
             else {
                 g_ctx.currentImageIndex = indexToDelete;
@@ -172,14 +303,11 @@ void DeleteCurrentImage() {
 }
 
 static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
-    if (!g_ctx.hBitmap) return nullptr;
+    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+    if (!g_ctx.wicConverter) return nullptr;
 
     ComPtr<IWICBitmapSource> source;
-    ComPtr<IWICBitmap> wicBitmap;
-    if (FAILED(g_ctx.wicFactory->CreateBitmapFromHBITMAP(g_ctx.hBitmap, nullptr, WICBitmapUseAlpha, &wicBitmap))) {
-        return nullptr;
-    }
-    source = wicBitmap;
+    source = g_ctx.wicConverter;
 
     if (g_ctx.rotationAngle != 0) {
         ComPtr<IWICBitmapFlipRotator> rotator;
@@ -211,7 +339,10 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
 }
 
 void SaveImageAs() {
-    if (!g_ctx.hBitmap) return;
+    {
+        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+        if (!g_ctx.wicConverter) return;
+    }
 
     wchar_t szFile[MAX_PATH] = L"Untitled.png";
     OPENFILENAMEW ofn = { sizeof(ofn) };
@@ -258,7 +389,6 @@ void SaveImageAs() {
 
     if (SUCCEEDED(hr)) {
         LoadImageFromFile(ofn.lpstrFile);
-        GetImagesInDirectory(ofn.lpstrFile);
     }
     else {
         MessageBoxW(g_ctx.hWnd, L"Failed to save image.", L"Save As Error", MB_ICONERROR);
@@ -267,7 +397,10 @@ void SaveImageAs() {
 
 void SaveImage() {
     if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
-        SaveImageAs();
+        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+        if (g_ctx.wicConverter) {
+            SaveImageAs();
+        }
         return;
     }
 
@@ -332,7 +465,6 @@ void HandleDropFiles(HDROP hDrop) {
     wchar_t filePath[MAX_PATH] = { 0 };
     if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH) > 0) {
         LoadImageFromFile(filePath);
-        GetImagesInDirectory(filePath);
     }
     DragFinish(hDrop);
 }
@@ -348,7 +480,6 @@ void HandlePaste() {
         if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH) > 0) {
             CloseClipboard();
             LoadImageFromFile(filePath);
-            GetImagesInDirectory(filePath);
             return;
         }
     }
@@ -357,18 +488,49 @@ void HandlePaste() {
     if (hClipData) {
         LPBITMAPINFO lpbi = static_cast<LPBITMAPINFO>(GlobalLock(hClipData));
         if (lpbi) {
-            if (g_ctx.hBitmap) DeleteObject(g_ctx.hBitmap);
+            {
+                std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+                g_ctx.wicConverter = nullptr;
+                g_ctx.d2dBitmap = nullptr;
+            }
             HDC screenDC = GetDC(nullptr);
             BYTE* pBits = reinterpret_cast<BYTE*>(lpbi) + lpbi->bmiHeader.biSize + lpbi->bmiHeader.biClrUsed * sizeof(RGBQUAD);
-            g_ctx.hBitmap = CreateDIBitmap(screenDC, &(lpbi->bmiHeader), CBM_INIT, pBits, lpbi, DIB_RGB_COLORS);
+            HBITMAP hTempBitmap = CreateDIBitmap(screenDC, &(lpbi->bmiHeader), CBM_INIT, pBits, lpbi, DIB_RGB_COLORS);
             ReleaseDC(nullptr, screenDC);
             GlobalUnlock(hClipData);
 
-            if (g_ctx.hBitmap) {
+            ComPtr<IWICFormatConverter> localConverter;
+            if (hTempBitmap) {
+                ComPtr<IWICBitmap> wicBitmap;
+                if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapFromHBITMAP(hTempBitmap, nullptr, WICBitmapUseAlpha, &wicBitmap))) {
+                    ComPtr<IWICFormatConverter> converter;
+                    if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+                        if (SUCCEEDED(converter->Initialize(wicBitmap, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                            localConverter = converter;
+                        }
+                    }
+                }
+                DeleteObject(hTempBitmap);
+            }
+
+            if (localConverter) {
+                g_ctx.cancelPreloading = true;
+                CleanupPreloadingThreads();
+                {
+                    std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+                    g_ctx.preloadedNextConverter = nullptr;
+                    g_ctx.preloadedPrevConverter = nullptr;
+                }
+                g_ctx.cancelPreloading = false;
+
+                std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+                g_ctx.wicConverter = localConverter;
                 g_ctx.imageFiles.clear();
                 g_ctx.currentImageIndex = -1;
+                g_ctx.currentDirectory.clear();
                 g_ctx.currentFilePathOverride = L"Pasted Image";
                 CenterImage(true);
+                SetWindowTextW(g_ctx.hWnd, L"Pasted Image");
             }
         }
     }
@@ -376,63 +538,79 @@ void HandlePaste() {
 }
 
 void HandleCopy() {
-    if (!g_ctx.hBitmap || !OpenClipboard(g_ctx.hWnd)) return;
+    ComPtr<IWICFormatConverter> converterCopy;
+    int indexCopy = g_ctx.currentImageIndex;
+    {
+        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+        converterCopy = g_ctx.wicConverter;
+    }
+
+    if (indexCopy == -1 && !converterCopy) return;
+    if (!OpenClipboard(g_ctx.hWnd)) return;
     EmptyClipboard();
 
-    BITMAP bm{};
-    GetObject(g_ctx.hBitmap, sizeof(BITMAP), &bm);
+    if (indexCopy != -1) {
+        const std::wstring& filePath = g_ctx.imageFiles[indexCopy];
 
-    int outWidth = bm.bmWidth;
-    int outHeight = bm.bmHeight;
-    if (g_ctx.rotationAngle == 90 || g_ctx.rotationAngle == 270) {
-        std::swap(outWidth, outHeight);
-    }
-
-    BITMAPINFO bi = {};
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = outWidth;
-    bi.bmiHeader.biHeight = outHeight;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    bi.bmiHeader.biCompression = BI_RGB;
-
-    HDC screenDC = GetDC(g_ctx.hWnd);
-    HDC memDC = CreateCompatibleDC(screenDC);
-    BYTE* pBits = nullptr;
-    HBITMAP hClipBitmap = CreateDIBSection(memDC, &bi, DIB_RGB_COLORS, reinterpret_cast<void**>(&pBits), NULL, 0);
-
-    if (hClipBitmap) {
-        HBITMAP hOldBitmap = static_cast<HBITMAP>(SelectObject(memDC, hClipBitmap));
-
-        AppContext tempCtx = g_ctx;
-        tempCtx.offsetX = 0;
-        tempCtx.offsetY = 0;
-        float rotatedW = (g_ctx.rotationAngle == 90 || g_ctx.rotationAngle == 270) ? static_cast<float>(bm.bmHeight) : static_cast<float>(bm.bmWidth);
-        float rotatedH = (g_ctx.rotationAngle == 90 || g_ctx.rotationAngle == 270) ? static_cast<float>(bm.bmWidth) : static_cast<float>(bm.bmHeight);
-        tempCtx.zoomFactor = std::min(static_cast<float>(outWidth) / rotatedW, static_cast<float>(outHeight) / rotatedH);
-
-        RECT clientRect = { 0, 0, outWidth, outHeight };
-        FillRect(memDC, &clientRect, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
-        DrawImage(memDC, clientRect, tempCtx);
-
-        DWORD dwBmpSize = (static_cast<DWORD>(outWidth) * bi.bmiHeader.biBitCount + 31) / 32 * 4 * outHeight;
-        DWORD dwSizeOfDIB = dwBmpSize + sizeof(BITMAPINFOHEADER);
-        HGLOBAL hGlobal = GlobalAlloc(GHND, dwSizeOfDIB);
+        SIZE_T cbTotalSize = sizeof(DROPFILES) + (filePath.length() + 2) * sizeof(wchar_t);
+        HGLOBAL hGlobal = GlobalAlloc(GHND, cbTotalSize);
         if (hGlobal) {
-            char* lpGlobal = static_cast<char*>(GlobalLock(hGlobal));
-            if (lpGlobal) {
-                memcpy(lpGlobal, &bi.bmiHeader, sizeof(BITMAPINFOHEADER));
-                memcpy(lpGlobal + sizeof(BITMAPINFOHEADER), pBits, dwBmpSize);
+            LPDROPFILES pDropFiles = static_cast<LPDROPFILES>(GlobalLock(hGlobal));
+            if (pDropFiles) {
+                pDropFiles->pFiles = sizeof(DROPFILES);
+                pDropFiles->pt.x = 0;
+                pDropFiles->pt.y = 0;
+                pDropFiles->fNC = FALSE;
+                pDropFiles->fWide = TRUE;
+
+                wchar_t* pszFile = reinterpret_cast<wchar_t*>(reinterpret_cast<BYTE*>(pDropFiles) + sizeof(DROPFILES));
+                wcscpy_s(pszFile, filePath.length() + 1, filePath.c_str());
+
                 GlobalUnlock(hGlobal);
-                SetClipboardData(CF_DIB, hGlobal);
+                SetClipboardData(CF_HDROP, hGlobal);
             }
         }
-        SelectObject(memDC, hOldBitmap);
-        DeleteObject(hClipBitmap);
     }
+    else if (converterCopy) {
+        UINT width = 0, height = 0;
+        converterCopy->GetSize(&width, &height);
 
-    DeleteDC(memDC);
-    ReleaseDC(g_ctx.hWnd, screenDC);
+        BITMAPINFO bmi = { sizeof(BITMAPINFOHEADER) };
+        bmi.bmiHeader.biWidth = width;
+        bmi.bmiHeader.biHeight = -static_cast<LONG>(height);
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        void* bits = nullptr;
+        HDC screenDC = GetDC(nullptr);
+        HBITMAP hTempBitmap = CreateDIBSection(screenDC, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
+        ReleaseDC(nullptr, screenDC);
+
+        if (hTempBitmap && bits) {
+            converterCopy->CopyPixels(nullptr, static_cast<UINT>(width) * 4, static_cast<UINT>(width) * height * 4, static_cast<BYTE*>(bits));
+
+            BITMAP bm{};
+            GetObject(hTempBitmap, sizeof(BITMAP), &bm);
+            DWORD dwBmpSize = ((bm.bmWidth * bmi.bmiHeader.biBitCount + 31) / 32) * 4 * bm.bmHeight;
+            DWORD dwSizeOfDIB = dwBmpSize + sizeof(BITMAPINFOHEADER);
+            HGLOBAL hGlobal = GlobalAlloc(GHND, dwSizeOfDIB);
+            if (hGlobal) {
+                char* lpGlobal = static_cast<char*>(GlobalLock(hGlobal));
+                if (lpGlobal) {
+                    memcpy(lpGlobal, &bmi.bmiHeader, sizeof(BITMAPINFOHEADER));
+
+                    HDC hdc = GetDC(NULL);
+                    GetDIBits(hdc, hTempBitmap, 0, (UINT)bm.bmHeight, lpGlobal + sizeof(BITMAPINFOHEADER), &bmi, DIB_RGB_COLORS);
+                    ReleaseDC(NULL, hdc);
+
+                    GlobalUnlock(hGlobal);
+                    SetClipboardData(CF_DIB, hGlobal);
+                }
+            }
+        }
+        if (hTempBitmap) DeleteObject(hTempBitmap);
+    }
     CloseClipboard();
 }
 
