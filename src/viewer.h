@@ -123,6 +123,8 @@ struct AppContext {
     std::vector<ComPtr<ID2D1Bitmap>> animationD2DBitmaps;
     std::vector<UINT> animationFrameDelays;
     UINT currentAnimationFrame = 0;
+
+    std::atomic<bool> isInitialized{ false };
 };
 
 void CenterImage(bool resetZoom);

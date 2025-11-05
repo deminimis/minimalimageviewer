@@ -140,6 +140,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         LoadImageFromFile(filePath);
     }
 
+    g_ctx.isInitialized = true; 
+
+    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);

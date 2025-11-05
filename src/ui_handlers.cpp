@@ -43,7 +43,11 @@ static void OpenFileAction() {
 static void OnPaint(HWND hWnd) {
     PAINTSTRUCT ps{};
     HDC hdc = BeginPaint(hWnd, &ps);
-    Render();
+
+    if (g_ctx.isInitialized) {
+        Render();
+    }
+
     EndPaint(hWnd, &ps);
 }
 
@@ -805,4 +809,3 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
     return 0;
 }
-
