@@ -103,19 +103,41 @@ Minimal Image Viewer excels in size, privacy, and format support, leveraging WIC
 
 1. See the [release page](https://github.com/deminimis/minimalimageviewer/releases) for single .exe, or build yourself (instructions below). 
 
-2. **Controls**:
-   - **Open**: Ctrl+O or right-click → "Open Image".
-   - **Navigate**: Left/Right arrows or right-click → "Next/Previous Image."
-   - **Zoom**: Ctrl++/-, mouse wheel, or right-click → "Zoom In/Out"; Ctrl+0 or double-click to fit.
-   - **Rotate**: Up/Down arrows or right-click → "Rotate Clockwise/Counterclockwise."
-   - **Save**: Ctrl+S or right-click → "Save Image" (preserves original format).
-   - **Delete**: Delete or right-click → "Delete Image" (to Recycle Bin).
-   - **Full-Screen**: F11 or right-click → "Full Screen."
-   - **Move/Resize**: Drag window or edges (non-full-screen).
-   - **Exit**: Esc or right-click → "Exit."
-   - **Copy**: Ctrl+c.
-   - **Paste**: Ctrl+v
-   - **Background Color**: Right-click → "Background Color" → [Grey/Black/White/Transparent].
+### File Operations
+
+- **Open Image:** Ctrl+O, Right-click → "Open Image", or **Drag & Drop** a file onto the window.
+    
+- **Save:** Ctrl+S (overwrites the original file if rotated) or Right-click → "Save".
+    
+- **Save As:** Ctrl+Shift+S or Right-click → "Save As".
+    
+- **Delete Image:** `Delete` key or Right-click → "Delete Image" (moves file to Recycle Bin).
+    
+- **Copy:** Ctrl+C (copies the image file or bitmap to the clipboard).
+    
+- **Paste:** Ctrl+V (pastes an image from the clipboard).
+    
+- **Open Location:** Right-click → "Open File Location".
+    
+- **Properties:** Right-click → "Properties...".
+    
+
+### Image Navigation
+
+- **Next/Previous Image:** `Right Arrow` / `Left Arrow` or Right-click menu.
+    
+- **Pan Image:** When zoomed in, **click and drag** the image to move it.
+    
+
+### Image Viewing
+
+- **Zoom In/Out:** Ctrl+`+` / Ctrl+`-`, **Mouse Wheel**, or Right-click menu.
+    
+- **Fit to Window:** Ctrl+0, **Double-Click** the image, or Right-click → "Fit to Window".
+    
+- **Actual Size (100%):** Ctrl+`*` or Right-click → "Actual Size (100%)".
+    
+- **Rotate:** `Up Arrow` (Clockwise) / `Down Arrow` (Counter-Clockwise) or Right-click menu.
   
 
 
