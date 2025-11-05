@@ -3,6 +3,17 @@
 
 extern AppContext g_ctx;
 
+bool GetCurrentImageSize(UINT* width, UINT* height) {
+    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+    if (g_ctx.isAnimated && !g_ctx.animationFrameConverters.empty()) {
+        return SUCCEEDED(g_ctx.animationFrameConverters[0]->GetSize(width, height));
+    }
+    else if (g_ctx.wicConverter) {
+        return SUCCEEDED(g_ctx.wicConverter->GetSize(width, height));
+    }
+    return false;
+}
+
 void CreateDeviceResources() {
     if (!g_ctx.renderTarget) {
         RECT rc;
@@ -77,6 +88,7 @@ void DiscardDeviceResources() {
     g_ctx.textBrush = nullptr;
     g_ctx.textFormat = nullptr;
     g_ctx.checkerboardBrush = nullptr;
+    g_ctx.animationD2DBitmaps.clear();
 }
 
 void Render() {
@@ -131,8 +143,26 @@ void Render() {
     }
     else {
         ComPtr<ID2D1Bitmap> bitmapToDraw;
-        ComPtr<IWICFormatConverter> converterToUse;
-        {
+        bool hasImage = false;
+
+        if (g_ctx.isAnimated) {
+            std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+            if (g_ctx.animationD2DBitmaps.empty() && !g_ctx.animationFrameConverters.empty()) {
+                for (const auto& converter : g_ctx.animationFrameConverters) {
+                    ComPtr<ID2D1Bitmap> d2dFrameBitmap;
+                    if (SUCCEEDED(g_ctx.renderTarget->CreateBitmapFromWicBitmap(converter, nullptr, &d2dFrameBitmap))) {
+                        g_ctx.animationD2DBitmaps.push_back(d2dFrameBitmap);
+                    }
+                }
+                g_ctx.d2dBitmap = nullptr;
+                g_ctx.wicConverter = nullptr;
+            }
+            if (g_ctx.currentAnimationFrame < g_ctx.animationD2DBitmaps.size()) {
+                bitmapToDraw = g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame];
+            }
+            hasImage = !g_ctx.animationD2DBitmaps.empty();
+        }
+        else {
             std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
             if (!g_ctx.d2dBitmap && g_ctx.wicConverter) {
                 g_ctx.renderTarget->CreateBitmapFromWicBitmap(
@@ -140,9 +170,10 @@ void Render() {
                     nullptr,
                     &g_ctx.d2dBitmap
                 );
+                g_ctx.animationD2DBitmaps.clear();
             }
             bitmapToDraw = g_ctx.d2dBitmap;
-            converterToUse = g_ctx.wicConverter;
+            hasImage = (g_ctx.wicConverter != nullptr);
         }
 
         if (bitmapToDraw && !IsIconic(g_ctx.hWnd)) {
@@ -164,7 +195,7 @@ void Render() {
                 g_ctx.zoomFactor < 1.0f ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
             );
         }
-        else if (!converterToUse && g_ctx.textFormat && g_ctx.textBrush) {
+        else if (!hasImage && g_ctx.textFormat && g_ctx.textBrush) {
             RECT rc;
             GetClientRect(g_ctx.hWnd, &rc);
             D2D1_RECT_F layoutRect = D2D1::RectF(
@@ -186,7 +217,7 @@ void Render() {
             g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
             g_ctx.renderTarget->DrawTextW(
                 L"Right-click for options or drag an image here",
-                47,
+                46,
                 g_ctx.textFormat,
                 layoutRect,
                 g_ctx.textBrush
@@ -202,15 +233,12 @@ void Render() {
 }
 
 void FitImageToWindow() {
-    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-    if (!g_ctx.wicConverter) return;
+    UINT imgWidth, imgHeight;
+    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
 
     RECT clientRect;
     GetClientRect(g_ctx.hWnd, &clientRect);
     if (IsRectEmpty(&clientRect)) return;
-
-    UINT imgWidth, imgHeight;
-    g_ctx.wicConverter->GetSize(&imgWidth, &imgHeight);
 
     float clientWidth = static_cast<float>(clientRect.right - clientRect.left);
     float clientHeight = static_cast<float>(clientRect.bottom - clientRect.top);
@@ -230,8 +258,8 @@ void FitImageToWindow() {
 }
 
 void ZoomImage(float factor, POINT pt) {
-    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-    if (!g_ctx.wicConverter) return;
+    UINT imgWidth, imgHeight;
+    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
 
     RECT clientRect;
     GetClientRect(g_ctx.hWnd, &clientRect);
@@ -255,19 +283,16 @@ void ZoomImage(float factor, POINT pt) {
 }
 
 void RotateImage(bool clockwise) {
-    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-    if (!g_ctx.wicConverter) return;
+    UINT imgWidth, imgHeight;
+    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
     g_ctx.rotationAngle += clockwise ? 90 : -90;
     g_ctx.rotationAngle = (g_ctx.rotationAngle % 360 + 360) % 360;
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
 
 bool IsPointInImage(POINT pt, const RECT& clientRect) {
-    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-    if (!g_ctx.wicConverter) return false;
-
     UINT imgWidth, imgHeight;
-    g_ctx.wicConverter->GetSize(&imgWidth, &imgHeight);
+    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return false;
 
     RECT cr;
     GetClientRect(g_ctx.hWnd, &cr);

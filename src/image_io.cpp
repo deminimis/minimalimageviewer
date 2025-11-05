@@ -50,6 +50,11 @@ void LoadImageFromFile(const std::wstring& filePath) {
         std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
         g_ctx.wicConverter = nullptr;
         g_ctx.d2dBitmap = nullptr;
+        g_ctx.animationD2DBitmaps.clear();
+        g_ctx.isAnimated = false;
+        g_ctx.animationFrameConverters.clear();
+        g_ctx.animationFrameDelays.clear();
+        g_ctx.currentAnimationFrame = 0;
     }
     g_ctx.currentFilePathOverride.clear();
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
@@ -65,8 +70,9 @@ void LoadImageFromFile(const std::wstring& filePath) {
         wcscpy_s(folder, MAX_PATH, filePath.c_str());
         PathRemoveFileSpecW(folder);
         if (g_ctx.currentDirectory == folder && targetIndex != -1) {
-            nextIndex = (g_ctx.currentImageIndex + 1) % g_ctx.imageFiles.size();
-            prevIndex = (g_ctx.currentImageIndex - 1 + g_ctx.imageFiles.size()) % g_ctx.imageFiles.size();
+            size_t size = g_ctx.imageFiles.size();
+            nextIndex = (g_ctx.currentImageIndex + 1) % static_cast<int>(size);
+            prevIndex = (g_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
         }
         else {
             targetIndex = -1;
@@ -90,6 +96,9 @@ void LoadImageFromFile(const std::wstring& filePath) {
         {
             std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
             g_ctx.stagedWicConverter = preloadedConverter;
+            g_ctx.isAnimated = false;
+            g_ctx.animationFrameConverters.clear();
+            g_ctx.animationFrameDelays.clear();
         }
         PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOADED, (WPARAM)targetIndex, 0);
         return;
@@ -101,9 +110,72 @@ void LoadImageFromFile(const std::wstring& filePath) {
             return;
         }
 
-        ComPtr<IWICFormatConverter> converter = LoadImageInternal(filePath, false);
+        ComPtr<IWICBitmapDecoder> decoder;
+        HRESULT hr = g_ctx.wicFactory->CreateDecoderFromFilename(
+            filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder
+        );
 
-        if (!converter) {
+        if (FAILED(hr)) {
+            PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, 0);
+            CoUninitialize();
+            return;
+        }
+
+        UINT frameCount = 0;
+        decoder->GetFrameCount(&frameCount);
+
+        bool isAnimated = false;
+        ComPtr<IWICFormatConverter> firstFrameConverter;
+        std::vector<ComPtr<IWICFormatConverter>> frameConverters;
+        std::vector<UINT> frameDelays;
+
+        if (frameCount > 1) {
+            isAnimated = true;
+            for (UINT i = 0; i < frameCount; ++i) {
+                ComPtr<IWICBitmapFrameDecode> frame;
+                if (FAILED(decoder->GetFrame(i, &frame))) continue;
+
+                ComPtr<IWICMetadataQueryReader> metadataReader;
+                frame->GetMetadataQueryReader(&metadataReader);
+
+                PROPVARIANT propValue;
+                PropVariantInit(&propValue);
+                UINT delay = 100;
+
+                if (metadataReader && SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Delay", &propValue))) {
+                    if (propValue.vt == VT_UI2) {
+                        delay = propValue.uiVal * 10;
+                    }
+                    PropVariantClear(&propValue);
+                }
+
+                if (delay < 10) delay = 100;
+                frameDelays.push_back(delay);
+
+                ComPtr<IWICFormatConverter> converter;
+                if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+                    if (SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                        frameConverters.push_back(converter);
+                    }
+                }
+            }
+            if (!frameConverters.empty()) {
+                firstFrameConverter = frameConverters[0];
+            }
+        }
+        else {
+            ComPtr<IWICBitmapFrameDecode> frame;
+            if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
+                ComPtr<IWICFormatConverter> converter;
+                if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+                    if (SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                        firstFrameConverter = converter;
+                    }
+                }
+            }
+        }
+
+        if (!firstFrameConverter) {
             PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, 0);
             CoUninitialize();
             return;
@@ -126,7 +198,12 @@ void LoadImageFromFile(const std::wstring& filePath) {
 
         {
             std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-            g_ctx.stagedWicConverter = converter;
+            g_ctx.stagedWicConverter = firstFrameConverter;
+            g_ctx.isAnimated = isAnimated;
+            g_ctx.animationFrameConverters = frameConverters;
+            g_ctx.animationFrameDelays = frameDelays;
+            g_ctx.currentAnimationFrame = 0;
+            g_ctx.animationD2DBitmaps.clear();
         }
 
         PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOADED, (WPARAM)foundIndex, 0);
@@ -140,22 +217,38 @@ void FinalizeImageLoad(bool success, int foundIndex) {
         g_ctx.loadingThread.join();
     }
 
+    KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
     {
         std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
         g_ctx.d2dBitmap = nullptr;
+        g_ctx.animationD2DBitmaps.clear();
         if (success) {
-            g_ctx.wicConverter = g_ctx.stagedWicConverter;
+            if (g_ctx.isAnimated) {
+                g_ctx.wicConverter = nullptr;
+            }
+            else {
+                g_ctx.wicConverter = g_ctx.stagedWicConverter;
+                g_ctx.animationFrameConverters.clear();
+                g_ctx.animationFrameDelays.clear();
+            }
         }
         else {
             g_ctx.wicConverter = nullptr;
+            g_ctx.isAnimated = false;
+            g_ctx.animationFrameConverters.clear();
+            g_ctx.animationFrameDelays.clear();
         }
         g_ctx.stagedWicConverter = nullptr;
+        g_ctx.currentAnimationFrame = 0;
     }
 
     if (success) {
         g_ctx.currentImageIndex = foundIndex;
         SetWindowTextW(g_ctx.hWnd, g_ctx.loadingFilePath.c_str());
         StartPreloading();
+        if (g_ctx.isAnimated && !g_ctx.animationFrameDelays.empty()) {
+            SetTimer(g_ctx.hWnd, ANIMATION_TIMER_ID, g_ctx.animationFrameDelays[0], nullptr);
+        }
     }
     else {
         g_ctx.currentImageIndex = -1;
@@ -181,8 +274,9 @@ void StartPreloading() {
 
     if (g_ctx.imageFiles.empty() || g_ctx.currentImageIndex == -1) return;
 
-    int nextIndex = (g_ctx.currentImageIndex + 1) % g_ctx.imageFiles.size();
-    int prevIndex = (g_ctx.currentImageIndex - 1 + g_ctx.imageFiles.size()) % g_ctx.imageFiles.size();
+    size_t size = g_ctx.imageFiles.size();
+    int nextIndex = (g_ctx.currentImageIndex + 1) % static_cast<int>(size);
+    int prevIndex = (g_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
 
     if (nextIndex == prevIndex) {
         prevIndex = -1;
@@ -252,6 +346,7 @@ void DeleteCurrentImage() {
 
     if (MessageBoxW(g_ctx.hWnd, msg.c_str(), L"Confirm Delete", MB_YESNO | MB_ICONQUESTION) == IDYES) {
 
+        KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
         g_ctx.cancelPreloading = true;
         CleanupPreloadingThreads();
         {
@@ -265,6 +360,10 @@ void DeleteCurrentImage() {
             std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
             g_ctx.wicConverter = nullptr;
             g_ctx.d2dBitmap = nullptr;
+            g_ctx.isAnimated = false;
+            g_ctx.animationFrameConverters.clear();
+            g_ctx.animationD2DBitmaps.clear();
+            g_ctx.animationFrameDelays.clear();
         }
         InvalidateRect(g_ctx.hWnd, nullptr, TRUE);
         UpdateWindow(g_ctx.hWnd);
@@ -304,10 +403,17 @@ void DeleteCurrentImage() {
 
 static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
     std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-    if (!g_ctx.wicConverter) return nullptr;
-
     ComPtr<IWICBitmapSource> source;
-    source = g_ctx.wicConverter;
+
+    if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
+        source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+    }
+    else if (g_ctx.wicConverter) {
+        source = g_ctx.wicConverter;
+    }
+    else {
+        return nullptr;
+    }
 
     if (g_ctx.rotationAngle != 0) {
         ComPtr<IWICBitmapFlipRotator> rotator;
@@ -339,10 +445,8 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
 }
 
 void SaveImageAs() {
-    {
-        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-        if (!g_ctx.wicConverter) return;
-    }
+    UINT imgWidth, imgHeight;
+    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
 
     wchar_t szFile[MAX_PATH] = L"Untitled.png";
     OPENFILENAMEW ofn = { sizeof(ofn) };
@@ -397,8 +501,8 @@ void SaveImageAs() {
 
 void SaveImage() {
     if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
-        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-        if (g_ctx.wicConverter) {
+        UINT imgWidth, imgHeight;
+        if (GetCurrentImageSize(&imgWidth, &imgHeight)) {
             SaveImageAs();
         }
         return;
@@ -488,10 +592,15 @@ void HandlePaste() {
     if (hClipData) {
         LPBITMAPINFO lpbi = static_cast<LPBITMAPINFO>(GlobalLock(hClipData));
         if (lpbi) {
+            KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
             {
                 std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
                 g_ctx.wicConverter = nullptr;
                 g_ctx.d2dBitmap = nullptr;
+                g_ctx.isAnimated = false;
+                g_ctx.animationFrameConverters.clear();
+                g_ctx.animationD2DBitmaps.clear();
+                g_ctx.animationFrameDelays.clear();
             }
             HDC screenDC = GetDC(nullptr);
             BYTE* pBits = reinterpret_cast<BYTE*>(lpbi) + lpbi->bmiHeader.biSize + lpbi->bmiHeader.biClrUsed * sizeof(RGBQUAD);
@@ -542,7 +651,12 @@ void HandleCopy() {
     int indexCopy = g_ctx.currentImageIndex;
     {
         std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-        converterCopy = g_ctx.wicConverter;
+        if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
+            converterCopy = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+        }
+        else {
+            converterCopy = g_ctx.wicConverter;
+        }
     }
 
     if (indexCopy == -1 && !converterCopy) return;

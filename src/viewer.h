@@ -33,14 +33,45 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 
-#define WM_APP_IMAGE_LOADED (WM_APP + 1)
-#define WM_APP_IMAGE_LOAD_FAILED (WM_APP + 2)
+constexpr UINT WM_APP_IMAGE_LOADED = (WM_APP + 1);
+constexpr UINT WM_APP_IMAGE_LOAD_FAILED = (WM_APP + 2);
+constexpr UINT ANIMATION_TIMER_ID = 1;
 
 enum class BackgroundColor {
     Grey = 0,
     Black = 1,
     White = 2,
     Transparent = 3
+};
+
+struct ImageProperties {
+    std::wstring filePath;
+    std::wstring dimensions;
+    std::wstring fileSize;
+    std::wstring createdDate;
+    std::wstring modifiedDate;
+    std::wstring accessedDate;
+    std::wstring attributes;
+    std::wstring imageFormat;
+    std::wstring bitDepth;
+    std::wstring dpi;
+    std::wstring cameraMake;
+    std::wstring cameraModel;
+    std::wstring dateTaken;
+    std::wstring fStop;
+    std::wstring exposureTime;
+    std::wstring iso;
+    std::wstring software;
+    std::wstring focalLength;
+    std::wstring focalLength35mm;
+    std::wstring exposureBias;
+    std::wstring meteringMode;
+    std::wstring flash;
+    std::wstring exposureProgram;
+    std::wstring whiteBalance;
+    std::wstring author;
+    std::wstring copyright;
+    std::wstring lensModel;
 };
 
 struct AppContext {
@@ -67,6 +98,7 @@ struct AppContext {
     RECT savedRect = { 0 };
     std::wstring currentFilePathOverride;
     bool startFullScreen = false;
+    bool enforceSingleInstance = true;
     bool isDraggingImage = false;
     std::wstring settingsPath;
     std::wstring currentDirectory;
@@ -83,11 +115,20 @@ struct AppContext {
     std::thread preloadingPrevThread;
     std::atomic<bool> cancelPreloading{ false };
     std::mutex preloadMutex;
+
+    HWND hPropsWnd = nullptr;
+
+    bool isAnimated = false;
+    std::vector<ComPtr<IWICFormatConverter>> animationFrameConverters;
+    std::vector<ComPtr<ID2D1Bitmap>> animationD2DBitmaps;
+    std::vector<UINT> animationFrameDelays;
+    UINT currentAnimationFrame = 0;
 };
 
 void CenterImage(bool resetZoom);
 void SetActualSize();
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK PropsWndProc(HWND, UINT, WPARAM, LPARAM);
 void ToggleFullScreen();
 void LoadImageFromFile(const std::wstring& filePath);
 void FinalizeImageLoad(bool success, int foundIndex);
@@ -102,6 +143,7 @@ void HandleDropFiles(HDROP hDrop);
 void HandlePaste();
 void HandleCopy();
 void OpenFileLocationAction();
+void ShowImageProperties();
 void Render();
 void CreateDeviceResources();
 void DiscardDeviceResources();
@@ -109,6 +151,7 @@ void FitImageToWindow();
 void ZoomImage(float factor, POINT pt);
 void RotateImage(bool clockwise);
 bool IsPointInImage(POINT pt, const RECT& clientRect);
+bool GetCurrentImageSize(UINT* width, UINT* height);
 
-void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen);
-void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen);
+void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance);
+void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance);

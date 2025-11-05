@@ -3,8 +3,9 @@
 
 extern AppContext g_ctx;
 
-void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen) {
+void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance) {
     fullscreen = GetPrivateProfileIntW(L"Settings", L"StartFullScreen", 0, path.c_str()) == 1;
+    singleInstance = GetPrivateProfileIntW(L"Settings", L"EnforceSingleInstance", 1, path.c_str()) == 1;
 
     int bgChoice = GetPrivateProfileIntW(L"Settings", L"BackgroundColor", 0, path.c_str());
     if (bgChoice < 0 || bgChoice > 3) bgChoice = 0;
@@ -20,9 +21,12 @@ void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen) {
     }
 }
 
-void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen) {
+void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance) {
     std::wstring fs_val = fullscreen ? L"1" : L"0";
     WritePrivateProfileStringW(L"Settings", L"StartFullScreen", fs_val.c_str(), path.c_str());
+
+    std::wstring si_val = singleInstance ? L"1" : L"0";
+    WritePrivateProfileStringW(L"Settings", L"EnforceSingleInstance", si_val.c_str(), path.c_str());
 
     std::wstring bg_val = std::to_wstring(static_cast<int>(g_ctx.bgColor));
     WritePrivateProfileStringW(L"Settings", L"BackgroundColor", bg_val.c_str(), path.c_str());

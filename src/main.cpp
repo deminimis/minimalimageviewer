@@ -18,6 +18,7 @@ void CleanupLoadingThread() {
         g_ctx.loadingThread.join();
     }
     g_ctx.cancelPreloading = false;
+    KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
 }
 
 void CenterImage(bool resetZoom) {
@@ -32,8 +33,8 @@ void CenterImage(bool resetZoom) {
 }
 
 void SetActualSize() {
-    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-    if (!g_ctx.wicConverter) return;
+    UINT imgWidth, imgHeight;
+    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
     g_ctx.zoomFactor = 1.0f;
     g_ctx.rotationAngle = 0;
     g_ctx.offsetX = 0.0f;
@@ -42,22 +43,6 @@ void SetActualSize() {
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
-    HWND existingWnd = FindWindowW(L"MinimalImageViewer", nullptr);
-    if (existingWnd) {
-        SetForegroundWindow(existingWnd);
-        if (IsIconic(existingWnd)) {
-            ShowWindow(existingWnd, SW_RESTORE);
-        }
-        if (lpCmdLine && *lpCmdLine) {
-            COPYDATASTRUCT cds{};
-            cds.dwData = 1;
-            cds.cbData = (static_cast<DWORD>(wcslen(lpCmdLine)) + 1) * sizeof(wchar_t);
-            cds.lpData = lpCmdLine;
-            SendMessage(existingWnd, WM_COPYDATA, reinterpret_cast<WPARAM>(hInstance), reinterpret_cast<LPARAM>(&cds));
-        }
-        return 0;
-    }
-
     g_ctx.hInst = hInstance;
 
     wchar_t exePath[MAX_PATH] = { 0 };
@@ -67,9 +52,27 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     g_ctx.settingsPath = exePath;
 
     RECT startupRect;
-    ReadSettings(g_ctx.settingsPath, startupRect, g_ctx.startFullScreen);
+    ReadSettings(g_ctx.settingsPath, startupRect, g_ctx.startFullScreen, g_ctx.enforceSingleInstance);
     if (IsRectEmpty(&startupRect)) {
         startupRect = { CW_USEDEFAULT, CW_USEDEFAULT, 800, 600 };
+    }
+
+    if (g_ctx.enforceSingleInstance) {
+        HWND existingWnd = FindWindowW(L"MinimalImageViewer", nullptr);
+        if (existingWnd) {
+            SetForegroundWindow(existingWnd);
+            if (IsIconic(existingWnd)) {
+                ShowWindow(existingWnd, SW_RESTORE);
+            }
+            if (lpCmdLine && *lpCmdLine) {
+                COPYDATASTRUCT cds{};
+                cds.dwData = 1;
+                cds.cbData = (static_cast<DWORD>(wcslen(lpCmdLine)) + 1) * sizeof(wchar_t);
+                cds.lpData = lpCmdLine;
+                SendMessage(existingWnd, WM_COPYDATA, reinterpret_cast<WPARAM>(hInstance), reinterpret_cast<LPARAM>(&cds));
+            }
+            return 0;
+        }
     }
 
     if (FAILED(CoInitialize(nullptr))) {
@@ -146,6 +149,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     CleanupLoadingThread();
     g_ctx.wicConverter = nullptr;
     g_ctx.d2dBitmap = nullptr;
+    g_ctx.animationFrameConverters.clear();
+    g_ctx.animationD2DBitmaps.clear();
     g_ctx.textBrush = nullptr;
     g_ctx.textFormat = nullptr;
     g_ctx.renderTarget = nullptr;
