@@ -25,6 +25,7 @@ Minimal Image Viewer is an open-source, C++-based image viewing application engi
   - Automatically indexes all WIC-supported images in the current directory, sorted lexicographically.
 
 - **Flexible Viewing**:
+  - Internally sorts images based on name, size, etc. 
   - Smooth zoom (0.1x–10x) via Ctrl++/-, mouse wheel, or context menu, implemented with `SetWorldTransform` for GPU-friendly scaling.
   - Fits images to window (Ctrl+0 or double-click), adjusting for rotation angles.
   - Rotates images in 90° increments.
@@ -47,6 +48,9 @@ Minimal Image Viewer is an open-source, C++-based image viewing application engi
 
 - **Single-Instance Enforcement**:
   - Uses `FindWindowW` to prevent multiple instances, forwarding command-line arguments to the existing instance via `WM_COPYDATA` for memory management.
+ 
+- **EXIF Data**:
+  - View commmon EXIF data in a properties window or overlayed on image. 
  
 
 ## Security and Privacy
@@ -120,6 +124,8 @@ Minimal Image Viewer excels in size, privacy, and format support, leveraging WIC
 - **Open Location:** Right-click → "Open File Location".
     
 - **Properties:** Right-click → "Properties...".
+
+- **EXIF overlay:** "i"
     
 
 ### Image Navigation
