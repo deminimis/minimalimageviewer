@@ -140,7 +140,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         LoadImageFromFile(filePath);
     }
 
-    g_ctx.isInitialized = true; 
+    g_ctx.isInitialized = true;
 
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 

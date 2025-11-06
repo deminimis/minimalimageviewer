@@ -44,6 +44,12 @@ enum class BackgroundColor {
     Transparent = 3
 };
 
+enum class SortCriteria {
+    ByName = 0,
+    ByDateModified = 1,
+    ByFileSize = 2
+};
+
 struct ImageProperties {
     std::wstring filePath;
     std::wstring dimensions;
@@ -102,6 +108,8 @@ struct AppContext {
     bool isDraggingImage = false;
     std::wstring settingsPath;
     std::wstring currentDirectory;
+    SortCriteria currentSortCriteria = SortCriteria::ByName;
+    bool isSortAscending = true;
 
     std::atomic<bool> isLoading{ false };
     std::thread loadingThread;
@@ -125,6 +133,7 @@ struct AppContext {
     UINT currentAnimationFrame = 0;
 
     std::atomic<bool> isInitialized{ false };
+    bool isOsdVisible = false;
 };
 
 void CenterImage(bool resetZoom);
@@ -137,7 +146,7 @@ void FinalizeImageLoad(bool success, int foundIndex);
 void CleanupLoadingThread();
 void CleanupPreloadingThreads();
 void StartPreloading();
-void GetImagesInDirectory(const wchar_t* filePath);
+void GetImagesInDirectory(const wchar_t* directoryPath);
 void SaveImage();
 void SaveImageAs();
 void DeleteCurrentImage();
@@ -154,6 +163,7 @@ void ZoomImage(float factor, POINT pt);
 void RotateImage(bool clockwise);
 bool IsPointInImage(POINT pt, const RECT& clientRect);
 bool GetCurrentImageSize(UINT* width, UINT* height);
+ImageProperties GetCurrentOsdProperties();
 
 void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance);
 void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance);

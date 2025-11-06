@@ -1,4 +1,5 @@
 #include "viewer.h"
+#include "exif_utils.h"
 #include <string>
 #include <stdio.h>
 
@@ -83,6 +84,10 @@ static void OnKeyDown(WPARAM wParam) {
     case 'V':      if (ctrlPressed) HandlePaste(); break;
     case '0':      if (ctrlPressed) CenterImage(true); break;
     case VK_MULTIPLY: if (ctrlPressed) SetActualSize(); break;
+    case 'I':
+        g_ctx.isOsdVisible = !g_ctx.isOsdVisible;
+        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        break;
     case VK_OEM_PLUS:
         if (ctrlPressed) {
             RECT cr; GetClientRect(g_ctx.hWnd, &cr);
@@ -110,6 +115,24 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hMenu, MF_STRING, IDM_NEXT_IMG, L"Next Image\tRight Arrow");
     AppendMenuW(hMenu, MF_STRING, IDM_PREV_IMG, L"Previous Image\tLeft Arrow");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+
+    HMENU hSortMenu = CreatePopupMenu();
+    bool isNameAsc = (g_ctx.currentSortCriteria == SortCriteria::ByName && g_ctx.isSortAscending);
+    bool isNameDesc = (g_ctx.currentSortCriteria == SortCriteria::ByName && !g_ctx.isSortAscending);
+    bool isDateAsc = (g_ctx.currentSortCriteria == SortCriteria::ByDateModified && g_ctx.isSortAscending);
+    bool isDateDesc = (g_ctx.currentSortCriteria == SortCriteria::ByDateModified && !g_ctx.isSortAscending);
+    bool isSizeAsc = (g_ctx.currentSortCriteria == SortCriteria::ByFileSize && g_ctx.isSortAscending);
+    bool isSizeDesc = (g_ctx.currentSortCriteria == SortCriteria::ByFileSize && !g_ctx.isSortAscending);
+
+    AppendMenuW(hSortMenu, MF_STRING | (isNameAsc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_NAME_ASC, L"Name (Ascending)");
+    AppendMenuW(hSortMenu, MF_STRING | (isNameDesc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_NAME_DESC, L"Name (Descending)");
+    AppendMenuW(hSortMenu, MF_STRING | (isDateAsc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_DATE_ASC, L"Date Modified (Ascending)");
+    AppendMenuW(hSortMenu, MF_STRING | (isDateDesc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_DATE_DESC, L"Date Modified (Descending)");
+    AppendMenuW(hSortMenu, MF_STRING | (isSizeAsc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_SIZE_ASC, L"File Size (Ascending)");
+    AppendMenuW(hSortMenu, MF_STRING | (isSizeDesc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_SIZE_DESC, L"File Size (Descending)");
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSortMenu, L"Sort By");
+    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
+
     AppendMenuW(hMenu, MF_STRING, IDM_ROTATE_CW, L"Rotate Clockwise\tUp Arrow");
     AppendMenuW(hMenu, MF_STRING, IDM_ROTATE_CCW, L"Rotate Counter-Clockwise\tDown Arrow");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
@@ -197,6 +220,35 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     case IDM_SINGLE_INSTANCE:
         g_ctx.enforceSingleInstance = !g_ctx.enforceSingleInstance;
         break;
+
+    case IDM_SORT_BY_NAME_ASC:
+    case IDM_SORT_BY_NAME_DESC:
+    case IDM_SORT_BY_DATE_ASC:
+    case IDM_SORT_BY_DATE_DESC:
+    case IDM_SORT_BY_SIZE_ASC:
+    case IDM_SORT_BY_SIZE_DESC:
+    {
+        std::wstring currentFile;
+        if (g_ctx.currentImageIndex >= 0 && g_ctx.currentImageIndex < static_cast<int>(g_ctx.imageFiles.size())) {
+            currentFile = g_ctx.imageFiles[g_ctx.currentImageIndex];
+        }
+
+        if (cmd == IDM_SORT_BY_NAME_ASC) { g_ctx.currentSortCriteria = SortCriteria::ByName; g_ctx.isSortAscending = true; }
+        else if (cmd == IDM_SORT_BY_NAME_DESC) { g_ctx.currentSortCriteria = SortCriteria::ByName; g_ctx.isSortAscending = false; }
+        else if (cmd == IDM_SORT_BY_DATE_ASC) { g_ctx.currentSortCriteria = SortCriteria::ByDateModified; g_ctx.isSortAscending = true; }
+        else if (cmd == IDM_SORT_BY_DATE_DESC) { g_ctx.currentSortCriteria = SortCriteria::ByDateModified; g_ctx.isSortAscending = false; }
+        else if (cmd == IDM_SORT_BY_SIZE_ASC) { g_ctx.currentSortCriteria = SortCriteria::ByFileSize; g_ctx.isSortAscending = true; }
+        else if (cmd == IDM_SORT_BY_SIZE_DESC) { g_ctx.currentSortCriteria = SortCriteria::ByFileSize; g_ctx.isSortAscending = false; }
+
+        if (!g_ctx.currentDirectory.empty()) {
+            GetImagesInDirectory(g_ctx.currentDirectory.c_str());
+        }
+
+        if (!currentFile.empty()) {
+            LoadImageFromFile(currentFile);
+        }
+        break;
+    }
     }
 }
 
@@ -242,136 +294,71 @@ static std::wstring FormatFileSize(const LARGE_INTEGER& fileSize) {
     return buffer;
 }
 
-static std::wstring GetMetadataString(IWICMetadataQueryReader* pReader, const wchar_t* query) {
-    PROPVARIANT propValue;
-    PropVariantInit(&propValue);
-    std::wstring val = L"N/A";
-    if (FAILED(pReader->GetMetadataByName(query, &propValue))) {
-        PropVariantClear(&propValue);
-        return val;
+ImageProperties GetCurrentOsdProperties() {
+    ImageProperties pProps = {};
+
+    if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
+        if (!g_ctx.currentFilePathOverride.empty()) {
+            pProps.filePath = g_ctx.currentFilePathOverride;
+        }
+        return pProps;
     }
 
-    wchar_t buffer[256] = { 0 };
+    const std::wstring& filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
+    pProps.filePath = filePath;
 
-    if (wcscmp(query, L"/app1/ifd/exif/{rational=33437}") == 0 && propValue.vt == (VT_UI4 | VT_VECTOR) && propValue.caul.cElems == 2) {
-        double fstop_val = (double)propValue.caul.pElems[0] / (double)propValue.caul.pElems[1];
-        swprintf_s(buffer, 256, L"f/%.1f", fstop_val);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{rational=33434}") == 0 && propValue.vt == (VT_UI4 | VT_VECTOR) && propValue.caul.cElems == 2) {
-        double num = (double)propValue.caul.pElems[0];
-        double den = (double)propValue.caul.pElems[1];
-        if (den == 0) den = 1.0;
-        if (num == 1 && den > 1) {
-            swprintf_s(buffer, 256, L"1/%.0f s", den);
-        }
-        else {
-            swprintf_s(buffer, 256, L"%.4f s", num / den);
-        }
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=34855}") == 0 && propValue.vt == VT_UI2) {
-        swprintf_s(buffer, 256, L"ISO %u", propValue.uiVal);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{rational=37386}") == 0 && propValue.vt == (VT_UI4 | VT_VECTOR) && propValue.caul.cElems == 2) {
-        double focal_val = (double)propValue.caul.pElems[0] / (double)propValue.caul.pElems[1];
-        swprintf_s(buffer, 256, L"%.0f mm", focal_val);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=41989}") == 0 && propValue.vt == VT_UI2) {
-        swprintf_s(buffer, 256, L"%u mm", propValue.uiVal);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{srational=37380}") == 0 && propValue.vt == (VT_I4 | VT_VECTOR) && propValue.caul.cElems == 2) {
-        double bias_val = (double)propValue.caul.pElems[0] / (double)propValue.caul.pElems[1];
-        swprintf_s(buffer, 256, L"%.2f EV", bias_val);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=37383}") == 0 && propValue.vt == VT_UI2) {
-        switch (propValue.uiVal) {
-        case 0: val = L"Unknown"; break;
-        case 1: val = L"Average"; break;
-        case 2: val = L"Center Weighted Average"; break;
-        case 3: val = L"Spot"; break;
-        case 4: val = L"Multi-spot"; break;
-        case 5: val = L"Pattern"; break;
-        case 6: val = L"Partial"; break;
-        default: val = L"Other"; break;
-        }
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=37385}") == 0 && propValue.vt == VT_UI2) {
-        if (propValue.uiVal & 0x1) val = L"Fired";
-        else val = L"Did not fire";
-        if (propValue.uiVal & 0x4) val += L", Strobe";
-        if (propValue.uiVal & 0x10) val += L", Auto";
-        if (propValue.uiVal & 0x40) val += L", Red-eye reduction";
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=34850}") == 0 && propValue.vt == VT_UI2) {
-        switch (propValue.uiVal) {
-        case 0: val = L"Not defined"; break;
-        case 1: val = L"Manual"; break;
-        case 2: val = L"Normal program (Auto)"; break;
-        case 3: val = L"Aperture priority"; break;
-        case 4: val = L"Shutter priority"; break;
-        case 5: val = L"Creative program"; break;
-        case 6: val = L"Action program"; break;
-        case 7: val = L"Portrait mode"; break;
-        case 8: val = L"Landscape mode"; break;
-        default: val = L"Other"; break;
-        }
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=41987}") == 0 && propValue.vt == VT_UI2) {
-        switch (propValue.uiVal) {
-        case 0: val = L"Auto"; break;
-        case 1: val = L"Manual"; break;
-        default: val = L"Other"; break;
-        }
-    }
-    else if (SUCCEEDED(PropVariantToString(propValue, buffer, 256))) {
-        val = buffer;
+    UINT imgWidth, imgHeight;
+    if (GetCurrentImageSize(&imgWidth, &imgHeight)) {
+        pProps.dimensions = std::to_wstring(imgWidth) + L" x " + std::to_wstring(imgHeight) + L" pixels";
     }
 
-    PropVariantClear(&propValue);
-    return val;
+    WIN32_FILE_ATTRIBUTE_DATA fad;
+    if (GetFileAttributesExW(filePath.c_str(), GetFileExInfoStandard, &fad)) {
+        LARGE_INTEGER fileSize;
+        fileSize.HighPart = fad.nFileSizeHigh;
+        fileSize.LowPart = fad.nFileSizeLow;
+        pProps.fileSize = FormatFileSize(fileSize);
+
+        if (fad.dwFileAttributes & FILE_ATTRIBUTE_READONLY) pProps.attributes += L"Read-only; ";
+        if (fad.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) pProps.attributes += L"Hidden; ";
+        if (fad.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) pProps.attributes += L"System; ";
+        if (pProps.attributes.empty()) pProps.attributes = L"Normal";
+
+    }
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    ComPtr<IWICBitmapFrameDecode> frame;
+    ComPtr<IWICMetadataQueryReader> metadataReader;
+
+    if (SUCCEEDED(g_ctx.wicFactory->CreateDecoderFromFilename(filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder))) {
+        GUID containerFormat;
+        if (SUCCEEDED(decoder->GetContainerFormat(&containerFormat))) {
+            pProps.imageFormat = GetContainerFormatName(containerFormat);
+            if (g_ctx.isAnimated) {
+                pProps.imageFormat += L" (Animated)";
+            }
+        }
+
+        if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
+
+            pProps.bitDepth = GetBitDepth(frame);
+
+            double dpiX, dpiY;
+            if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) {
+                pProps.dpi = std::to_wstring(static_cast<int>(dpiX + 0.5)) + L" x " + std::to_wstring(static_cast<int>(dpiY + 0.5)) + L" DPI";
+            }
+
+            if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
+                pProps.fStop = GetMetadataString(metadataReader, L"/app1/ifd/exif/{rational=33437}");
+                pProps.exposureTime = GetMetadataString(metadataReader, L"/app1/ifd/exif/{rational=33434}");
+                pProps.iso = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=34855}");
+                pProps.software = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=305}");
+                pProps.author = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=315}");
+            }
+        }
+    }
+    return pProps;
 }
-
-static std::wstring GetContainerFormatName(const GUID& guid) {
-    if (guid == GUID_ContainerFormatPng) return L"PNG";
-    if (guid == GUID_ContainerFormatJpeg) return L"JPEG";
-    if (guid == GUID_ContainerFormatBmp) return L"BMP";
-    if (guid == GUID_ContainerFormatGif) return L"GIF";
-    if (guid == GUID_ContainerFormatTiff) return L"TIFF";
-    if (guid == GUID_ContainerFormatIco) return L"ICO";
-    if (guid == GUID_ContainerFormatWmp) return L"HD Photo / JPEG XR";
-    if (guid == GUID_ContainerFormatDds) return L"DDS";
-    if (guid == GUID_ContainerFormatHeif) return L"HEIF";
-    return L"Unknown";
-}
-
-static std::wstring GetBitDepth(IWICBitmapFrameDecode* pFrame) {
-    WICPixelFormatGUID pixelFormatGuid;
-    if (FAILED(pFrame->GetPixelFormat(&pixelFormatGuid))) {
-        return L"N/A";
-    }
-
-    ComPtr<IWICComponentInfo> componentInfo;
-    if (FAILED(g_ctx.wicFactory->CreateComponentInfo(pixelFormatGuid, &componentInfo))) {
-        return L"N/A";
-    }
-
-    ComPtr<IWICPixelFormatInfo> pixelFormatInfo;
-    if (FAILED(componentInfo->QueryInterface(IID_PPV_ARGS(&pixelFormatInfo)))) {
-        return L"N/A";
-    }
-
-    UINT bpp = 0;
-    if (SUCCEEDED(pixelFormatInfo->GetBitsPerPixel(&bpp))) {
-        return std::to_wstring(bpp) + L"-bit";
-    }
-    return L"N/A";
-}
-
 
 LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {

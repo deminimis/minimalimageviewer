@@ -24,3 +24,9 @@
 #define IDM_BACKGROUND_TRANSPARENT  1025
 #define IDM_SINGLE_INSTANCE         1026
 #define IDM_PROPERTIES              1027
+#define IDM_SORT_BY_NAME_ASC        1028
+#define IDM_SORT_BY_NAME_DESC       1029
+#define IDM_SORT_BY_DATE_ASC        1030
+#define IDM_SORT_BY_DATE_DESC       1031
+#define IDM_SORT_BY_SIZE_ASC        1032
+#define IDM_SORT_BY_SIZE_DESC       1033

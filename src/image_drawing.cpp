@@ -39,14 +39,14 @@ void CreateDeviceResources() {
                 DWRITE_FONT_WEIGHT_NORMAL,
                 DWRITE_FONT_STYLE_NORMAL,
                 DWRITE_FONT_STRETCH_NORMAL,
-                18.0f,
+                14.0f,
                 L"en-us",
                 &g_ctx.textFormat
             );
         }
         if (SUCCEEDED(hr)) {
-            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
     }
 
@@ -91,6 +91,59 @@ void DiscardDeviceResources() {
     g_ctx.animationD2DBitmaps.clear();
 }
 
+static void DrawOsdOverlay(ID2D1HwndRenderTarget* renderTarget) {
+    ImageProperties props = GetCurrentOsdProperties();
+    if (props.filePath.empty()) return;
+
+    D2D1_SIZE_F rtSize = renderTarget->GetSize();
+    float padding = 10.0f;
+    float lineHeight = 18.0f;
+    float textHeight = lineHeight * 8 + padding * 2;
+
+    std::wstring osdText;
+    osdText += L"Image Format: " + props.imageFormat + L"\n";
+    osdText += L"Dimensions: " + props.dimensions + L"\n";
+    osdText += L"Bit Depth: " + props.bitDepth + L"\n";
+    osdText += L"DPI: " + props.dpi + L"\n";
+    osdText += L"\n";
+    osdText += L"File Size: " + props.fileSize + L"\n";
+    osdText += L"Attributes: " + props.attributes + L"\n";
+    osdText += L"\n";
+    osdText += L"F-stop: " + props.fStop + L"  Exposure: " + props.exposureTime + L"  ISO: " + props.iso + L"\n";
+    osdText += L"Author: " + props.author + L"  Software: " + props.software + L"\n";
+
+    renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+
+    ComPtr<IDWriteTextLayout> textLayout;
+    if (FAILED(g_ctx.writeFactory->CreateTextLayout(
+        osdText.c_str(),
+        static_cast<UINT32>(osdText.length()),
+        g_ctx.textFormat,
+        rtSize.width - 2 * padding,
+        rtSize.height,
+        &textLayout
+    ))) return;
+
+    DWRITE_TEXT_METRICS metrics;
+    textLayout->GetMetrics(&metrics);
+
+    float bgWidth = metrics.widthIncludingTrailingWhitespace + padding * 2;
+    float bgHeight = metrics.height + padding * 2;
+    float bgX = padding;
+    float bgY = rtSize.height - bgHeight - padding;
+
+    D2D1_RECT_F bgRect = D2D1::RectF(bgX, bgY, bgX + bgWidth, bgY + bgHeight);
+
+    ComPtr<ID2D1SolidColorBrush> bgBrush;
+    renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.6f), &bgBrush);
+    renderTarget->FillRectangle(bgRect, bgBrush);
+
+    D2D1_RECT_F textRect = D2D1::RectF(bgX + padding, bgY + padding, bgX + bgWidth - padding, bgY + bgHeight - padding);
+
+    g_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
+    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout, g_ctx.textBrush);
+}
+
 void Render() {
     CreateDeviceResources();
     if (!g_ctx.renderTarget) return;
@@ -133,6 +186,8 @@ void Render() {
         g_ctx.textBrush->SetColor(textColor);
 
         g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+        g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         g_ctx.renderTarget->DrawTextW(
             L"Loading...",
             10,
@@ -140,6 +195,8 @@ void Render() {
             layoutRect,
             g_ctx.textBrush
         );
+        g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     }
     else {
         ComPtr<ID2D1Bitmap> bitmapToDraw;
@@ -215,6 +272,8 @@ void Render() {
             g_ctx.textBrush->SetColor(textColor);
 
             g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
             g_ctx.renderTarget->DrawTextW(
                 L"Right-click for options or drag an image here",
                 46,
@@ -222,6 +281,12 @@ void Render() {
                 layoutRect,
                 g_ctx.textBrush
             );
+            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+        }
+
+        if (g_ctx.isOsdVisible && hasImage) {
+            DrawOsdOverlay(g_ctx.renderTarget);
         }
     }
 

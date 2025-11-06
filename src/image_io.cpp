@@ -188,7 +188,7 @@ void LoadImageFromFile(const std::wstring& filePath) {
         int foundIndex = -1;
         if (g_ctx.currentDirectory != folder) {
             g_ctx.currentDirectory = folder;
-            GetImagesInDirectory(filePath.c_str());
+            GetImagesInDirectory(g_ctx.currentDirectory.c_str());
         }
 
         auto it = std::find_if(g_ctx.imageFiles.begin(), g_ctx.imageFiles.end(),
@@ -310,29 +310,66 @@ void StartPreloading() {
 }
 
 
-void GetImagesInDirectory(const wchar_t* filePath) {
+void GetImagesInDirectory(const wchar_t* directoryPath) {
     g_ctx.imageFiles.clear();
 
-    wchar_t folder[MAX_PATH] = { 0 };
-    wcscpy_s(folder, MAX_PATH, filePath);
-    PathRemoveFileSpecW(folder);
+    struct FileInfo {
+        std::wstring path;
+        FILETIME writeTime = {};
+        LARGE_INTEGER fileSize = {};
+    };
+    std::vector<FileInfo> foundFiles;
 
     WIN32_FIND_DATAW fd{};
     wchar_t searchPath[MAX_PATH] = { 0 };
-    PathCombineW(searchPath, folder, L"*.*");
+    PathCombineW(searchPath, directoryPath, L"*.*");
 
     HANDLE hFind = FindFirstFileW(searchPath, &fd);
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
             if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
                 wchar_t fullPath[MAX_PATH] = { 0 };
-                PathCombineW(fullPath, folder, fd.cFileName);
+                PathCombineW(fullPath, directoryPath, fd.cFileName);
                 if (IsImageFile(fullPath)) {
-                    g_ctx.imageFiles.push_back(fullPath);
+                    FileInfo info;
+                    info.path = fullPath;
+                    info.writeTime = fd.ftLastWriteTime;
+                    info.fileSize.LowPart = fd.nFileSizeLow;
+                    info.fileSize.HighPart = fd.nFileSizeHigh;
+                    foundFiles.push_back(info);
                 }
             }
         } while (FindNextFileW(hFind, &fd));
         FindClose(hFind);
+    }
+
+    std::sort(foundFiles.begin(), foundFiles.end(), [&](const FileInfo& a, const FileInfo& b) {
+        int compareResult = 0;
+        switch (g_ctx.currentSortCriteria) {
+        case SortCriteria::ByDateModified:
+            compareResult = CompareFileTime(&a.writeTime, &b.writeTime);
+            break;
+        case SortCriteria::ByFileSize:
+            if (a.fileSize.QuadPart < b.fileSize.QuadPart) compareResult = -1;
+            else if (a.fileSize.QuadPart > b.fileSize.QuadPart) compareResult = 1;
+            else compareResult = 0;
+            break;
+        case SortCriteria::ByName:
+        default:
+            compareResult = _wcsicmp(a.path.c_str(), b.path.c_str());
+            break;
+        }
+
+        if (g_ctx.isSortAscending) {
+            return compareResult < 0;
+        }
+        else {
+            return compareResult > 0;
+        }
+        });
+
+    for (const auto& info : foundFiles) {
+        g_ctx.imageFiles.push_back(info.path);
     }
 }
 
