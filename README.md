@@ -13,6 +13,8 @@ Minimal Image Viewer is an open-source, C++-based image viewing application engi
 ### 💾 Download the latest version [here](https://github.com/deminimis/minimalimageviewer/releases).
 <br>
 
+_For a stripped-down 21kb version, you can try the [stable stripped .exe](https://github.com/deminimis/minimalimageviewer/releases/tag/v1.6**)_
+
 ## Key Features
 
 ### Viewing & Navigation
