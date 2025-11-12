@@ -28,6 +28,17 @@ void CenterImage(bool resetZoom) {
     g_ctx.rotationAngle = 0;
     g_ctx.offsetX = 0.0f;
     g_ctx.offsetY = 0.0f;
+    g_ctx.isFlippedHorizontal = false;
+    g_ctx.isGrayscale = false;
+    g_ctx.isCropActive = false;
+    g_ctx.isCropMode = false;
+    g_ctx.isSelectingCropRect = false;
+    g_ctx.isCropPending = false;
+    {
+        CriticalSectionLock lock(g_ctx.wicMutex);
+        g_ctx.d2dBitmap = nullptr;
+        g_ctx.animationD2DBitmaps.clear();
+    }
     FitImageToWindow();
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
@@ -39,6 +50,17 @@ void SetActualSize() {
     g_ctx.rotationAngle = 0;
     g_ctx.offsetX = 0.0f;
     g_ctx.offsetY = 0.0f;
+    g_ctx.isFlippedHorizontal = false;
+    g_ctx.isGrayscale = false;
+    g_ctx.isCropActive = false;
+    g_ctx.isCropMode = false;
+    g_ctx.isSelectingCropRect = false;
+    g_ctx.isCropPending = false;
+    {
+        CriticalSectionLock lock(g_ctx.wicMutex);
+        g_ctx.d2dBitmap = nullptr;
+        g_ctx.animationD2DBitmaps.clear();
+    }
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
 
@@ -48,11 +70,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     wchar_t exePath[MAX_PATH] = { 0 };
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     PathRemoveFileSpecW(exePath);
-    PathAppendW(exePath, L"settings.ini");
+    PathAppendW(exePath, L"minimal_image_viewer_settings.ini");
     g_ctx.settingsPath = exePath;
 
     RECT startupRect;
-    ReadSettings(g_ctx.settingsPath, startupRect, g_ctx.startFullScreen, g_ctx.enforceSingleInstance);
+    ReadSettings(g_ctx.settingsPath, startupRect, g_ctx.startFullScreen, g_ctx.enforceSingleInstance, g_ctx.alwaysOnTop);
     if (IsRectEmpty(&startupRect)) {
         startupRect = { CW_USEDEFAULT, CW_USEDEFAULT, 800, 600 };
     }
@@ -80,20 +102,29 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         return 1;
     }
 
+    InitializeCriticalSection(&g_ctx.wicMutex);
+    InitializeCriticalSection(&g_ctx.preloadMutex);
+
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_ctx.wicFactory)))) {
         MessageBoxW(nullptr, L"Failed to create WIC Imaging Factory.", L"Error", MB_OK | MB_ICONERROR);
+        DeleteCriticalSection(&g_ctx.wicMutex);
+        DeleteCriticalSection(&g_ctx.preloadMutex);
         CoUninitialize();
         return 1;
     }
 
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_ctx.d2dFactory))) {
         MessageBoxW(nullptr, L"Failed to create Direct2D Factory.", L"Error", MB_OK | MB_ICONERROR);
+        DeleteCriticalSection(&g_ctx.wicMutex);
+        DeleteCriticalSection(&g_ctx.preloadMutex);
         CoUninitialize();
         return 1;
     }
 
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&g_ctx.writeFactory)))) {
         MessageBoxW(nullptr, L"Failed to create DirectWrite Factory.", L"Error", MB_OK | MB_ICONERROR);
+        DeleteCriticalSection(&g_ctx.wicMutex);
+        DeleteCriticalSection(&g_ctx.preloadMutex);
         CoUninitialize();
         return 1;
     }
@@ -108,7 +139,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     wcex.lpszClassName = L"MinimalImageViewer";
     RegisterClassExW(&wcex);
 
-    g_ctx.hWnd = CreateWindowW(
+    DWORD exStyle = (g_ctx.alwaysOnTop) ? WS_EX_TOPMOST : 0;
+
+    g_ctx.hWnd = CreateWindowExW(
+        exStyle,
         wcex.lpszClassName,
         L"Minimal Image Viewer",
         WS_OVERLAPPEDWINDOW | WS_VISIBLE,
@@ -120,6 +154,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
 
     if (!g_ctx.hWnd) {
         MessageBoxW(nullptr, L"Failed to create window.", L"Error", MB_OK | MB_ICONERROR);
+        DeleteCriticalSection(&g_ctx.wicMutex);
+        DeleteCriticalSection(&g_ctx.preloadMutex);
+        CoUninitialize();
         return 1;
     }
 
@@ -161,6 +198,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     g_ctx.writeFactory = nullptr;
     g_ctx.d2dFactory = nullptr;
     g_ctx.wicFactory = nullptr;
+
+    DeleteCriticalSection(&g_ctx.wicMutex);
+    DeleteCriticalSection(&g_ctx.preloadMutex);
     CoUninitialize();
     return static_cast<int>(msg.wParam);
 }

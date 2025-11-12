@@ -5,6 +5,158 @@
 
 extern AppContext g_ctx;
 
+static void UpdateEyedropperColor(POINT pt) {
+    g_ctx.didCopyColor = false;
+    float localX, localY;
+    UINT imgWidth, imgHeight;
+
+    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
+        g_ctx.colorStringRgb = L"N/A";
+        g_ctx.colorStringHex = L"";
+        return;
+    }
+
+    ConvertWindowToImagePoint(pt, localX, localY);
+
+    BYTE r = 0, g = 0, b = 0;
+    bool inImage = (localX >= 0 && localX < imgWidth && localY >= 0 && localY < imgHeight);
+
+    if (inImage) {
+        CriticalSectionLock lock(g_ctx.wicMutex);
+        ComPtr<IWICBitmapSource> source;
+
+        if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
+            source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+        }
+        else {
+            source = g_ctx.wicConverter;
+        }
+
+        if (source) {
+            WICRect rc = { static_cast<INT>(localX), static_cast<INT>(localY), 1, 1 };
+            UINT32 pixelData = 0;
+            HRESULT hr = source->CopyPixels(&rc, 4, 4, reinterpret_cast<BYTE*>(&pixelData));
+
+            if (SUCCEEDED(hr)) {
+                b = (pixelData) & 0xFF;
+                g = (pixelData >> 8) & 0xFF;
+                r = (pixelData >> 16) & 0xFF;
+                BYTE a = (pixelData >> 24) & 0xFF;
+
+                if (a != 0 && a != 255) {
+                    r = (r * 255) / a;
+                    g = (g * 255) / a;
+                    b = (b * 255) / a;
+                }
+            }
+        }
+    }
+    else {
+        switch (g_ctx.bgColor) {
+        case BackgroundColor::Black:
+            r = 0; g = 0; b = 0;
+            break;
+        case BackgroundColor::White:
+            r = 255; g = 255; b = 255;
+            break;
+        case BackgroundColor::Grey:
+            r = 30; g = 30; b = 30;
+            break;
+        case BackgroundColor::Transparent:
+            g_ctx.colorStringRgb = L"N/A (Transparent BG)";
+            g_ctx.colorStringHex = L"";
+            return;
+        }
+    }
+
+    g_ctx.hoveredColor = RGB(r, g, b);
+    wchar_t rgbBuf[32];
+    swprintf_s(rgbBuf, L"RGB(%d, %d, %d)", r, g, b);
+    g_ctx.colorStringRgb = rgbBuf;
+
+    wchar_t hexBuf[16];
+    swprintf_s(hexBuf, L"#%02X%02X%02X", r, g, b);
+    g_ctx.colorStringHex = hexBuf;
+}
+
+static void HandleEyedropperClick() {
+    if (g_ctx.colorStringHex.empty()) return;
+
+    if (!OpenClipboard(g_ctx.hWnd)) return;
+    EmptyClipboard();
+
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, (g_ctx.colorStringHex.length() + 1) * sizeof(wchar_t));
+    if (hMem) {
+        LPWSTR pMem = static_cast<LPWSTR>(GlobalLock(hMem));
+        if (pMem) {
+            wcscpy_s(pMem, g_ctx.colorStringHex.length() + 1, g_ctx.colorStringHex.c_str());
+            GlobalUnlock(hMem);
+            SetClipboardData(CF_UNICODETEXT, hMem);
+            g_ctx.didCopyColor = true;
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        }
+    }
+    CloseClipboard();
+}
+
+HRESULT CreateDecoderFromStream_FullFileRead(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder);
+HRESULT CreateDecoderFromStream_FullFileRead(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder)
+{
+    if (!ppDecoder) return E_POINTER;
+    *ppDecoder = nullptr;
+
+    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    LARGE_INTEGER fileSize;
+    if (!GetFileSizeEx(hFile, &fileSize)) {
+        CloseHandle(hFile);
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+    if (fileSize.QuadPart == 0) {
+        CloseHandle(hFile);
+        return E_FAIL;
+    }
+    DWORD dwFileSize = static_cast<DWORD>(fileSize.QuadPart);
+
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, dwFileSize);
+    if (!hMem) {
+        CloseHandle(hFile);
+        return E_OUTOFMEMORY;
+    }
+
+    LPVOID pMem = GlobalLock(hMem);
+    if (!pMem) {
+        CloseHandle(hFile);
+        GlobalFree(hMem);
+        return E_FAIL;
+    }
+
+    DWORD bytesRead = 0;
+    if (!ReadFile(hFile, pMem, dwFileSize, &bytesRead, NULL) || bytesRead != dwFileSize) {
+        GlobalUnlock(hMem);
+        GlobalFree(hMem);
+        CloseHandle(hFile);
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    GlobalUnlock(hMem);
+    CloseHandle(hFile);
+
+    ComPtr<IStream> stream;
+    HRESULT hr = CreateStreamOnHGlobal(hMem, TRUE, &stream);
+    if (FAILED(hr)) {
+        GlobalFree(hMem);
+        return hr;
+    }
+
+    hr = g_ctx.wicFactory->CreateDecoderFromStream(stream, NULL, WICDecodeMetadataCacheOnLoad, ppDecoder);
+
+    return hr;
+}
+
 void ToggleFullScreen() {
     if (!g_ctx.isFullScreen) {
         g_ctx.savedStyle = GetWindowLong(g_ctx.hWnd, GWL_STYLE);
@@ -13,14 +165,14 @@ void ToggleFullScreen() {
         MONITORINFO mi = { sizeof(mi) };
         GetMonitorInfo(hMonitor, &mi);
         SetWindowLong(g_ctx.hWnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        SetWindowPos(g_ctx.hWnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+        SetWindowPos(g_ctx.hWnd, g_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
             mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
             SWP_FRAMECHANGED | SWP_SHOWWINDOW);
         g_ctx.isFullScreen = true;
     }
     else {
         SetWindowLong(g_ctx.hWnd, GWL_STYLE, g_ctx.savedStyle | WS_VISIBLE);
-        SetWindowPos(g_ctx.hWnd, HWND_NOTOPMOST, g_ctx.savedRect.left, g_ctx.savedRect.top,
+        SetWindowPos(g_ctx.hWnd, g_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, g_ctx.savedRect.left, g_ctx.savedRect.top,
             g_ctx.savedRect.right - g_ctx.savedRect.left, g_ctx.savedRect.bottom - g_ctx.savedRect.top,
             SWP_FRAMECHANGED | SWP_SHOWWINDOW);
         g_ctx.isFullScreen = false;
@@ -74,16 +226,48 @@ static void OnKeyDown(WPARAM wParam) {
     case VK_DOWN:  RotateImage(false); break;
     case VK_DELETE: DeleteCurrentImage(); break;
     case VK_F11:   ToggleFullScreen(); break;
+    case 'F':      FlipImage(); break;
     case VK_ESCAPE:
-        if (g_ctx.isFullScreen) ToggleFullScreen();
-        else PostQuitMessage(0);
+        if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending) {
+            g_ctx.isCropMode = false;
+            g_ctx.isSelectingCropRect = false;
+            g_ctx.isCropPending = false;
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            if (GetCapture() == g_ctx.hWnd) {
+                ReleaseCapture();
+            }
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        }
+        else {
+            PostQuitMessage(0);
+        }
         break;
     case 'O':      if (ctrlPressed) OpenFileAction(); break;
     case 'S':      if (ctrlPressed && (GetKeyState(VK_SHIFT) & 0x8000)) SaveImageAs(); else if (ctrlPressed) SaveImage(); break;
-    case 'C':      if (ctrlPressed) HandleCopy(); break;
+    case 'C':
+        if (ctrlPressed) {
+            HandleCopy();
+        }
+        else {
+            g_ctx.isCropMode = !g_ctx.isCropMode;
+            g_ctx.isCropActive = false;
+            g_ctx.isCropPending = false;
+            g_ctx.isSelectingCropRect = false;
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+            SetCursor(LoadCursor(nullptr, g_ctx.isCropMode ? IDC_CROSS : IDC_ARROW));
+        }
+        break;
     case 'V':      if (ctrlPressed) HandlePaste(); break;
     case '0':      if (ctrlPressed) CenterImage(true); break;
     case VK_MULTIPLY: if (ctrlPressed) SetActualSize(); break;
+    case VK_RETURN:
+        if (g_ctx.isCropPending) {
+            g_ctx.isCropActive = true;
+            g_ctx.isCropPending = false;
+            g_ctx.isCropMode = false;
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        }
+        break;
     case 'I':
         g_ctx.isOsdVisible = !g_ctx.isOsdVisible;
         InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
@@ -103,6 +287,62 @@ static void OnKeyDown(WPARAM wParam) {
         }
         break;
     }
+}
+
+static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+    case WM_INITDIALOG: {
+        switch (g_ctx.bgColor) {
+        case BackgroundColor::Grey:       CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, IDC_RADIO_BG_GREY); break;
+        case BackgroundColor::Black:      CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, IDC_RADIO_BG_BLACK); break;
+        case BackgroundColor::White:      CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, IDC_RADIO_BG_WHITE); break;
+        case BackgroundColor::Transparent:CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, IDC_RADIO_BG_TRANSPARENT); break;
+        }
+
+        CheckDlgButton(hDlg, IDC_CHECK_ALWAYS_ON_TOP, g_ctx.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_START_FULLSCREEN, g_ctx.startFullScreen ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, g_ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
+
+        if (g_ctx.defaultZoomMode == DefaultZoomMode::Fit) {
+            CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL, IDC_RADIO_ZOOM_FIT);
+        }
+        else {
+            CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL, IDC_RADIO_ZOOM_ACTUAL);
+        }
+        return (INT_PTR)TRUE;
+    }
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDOK: {
+            if (IsDlgButtonChecked(hDlg, IDC_RADIO_BG_GREY)) g_ctx.bgColor = BackgroundColor::Grey;
+            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_BG_BLACK)) g_ctx.bgColor = BackgroundColor::Black;
+            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_BG_WHITE)) g_ctx.bgColor = BackgroundColor::White;
+            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_BG_TRANSPARENT)) g_ctx.bgColor = BackgroundColor::Transparent;
+
+            g_ctx.alwaysOnTop = (IsDlgButtonChecked(hDlg, IDC_CHECK_ALWAYS_ON_TOP) == BST_CHECKED);
+            g_ctx.startFullScreen = (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
+            g_ctx.enforceSingleInstance = (IsDlgButtonChecked(hDlg, IDC_CHECK_SINGLE_INSTANCE) == BST_CHECKED);
+
+            if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) g_ctx.defaultZoomMode = DefaultZoomMode::Fit;
+            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) g_ctx.defaultZoomMode = DefaultZoomMode::Actual;
+
+            SetWindowPos(g_ctx.hWnd, (g_ctx.alwaysOnTop) ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            InvalidateRect(g_ctx.hWnd, NULL, FALSE);
+
+            EndDialog(hDlg, IDOK);
+            return (INT_PTR)TRUE;
+        }
+        case IDCANCEL:
+            EndDialog(hDlg, IDCANCEL);
+            return (INT_PTR)TRUE;
+        }
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
+void OpenPreferencesDialog() {
+    DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_PREFERENCES_DIALOG), g_ctx.hWnd, PreferencesDialogProc, 0);
 }
 
 static void OnContextMenu(HWND hWnd, POINT pt) {
@@ -133,13 +373,26 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSortMenu, L"Sort By");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
-    AppendMenuW(hMenu, MF_STRING, IDM_ROTATE_CW, L"Rotate Clockwise\tUp Arrow");
-    AppendMenuW(hMenu, MF_STRING, IDM_ROTATE_CCW, L"Rotate Counter-Clockwise\tDown Arrow");
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, IDM_ZOOM_IN, L"Zoom In\tCtrl++");
-    AppendMenuW(hMenu, MF_STRING, IDM_ZOOM_OUT, L"Zoom Out\tCtrl+-");
-    AppendMenuW(hMenu, MF_STRING, IDM_ACTUAL_SIZE, L"Actual Size (100%)\tCtrl+*");
-    AppendMenuW(hMenu, MF_STRING, IDM_FIT_TO_WINDOW, L"Fit to Window\tCtrl+0");
+    HMENU hEditMenu = CreatePopupMenu();
+    AppendMenuW(hEditMenu, MF_STRING, IDM_ROTATE_CW, L"Rotate Clockwise\tUp Arrow");
+    AppendMenuW(hEditMenu, MF_STRING, IDM_ROTATE_CCW, L"Rotate Counter-Clockwise\tDown Arrow");
+    AppendMenuW(hEditMenu, MF_STRING, IDM_FLIP, L"Flip\tF");
+    AppendMenuW(hEditMenu, MF_STRING | (g_ctx.isGrayscale ? MF_CHECKED : MF_UNCHECKED), IDM_GRAYSCALE, L"Grayscale");
+    AppendMenuW(hEditMenu, MF_STRING, IDM_CROP, L"Crop\tC");
+    AppendMenuW(hEditMenu, MF_STRING, IDM_RESIZE, L"Resize Image...");
+    AppendMenuW(hEditMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(hEditMenu, MF_STRING | MF_GRAYED, 0, L"Eyedropper\tHold Alt Key");
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hEditMenu, L"Edit");
+
+    HMENU hViewMenu = CreatePopupMenu();
+    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_IN, L"Zoom In\tCtrl++");
+    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_OUT, L"Zoom Out\tCtrl+-");
+    AppendMenuW(hViewMenu, MF_STRING, IDM_ACTUAL_SIZE, L"Actual Size (100%)\tCtrl+*");
+    AppendMenuW(hViewMenu, MF_STRING, IDM_FIT_TO_WINDOW, L"Fit to Window\tCtrl+0");
+    AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(hViewMenu, MF_STRING, IDM_FULLSCREEN, L"Full Screen\tF11");
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hViewMenu, L"View");
+
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_SAVE, L"Save\tCtrl+S");
     AppendMenuW(hMenu, MF_STRING, IDM_SAVE_AS, L"Save As\tCtrl+Shift+S");
@@ -149,19 +402,9 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hMenu, locationFlags, IDM_PROPERTIES, L"Properties...");
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    HMENU hBgMenu = CreatePopupMenu();
-    AppendMenuW(hBgMenu, MF_STRING | (g_ctx.bgColor == BackgroundColor::Grey ? MF_CHECKED : MF_UNCHECKED), IDM_BACKGROUND_GREY, L"Grey (Default)");
-    AppendMenuW(hBgMenu, MF_STRING | (g_ctx.bgColor == BackgroundColor::Black ? MF_CHECKED : MF_UNCHECKED), IDM_BACKGROUND_BLACK, L"Black");
-    AppendMenuW(hBgMenu, MF_STRING | (g_ctx.bgColor == BackgroundColor::White ? MF_CHECKED : MF_UNCHECKED), IDM_BACKGROUND_WHITE, L"White");
-    AppendMenuW(hBgMenu, MF_STRING | (g_ctx.bgColor == BackgroundColor::Transparent ? MF_CHECKED : MF_UNCHECKED), IDM_BACKGROUND_TRANSPARENT, L"Transparent (Checkerboard)");
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hBgMenu, L"Background Color");
-
+    AppendMenuW(hMenu, MF_STRING, IDM_PREFERENCES, L"Preferences...");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING | (g_ctx.startFullScreen ? MF_CHECKED : MF_UNCHECKED), IDM_START_FULLSCREEN, L"Start full screen");
-    AppendMenuW(hMenu, MF_STRING | (g_ctx.enforceSingleInstance ? MF_CHECKED : MF_UNCHECKED), IDM_SINGLE_INSTANCE, L"Single instance only");
 
-    AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, IDM_FULLSCREEN, L"Full Screen\tF11");
     AppendMenuW(hMenu, MF_STRING, IDM_DELETE_IMG, L"Delete Image\tDelete");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_EXIT, L"Exit\tEsc");
@@ -194,32 +437,30 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     case IDM_EXIT:          PostQuitMessage(0); break;
     case IDM_ROTATE_CW:     RotateImage(true); break;
     case IDM_ROTATE_CCW:    RotateImage(false); break;
+    case IDM_FLIP:          FlipImage(); break;
+    case IDM_GRAYSCALE:
+        g_ctx.isGrayscale = !g_ctx.isGrayscale;
+        {
+            CriticalSectionLock lock(g_ctx.wicMutex);
+            g_ctx.d2dBitmap = nullptr;
+            g_ctx.animationD2DBitmaps.clear();
+        }
+        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        break;
+    case IDM_CROP:
+        g_ctx.isCropMode = true;
+        g_ctx.isCropActive = false;
+        g_ctx.isCropPending = false;
+        g_ctx.isSelectingCropRect = false;
+        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        SetCursor(LoadCursor(nullptr, IDC_CROSS));
+        break;
+    case IDM_RESIZE:        ResizeImageAction(); break;
     case IDM_SAVE:          SaveImage(); break;
     case IDM_SAVE_AS:       SaveImageAs(); break;
     case IDM_OPEN_LOCATION: OpenFileLocationAction(); break;
     case IDM_PROPERTIES:    ShowImageProperties(); break;
-    case IDM_BACKGROUND_GREY:
-        g_ctx.bgColor = BackgroundColor::Grey;
-        InvalidateRect(g_ctx.hWnd, NULL, FALSE);
-        break;
-    case IDM_BACKGROUND_BLACK:
-        g_ctx.bgColor = BackgroundColor::Black;
-        InvalidateRect(g_ctx.hWnd, NULL, FALSE);
-        break;
-    case IDM_BACKGROUND_WHITE:
-        g_ctx.bgColor = BackgroundColor::White;
-        InvalidateRect(g_ctx.hWnd, NULL, FALSE);
-        break;
-    case IDM_BACKGROUND_TRANSPARENT:
-        g_ctx.bgColor = BackgroundColor::Transparent;
-        InvalidateRect(g_ctx.hWnd, NULL, FALSE);
-        break;
-    case IDM_START_FULLSCREEN:
-        g_ctx.startFullScreen = !g_ctx.startFullScreen;
-        break;
-    case IDM_SINGLE_INSTANCE:
-        g_ctx.enforceSingleInstance = !g_ctx.enforceSingleInstance;
-        break;
+    case IDM_PREFERENCES:   OpenPreferencesDialog(); break;
 
     case IDM_SORT_BY_NAME_ASC:
     case IDM_SORT_BY_NAME_DESC:
@@ -330,7 +571,7 @@ ImageProperties GetCurrentOsdProperties() {
     ComPtr<IWICBitmapFrameDecode> frame;
     ComPtr<IWICMetadataQueryReader> metadataReader;
 
-    if (SUCCEEDED(g_ctx.wicFactory->CreateDecoderFromFilename(filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder))) {
+    if (SUCCEEDED(CreateDecoderFromStream_FullFileRead(filePath.c_str(), &decoder))) {
         GUID containerFormat;
         if (SUCCEEDED(decoder->GetContainerFormat(&containerFormat))) {
             pProps.imageFormat = GetContainerFormatName(containerFormat);
@@ -584,7 +825,7 @@ void ShowImageProperties() {
     ComPtr<IWICBitmapFrameDecode> frame;
     ComPtr<IWICMetadataQueryReader> metadataReader;
 
-    if (SUCCEEDED(g_ctx.wicFactory->CreateDecoderFromFilename(filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder))) {
+    if (SUCCEEDED(CreateDecoderFromStream_FullFileRead(filePath.c_str(), &decoder))) {
         GUID containerFormat;
         if (SUCCEEDED(decoder->GetContainerFormat(&containerFormat))) {
             pProps->imageFormat = GetContainerFormatName(containerFormat);
@@ -681,7 +922,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_TIMER:
         if (wParam == ANIMATION_TIMER_ID) {
-            std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+            CriticalSectionLock lock(g_ctx.wicMutex);
             if (g_ctx.isAnimated && !g_ctx.animationFrameDelays.empty()) {
                 g_ctx.currentAnimationFrame = (g_ctx.currentAnimationFrame + 1) % g_ctx.animationFrameDelays.size();
                 InvalidateRect(hWnd, nullptr, FALSE);
@@ -696,6 +937,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_KEYDOWN:
         OnKeyDown(wParam);
         break;
+    case WM_KEYUP:
+        break;
+    case WM_SYSKEYDOWN:
+        if (wParam == VK_MENU && !g_ctx.isEyedropperActive) {
+            g_ctx.isEyedropperActive = true;
+            g_ctx.didCopyColor = false;
+            GetCursorPos(&g_ctx.currentMousePos);
+            ScreenToClient(g_ctx.hWnd, &g_ctx.currentMousePos);
+            UpdateEyedropperColor(g_ctx.currentMousePos);
+            SetCursor(LoadCursor(nullptr, IDC_CROSS));
+            SetCapture(g_ctx.hWnd);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        break;
+    case WM_SYSKEYUP:
+        if (wParam == VK_MENU && g_ctx.isEyedropperActive) {
+            g_ctx.isEyedropperActive = false;
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            ReleaseCapture();
+            InvalidateRect(hWnd, nullptr, FALSE);
+            return 0;
+        }
+        break;
     case WM_MOUSEWHEEL: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         ScreenToClient(hWnd, &pt);
@@ -706,6 +971,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         FitImageToWindow();
         break;
     case WM_RBUTTONUP: {
+        if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending) {
+            g_ctx.isCropMode = false;
+            g_ctx.isSelectingCropRect = false;
+            g_ctx.isCropPending = false;
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            if (GetCapture() == hWnd) {
+                ReleaseCapture();
+            }
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
         ClientToScreen(hWnd, &pt);
         OnContextMenu(hWnd, pt);
@@ -716,24 +992,80 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_LBUTTONDOWN: {
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
-        UINT w, h;
-        if (GetCurrentImageSize(&w, &h) && IsPointInImage(pt, {})) {
-            g_ctx.isDraggingImage = true;
-            dragStart = pt;
+        if (g_ctx.isEyedropperActive) {
+            HandleEyedropperClick();
+            break;
+        }
+        if (g_ctx.isCropMode) {
+            g_ctx.isCropPending = false;
+            g_ctx.isSelectingCropRect = true;
+            g_ctx.cropStartPoint = pt;
+            g_ctx.cropRectWindow = D2D1::RectF(
+                static_cast<float>(pt.x), static_cast<float>(pt.y),
+                static_cast<float>(pt.x), static_cast<float>(pt.y)
+            );
             SetCapture(hWnd);
-            SetCursor(LoadCursor(nullptr, IDC_HAND));
+        }
+        else {
+            UINT w, h;
+            if (GetCurrentImageSize(&w, &h) && IsPointInImage(pt, {})) {
+                g_ctx.isDraggingImage = true;
+                dragStart = pt;
+                SetCapture(hWnd);
+                SetCursor(LoadCursor(nullptr, IDC_HAND));
+            }
         }
         break;
     }
     case WM_LBUTTONUP:
-        if (g_ctx.isDraggingImage) {
+        if (g_ctx.isSelectingCropRect) {
+            g_ctx.isSelectingCropRect = false;
+            g_ctx.isCropMode = false;
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            ReleaseCapture();
+
+            float x1, y1, x2, y2;
+            ConvertWindowToImagePoint(g_ctx.cropStartPoint, x1, y1);
+            POINT endPoint = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ConvertWindowToImagePoint(endPoint, x2, y2);
+
+            g_ctx.cropRectLocal = D2D1::RectF(std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2));
+
+            UINT imgWidth, imgHeight;
+            GetCurrentImageSize(&imgWidth, &imgHeight);
+
+            g_ctx.cropRectLocal.left = std::max(0.0f, g_ctx.cropRectLocal.left);
+            g_ctx.cropRectLocal.top = std::max(0.0f, g_ctx.cropRectLocal.top);
+            g_ctx.cropRectLocal.right = std::min(static_cast<float>(imgWidth), g_ctx.cropRectLocal.right);
+            g_ctx.cropRectLocal.bottom = std::min(static_cast<float>(imgHeight), g_ctx.cropRectLocal.bottom);
+
+            if (g_ctx.cropRectLocal.left < g_ctx.cropRectLocal.right && g_ctx.cropRectLocal.top < g_ctx.cropRectLocal.bottom) {
+                g_ctx.isCropPending = true;
+            }
+            else {
+                g_ctx.isCropPending = false;
+            }
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        else if (g_ctx.isDraggingImage) {
             g_ctx.isDraggingImage = false;
             ReleaseCapture();
         }
         break;
     case WM_MOUSEMOVE: {
-        POINT pt = { LOWORD(lParam), HIWORD(lParam) };
-        if (g_ctx.isDraggingImage) {
+        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+        if (g_ctx.isEyedropperActive) {
+            g_ctx.currentMousePos = pt;
+            UpdateEyedropperColor(pt);
+            InvalidateRect(hWnd, nullptr, FALSE);
+            break;
+        }
+        if (g_ctx.isSelectingCropRect) {
+            g_ctx.cropRectWindow.right = static_cast<float>(pt.x);
+            g_ctx.cropRectWindow.bottom = static_cast<float>(pt.y);
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        else if (g_ctx.isDraggingImage) {
             g_ctx.offsetX += (pt.x - dragStart.x);
             g_ctx.offsetY += (pt.y - dragStart.y);
             dragStart = pt;
@@ -743,6 +1075,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
     case WM_SETCURSOR: {
         if (LOWORD(lParam) == HTCLIENT) {
+            if (g_ctx.isEyedropperActive) {
+                SetCursor(LoadCursor(nullptr, IDC_CROSS));
+                return TRUE;
+            }
+            if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending) {
+                SetCursor(LoadCursor(nullptr, IDC_CROSS));
+                return TRUE;
+            }
             if (g_ctx.isDraggingImage) {
                 SetCursor(LoadCursor(nullptr, IDC_HAND));
                 return TRUE;
@@ -786,7 +1126,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (!g_ctx.isFullScreen) {
             GetWindowRect(g_ctx.hWnd, &g_ctx.savedRect);
         }
-        WriteSettings(g_ctx.settingsPath, g_ctx.savedRect, g_ctx.startFullScreen, g_ctx.enforceSingleInstance);
+        WriteSettings(g_ctx.settingsPath, g_ctx.savedRect, g_ctx.startFullScreen, g_ctx.enforceSingleInstance, g_ctx.alwaysOnTop);
         CleanupLoadingThread();
         DiscardDeviceResources();
         PostQuitMessage(0);

@@ -16,13 +16,7 @@
 #define IDM_COPY                    1015
 #define IDM_PASTE                   1016
 #define IDM_OPEN_LOCATION           1017
-#define IDM_START_FULLSCREEN        1018
 #define IDM_ACTUAL_SIZE             1021
-#define IDM_BACKGROUND_GREY         1022
-#define IDM_BACKGROUND_BLACK        1023
-#define IDM_BACKGROUND_WHITE        1024
-#define IDM_BACKGROUND_TRANSPARENT  1025
-#define IDM_SINGLE_INSTANCE         1026
 #define IDM_PROPERTIES              1027
 #define IDM_SORT_BY_NAME_ASC        1028
 #define IDM_SORT_BY_NAME_DESC       1029
@@ -30,3 +24,30 @@
 #define IDM_SORT_BY_DATE_DESC       1031
 #define IDM_SORT_BY_SIZE_ASC        1032
 #define IDM_SORT_BY_SIZE_DESC       1033
+#define IDM_FLIP                    1035
+#define IDM_CROP                    1036
+#define IDM_RESIZE                  1037
+
+#define IDM_PREFERENCES             1038
+#define IDM_GRAYSCALE               1039
+
+#define IDD_RESIZE_DIALOG           201
+#define IDC_EDIT_WIDTH              2001
+#define IDC_EDIT_HEIGHT             2002
+#define IDC_CHECK_ASPECT            2003
+
+#define IDD_PREFERENCES_DIALOG      202
+#define IDC_RADIO_BG_GREY           2004
+#define IDC_RADIO_BG_BLACK          2005
+#define IDC_RADIO_BG_WHITE          2006
+#define IDC_RADIO_BG_TRANSPARENT    2007
+#define IDC_CHECK_ALWAYS_ON_TOP     2008
+#define IDC_CHECK_START_FULLSCREEN  2009
+#define IDC_CHECK_SINGLE_INSTANCE   2010
+#define IDC_RADIO_ZOOM_FIT          2011
+#define IDC_RADIO_ZOOM_ACTUAL       2012
+#define IDC_STATIC_BG_GROUP         2013
+#define IDC_STATIC_APP_GROUP        2014
+#define IDC_STATIC_ZOOM_GROUP       2015
+
+#define IDC_STATIC                  -1

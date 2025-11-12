@@ -1,6 +1,63 @@
 #include "viewer.h"
+#include <memory>
 
 extern AppContext g_ctx;
+
+static HRESULT CreateDecoderFromStream_FullFileRead(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder) {
+    if (!ppDecoder) return E_POINTER;
+    *ppDecoder = nullptr;
+
+    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE) {
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    LARGE_INTEGER fileSize;
+    if (!GetFileSizeEx(hFile, &fileSize)) {
+        CloseHandle(hFile);
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+    if (fileSize.QuadPart == 0) {
+        CloseHandle(hFile);
+        return E_FAIL;
+    }
+    DWORD dwFileSize = static_cast<DWORD>(fileSize.QuadPart);
+
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, dwFileSize);
+    if (!hMem) {
+        CloseHandle(hFile);
+        return E_OUTOFMEMORY;
+    }
+
+    LPVOID pMem = GlobalLock(hMem);
+    if (!pMem) {
+        CloseHandle(hFile);
+        GlobalFree(hMem);
+        return E_FAIL;
+    }
+
+    DWORD bytesRead = 0;
+    if (!ReadFile(hFile, pMem, dwFileSize, &bytesRead, NULL) || bytesRead != dwFileSize) {
+        GlobalUnlock(hMem);
+        GlobalFree(hMem);
+        CloseHandle(hFile);
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    GlobalUnlock(hMem);
+    CloseHandle(hFile);
+
+    ComPtr<IStream> stream;
+    HRESULT hr = CreateStreamOnHGlobal(hMem, TRUE, &stream);
+    if (FAILED(hr)) {
+        GlobalFree(hMem);
+        return hr;
+    }
+
+    hr = g_ctx.wicFactory->CreateDecoderFromStream(stream, NULL, WICDecodeMetadataCacheOnLoad, ppDecoder);
+
+    return hr;
+}
 
 static bool IsImageFile(const wchar_t* filePath) {
     ComPtr<IWICBitmapDecoder> decoder;
@@ -10,16 +67,17 @@ static bool IsImageFile(const wchar_t* filePath) {
     return SUCCEEDED(hr);
 }
 
-static ComPtr<IWICFormatConverter> LoadImageInternal(const std::wstring& filePath, bool isPreload) {
+static ComPtr<IWICFormatConverter> LoadImageInternal(const std::wstring& filePath, bool isPreload, GUID* pContainerFormat) {
+    *pContainerFormat = GUID_NULL;
     if (isPreload && g_ctx.cancelPreloading) {
         return nullptr;
     }
 
     ComPtr<IWICBitmapDecoder> decoder;
-    HRESULT hr = g_ctx.wicFactory->CreateDecoderFromFilename(
-        filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder
-    );
+    HRESULT hr = CreateDecoderFromStream_FullFileRead(filePath.c_str(), &decoder);
     if (FAILED(hr)) return nullptr;
+
+    decoder->GetContainerFormat(pContainerFormat);
 
     if (isPreload && g_ctx.cancelPreloading) return nullptr;
 
@@ -47,7 +105,7 @@ void LoadImageFromFile(const std::wstring& filePath) {
     g_ctx.loadingFilePath = filePath;
 
     {
-        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+        CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.wicConverter = nullptr;
         g_ctx.d2dBitmap = nullptr;
         g_ctx.animationD2DBitmaps.clear();
@@ -55,6 +113,7 @@ void LoadImageFromFile(const std::wstring& filePath) {
         g_ctx.animationFrameConverters.clear();
         g_ctx.animationFrameDelays.clear();
         g_ctx.currentAnimationFrame = 0;
+        g_ctx.originalContainerFormat = GUID_NULL;
     }
     g_ctx.currentFilePathOverride.clear();
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
@@ -80,25 +139,31 @@ void LoadImageFromFile(const std::wstring& filePath) {
     }
 
     ComPtr<IWICFormatConverter> preloadedConverter = nullptr;
+    GUID preloadedFormat = {};
     {
-        std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+        CriticalSectionLock lock(g_ctx.preloadMutex);
         if (targetIndex != -1 && targetIndex == nextIndex && g_ctx.preloadedNextConverter) {
             preloadedConverter = g_ctx.preloadedNextConverter;
+            preloadedFormat = g_ctx.preloadedNextFormat;
             g_ctx.preloadedNextConverter = nullptr;
+            g_ctx.preloadedNextFormat = {};
         }
         else if (targetIndex != -1 && targetIndex == prevIndex && g_ctx.preloadedPrevConverter) {
             preloadedConverter = g_ctx.preloadedPrevConverter;
+            preloadedFormat = g_ctx.preloadedPrevFormat;
             g_ctx.preloadedPrevConverter = nullptr;
+            g_ctx.preloadedPrevFormat = {};
         }
     }
 
     if (preloadedConverter) {
         {
-            std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+            CriticalSectionLock lock(g_ctx.wicMutex);
             g_ctx.stagedWicConverter = preloadedConverter;
             g_ctx.isAnimated = false;
             g_ctx.animationFrameConverters.clear();
             g_ctx.animationFrameDelays.clear();
+            g_ctx.originalContainerFormat = preloadedFormat;
         }
         PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOADED, (WPARAM)targetIndex, 0);
         return;
@@ -111,15 +176,16 @@ void LoadImageFromFile(const std::wstring& filePath) {
         }
 
         ComPtr<IWICBitmapDecoder> decoder;
-        HRESULT hr = g_ctx.wicFactory->CreateDecoderFromFilename(
-            filePath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder
-        );
+        HRESULT hr = CreateDecoderFromStream_FullFileRead(filePath.c_str(), &decoder);
 
         if (FAILED(hr)) {
             PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, 0);
             CoUninitialize();
             return;
         }
+
+        GUID containerFormat = {};
+        decoder->GetContainerFormat(&containerFormat);
 
         UINT frameCount = 0;
         decoder->GetFrameCount(&frameCount);
@@ -197,13 +263,14 @@ void LoadImageFromFile(const std::wstring& filePath) {
         foundIndex = (it != g_ctx.imageFiles.end()) ? static_cast<int>(std::distance(g_ctx.imageFiles.begin(), it)) : -1;
 
         {
-            std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+            CriticalSectionLock lock(g_ctx.wicMutex);
             g_ctx.stagedWicConverter = firstFrameConverter;
             g_ctx.isAnimated = isAnimated;
             g_ctx.animationFrameConverters = frameConverters;
             g_ctx.animationFrameDelays = frameDelays;
             g_ctx.currentAnimationFrame = 0;
             g_ctx.animationD2DBitmaps.clear();
+            g_ctx.originalContainerFormat = containerFormat;
         }
 
         PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOADED, (WPARAM)foundIndex, 0);
@@ -219,7 +286,7 @@ void FinalizeImageLoad(bool success, int foundIndex) {
 
     KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
     {
-        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+        CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.d2dBitmap = nullptr;
         g_ctx.animationD2DBitmaps.clear();
         if (success) {
@@ -237,6 +304,7 @@ void FinalizeImageLoad(bool success, int foundIndex) {
             g_ctx.isAnimated = false;
             g_ctx.animationFrameConverters.clear();
             g_ctx.animationFrameDelays.clear();
+            g_ctx.originalContainerFormat = GUID_NULL;
         }
         g_ctx.stagedWicConverter = nullptr;
         g_ctx.currentAnimationFrame = 0;
@@ -255,21 +323,30 @@ void FinalizeImageLoad(bool success, int foundIndex) {
         SetWindowTextW(g_ctx.hWnd, L"Minimal Image Viewer");
         CleanupPreloadingThreads();
         {
-            std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+            CriticalSectionLock lock(g_ctx.preloadMutex);
             g_ctx.preloadedNextConverter = nullptr;
             g_ctx.preloadedPrevConverter = nullptr;
+            g_ctx.preloadedNextFormat = {};
+            g_ctx.preloadedPrevFormat = {};
         }
     }
 
-    CenterImage(true);
+    if (success && g_ctx.defaultZoomMode == DefaultZoomMode::Actual) {
+        SetActualSize();
+    }
+    else {
+        CenterImage(true);
+    }
 }
 
 void StartPreloading() {
     CleanupPreloadingThreads();
     {
-        std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+        CriticalSectionLock lock(g_ctx.preloadMutex);
         g_ctx.preloadedNextConverter = nullptr;
         g_ctx.preloadedPrevConverter = nullptr;
+        g_ctx.preloadedNextFormat = {};
+        g_ctx.preloadedPrevFormat = {};
     }
 
     if (g_ctx.imageFiles.empty() || g_ctx.currentImageIndex == -1) return;
@@ -286,10 +363,12 @@ void StartPreloading() {
         std::wstring nextPath = g_ctx.imageFiles[nextIndex];
         g_ctx.preloadingNextThread = std::thread([nextPath]() {
             if (FAILED(CoInitialize(nullptr))) return;
-            ComPtr<IWICFormatConverter> converter = LoadImageInternal(nextPath, true);
+            GUID containerFormat = {};
+            ComPtr<IWICFormatConverter> converter = LoadImageInternal(nextPath, true, &containerFormat);
             if (converter && !g_ctx.cancelPreloading) {
-                std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+                CriticalSectionLock lock(g_ctx.preloadMutex);
                 g_ctx.preloadedNextConverter = converter;
+                g_ctx.preloadedNextFormat = containerFormat;
             }
             CoUninitialize();
             });
@@ -299,10 +378,12 @@ void StartPreloading() {
         std::wstring prevPath = g_ctx.imageFiles[prevIndex];
         g_ctx.preloadingPrevThread = std::thread([prevPath]() {
             if (FAILED(CoInitialize(nullptr))) return;
-            ComPtr<IWICFormatConverter> converter = LoadImageInternal(prevPath, true);
+            GUID containerFormat = {};
+            ComPtr<IWICFormatConverter> converter = LoadImageInternal(prevPath, true, &containerFormat);
             if (converter && !g_ctx.cancelPreloading) {
-                std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+                CriticalSectionLock lock(g_ctx.preloadMutex);
                 g_ctx.preloadedPrevConverter = converter;
+                g_ctx.preloadedPrevFormat = containerFormat;
             }
             CoUninitialize();
             });
@@ -356,7 +437,7 @@ void GetImagesInDirectory(const wchar_t* directoryPath) {
             break;
         case SortCriteria::ByName:
         default:
-            compareResult = _wcsicmp(a.path.c_str(), b.path.c_str());
+            compareResult = StrCmpLogicalW(a.path.c_str(), b.path.c_str());
             break;
         }
 
@@ -387,14 +468,16 @@ void DeleteCurrentImage() {
         g_ctx.cancelPreloading = true;
         CleanupPreloadingThreads();
         {
-            std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+            CriticalSectionLock lock(g_ctx.preloadMutex);
             g_ctx.preloadedNextConverter = nullptr;
             g_ctx.preloadedPrevConverter = nullptr;
+            g_ctx.preloadedNextFormat = {};
+            g_ctx.preloadedPrevFormat = {};
         }
         g_ctx.cancelPreloading = false;
 
         {
-            std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+            CriticalSectionLock lock(g_ctx.wicMutex);
             g_ctx.wicConverter = nullptr;
             g_ctx.d2dBitmap = nullptr;
             g_ctx.isAnimated = false;
@@ -438,170 +521,6 @@ void DeleteCurrentImage() {
     }
 }
 
-static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
-    std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
-    ComPtr<IWICBitmapSource> source;
-
-    if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
-        source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
-    }
-    else if (g_ctx.wicConverter) {
-        source = g_ctx.wicConverter;
-    }
-    else {
-        return nullptr;
-    }
-
-    if (g_ctx.rotationAngle != 0) {
-        ComPtr<IWICBitmapFlipRotator> rotator;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
-            WICBitmapTransformOptions options = WICBitmapTransformRotate0;
-            switch (g_ctx.rotationAngle) {
-            case 90:  options = WICBitmapTransformRotate90;  break;
-            case 180: options = WICBitmapTransformRotate180; break;
-            case 270: options = WICBitmapTransformRotate270; break;
-            }
-            if (SUCCEEDED(rotator->Initialize(source, options))) {
-                source = rotator;
-            }
-        }
-    }
-
-    WICPixelFormatGUID sourcePixelFormat{};
-    if (FAILED(source->GetPixelFormat(&sourcePixelFormat))) return nullptr;
-
-    if (targetFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
-        ComPtr<IWICFormatConverter> converter;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
-            if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
-                source = converter;
-            }
-        }
-    }
-    return source;
-}
-
-void SaveImageAs() {
-    UINT imgWidth, imgHeight;
-    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
-
-    wchar_t szFile[MAX_PATH] = L"Untitled.png";
-    OPENFILENAMEW ofn = { sizeof(ofn) };
-    ofn.hwndOwner = g_ctx.hWnd;
-    ofn.lpstrFile = szFile;
-    ofn.nMaxFile = MAX_PATH;
-    ofn.lpstrFilter = L"PNG File (*.png)\0*.png\0JPEG File (*.jpg)\0*.jpg\0BMP File (*.bmp)\0*.bmp\0All Files (*.*)\0*.*\0";
-    ofn.nFilterIndex = 1;
-    ofn.lpstrDefExt = L"png";
-    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-
-    if (!GetSaveFileNameW(&ofn)) return;
-
-    GUID containerFormat = GUID_ContainerFormatPng;
-    const wchar_t* ext = PathFindExtensionW(ofn.lpstrFile);
-    if (ext) {
-        if (_wcsicmp(ext, L".jpg") == 0 || _wcsicmp(ext, L".jpeg") == 0) containerFormat = GUID_ContainerFormatJpeg;
-        else if (_wcsicmp(ext, L".bmp") == 0) containerFormat = GUID_ContainerFormatBmp;
-    }
-
-    ComPtr<IWICBitmapSource> source = GetSaveSource(containerFormat);
-    if (!source) {
-        MessageBoxW(g_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
-        return;
-    }
-
-    HRESULT hr = E_FAIL;
-    {
-        ComPtr<IWICStream> stream;
-        ComPtr<IWICBitmapEncoder> encoder;
-        ComPtr<IWICBitmapFrameEncode> frame;
-        ComPtr<IPropertyBag2> props;
-
-        hr = g_ctx.wicFactory->CreateStream(&stream);
-        if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(ofn.lpstrFile, GENERIC_WRITE);
-        if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
-        if (SUCCEEDED(hr)) hr = encoder->Initialize(stream, WICBitmapEncoderNoCache);
-        if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, &props);
-        if (SUCCEEDED(hr)) hr = frame->Initialize(props);
-        if (SUCCEEDED(hr)) hr = frame->WriteSource(source, nullptr);
-        if (SUCCEEDED(hr)) hr = frame->Commit();
-        if (SUCCEEDED(hr)) hr = encoder->Commit();
-    }
-
-    if (SUCCEEDED(hr)) {
-        LoadImageFromFile(ofn.lpstrFile);
-    }
-    else {
-        MessageBoxW(g_ctx.hWnd, L"Failed to save image.", L"Save As Error", MB_ICONERROR);
-    }
-}
-
-void SaveImage() {
-    if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
-        UINT imgWidth, imgHeight;
-        if (GetCurrentImageSize(&imgWidth, &imgHeight)) {
-            SaveImageAs();
-        }
-        return;
-    }
-
-    const auto& originalPath = g_ctx.imageFiles[g_ctx.currentImageIndex];
-
-    if (g_ctx.rotationAngle == 0) {
-        MessageBoxW(g_ctx.hWnd, L"No changes to save.", L"Save", MB_OK | MB_ICONINFORMATION);
-        return;
-    }
-
-    GUID containerFormat{};
-    {
-        ComPtr<IWICBitmapDecoder> decoder;
-        if (FAILED(g_ctx.wicFactory->CreateDecoderFromFilename(originalPath.c_str(), nullptr, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &decoder)) || FAILED(decoder->GetContainerFormat(&containerFormat))) {
-            MessageBoxW(g_ctx.hWnd, L"Could not determine original file format. Use 'Save As'.", L"Save Error", MB_ICONERROR);
-            return;
-        }
-    }
-
-    ComPtr<IWICBitmapSource> source = GetSaveSource(containerFormat);
-    if (!source) {
-        MessageBoxW(g_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
-        return;
-    }
-
-    std::wstring tempPath = originalPath + L".tmp_save";
-    HRESULT hr = E_FAIL;
-    {
-        ComPtr<IWICStream> stream;
-        ComPtr<IWICBitmapEncoder> encoder;
-        ComPtr<IWICBitmapFrameEncode> frame;
-
-        hr = g_ctx.wicFactory->CreateStream(&stream);
-        if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(tempPath.c_str(), GENERIC_WRITE);
-        if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
-        if (SUCCEEDED(hr)) hr = encoder->Initialize(stream, WICBitmapEncoderNoCache);
-        if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, nullptr);
-        if (SUCCEEDED(hr)) hr = frame->Initialize(nullptr);
-        if (SUCCEEDED(hr)) hr = frame->WriteSource(source, nullptr);
-        if (SUCCEEDED(hr)) hr = frame->Commit();
-        if (SUCCEEDED(hr)) hr = encoder->Commit();
-    }
-
-    if (SUCCEEDED(hr)) {
-        if (ReplaceFileW(originalPath.c_str(), tempPath.c_str(), nullptr, REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)) {
-            LoadImageFromFile(originalPath.c_str());
-            g_ctx.rotationAngle = 0;
-            InvalidateRect(g_ctx.hWnd, NULL, FALSE);
-        }
-        else {
-            DeleteFileW(tempPath.c_str());
-            MessageBoxW(g_ctx.hWnd, L"Failed to replace the original file.", L"Save Error", MB_ICONERROR);
-        }
-    }
-    else {
-        DeleteFileW(tempPath.c_str());
-        MessageBoxW(g_ctx.hWnd, L"Failed to save image to temporary file.", L"Save Error", MB_ICONERROR);
-    }
-}
-
 void HandleDropFiles(HDROP hDrop) {
     wchar_t filePath[MAX_PATH] = { 0 };
     if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH) > 0) {
@@ -631,7 +550,7 @@ void HandlePaste() {
         if (lpbi) {
             KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
             {
-                std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+                CriticalSectionLock lock(g_ctx.wicMutex);
                 g_ctx.wicConverter = nullptr;
                 g_ctx.d2dBitmap = nullptr;
                 g_ctx.isAnimated = false;
@@ -663,18 +582,21 @@ void HandlePaste() {
                 g_ctx.cancelPreloading = true;
                 CleanupPreloadingThreads();
                 {
-                    std::lock_guard<std::mutex> lock(g_ctx.preloadMutex);
+                    CriticalSectionLock lock(g_ctx.preloadMutex);
                     g_ctx.preloadedNextConverter = nullptr;
                     g_ctx.preloadedPrevConverter = nullptr;
+                    g_ctx.preloadedNextFormat = {};
+                    g_ctx.preloadedPrevFormat = {};
                 }
                 g_ctx.cancelPreloading = false;
 
-                std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+                CriticalSectionLock lock(g_ctx.wicMutex);
                 g_ctx.wicConverter = localConverter;
                 g_ctx.imageFiles.clear();
                 g_ctx.currentImageIndex = -1;
                 g_ctx.currentDirectory.clear();
                 g_ctx.currentFilePathOverride = L"Pasted Image";
+                g_ctx.originalContainerFormat = GUID_ContainerFormatBmp;
                 CenterImage(true);
                 SetWindowTextW(g_ctx.hWnd, L"Pasted Image");
             }
@@ -687,7 +609,7 @@ void HandleCopy() {
     ComPtr<IWICFormatConverter> converterCopy;
     int indexCopy = g_ctx.currentImageIndex;
     {
-        std::lock_guard<std::mutex> lock(g_ctx.wicMutex);
+        CriticalSectionLock lock(g_ctx.wicMutex);
         if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
             converterCopy = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
         }
