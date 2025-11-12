@@ -15,215 +15,230 @@ Minimal Image Viewer is an open-source, C++-based image viewing application engi
 
 ## Key Features
 
-- **Comprehensive Image Format Support**:
-  - Supports a wide array of formats via WIC, including JPEG, PNG, BMP, GIF, TIFF, ICO, WebP, HEIF, AVIF, and RAW formats (e.g., .cr2, .cr3, .nef, .dng, .arw, .orf, .rw2) with appropriate codecs installed.
-  - Dynamically validates files as images using WIC’s `IWICBitmapDecoder`, enabling support for any WIC-compatible format without hardcoding extensions.
-  - Preserves original file formats during save operations, ensuring fidelity for formats like TIFF and GIF.
+### Viewing & Navigation
 
-- **Intuitive Navigation**:
-  - Directory-based image navigation via Left/Right arrow keys or context menu ("Next Image," "Previous Image").
-  - Automatically indexes all WIC-supported images in the current directory, sorted lexicographically.
-
-- **Flexible Viewing**:
-  - Internally sorts images based on name, size, etc. 
-  - Smooth zoom (0.1x–10x) via Ctrl++/-, mouse wheel, or context menu, implemented with `SetWorldTransform` for GPU-friendly scaling.
-  - Fits images to window (Ctrl+0 or double-click), adjusting for rotation angles.
-  - Rotates images in 90° increments.
-  - **Configurable Background**: Change the background to Grey (default), Black, White, or a transparent checkerboard pattern via the right-click menu.
+- **Comprehensive Format Support**: Leverages Windows Imaging Component (WIC) to support JPEG, PNG, BMP, GIF, TIFF, ICO, WebP, HEIF, AVIF, and many RAW formats (.cr2, .nef, .dng, etc.) with the proper codecs installed.
     
-- **Image Management**:
-  - Saves rotated images (Ctrl+S or context menu) in their original WIC-supported format, using temporary files to ensure atomic operations.
-  - Deletes images to the Recycle Bin (Delete key or context menu) for recoverable deletions.
-  - Opens images with a comprehensive filter for common image formats, falling back to WIC for validation.
-  - Copy the current view to the clipboard (Ctrl+C) or paste an image/file path from the clipboard (Ctrl+V).
-
-- **Minimalist Interface**:
-  - Borderless window for a distraction-free experience, with dynamic cursor feedback for resizing.
-  - Displays "Right click to see hotkeys" when no image is loaded, using GDI text rendering.
-
-- **Window Control**:
-  - Supports window dragging (non-full-screen) and edge-based resizing.
-  - Toggles full-screen mode (F11 or context menu) with automatic image fitting, preserving window state.
-  - Exits via Esc or context menu, ensuring clean resource deallocation.
-
-- **Single-Instance Enforcement**:
-  - Uses `FindWindowW` to prevent multiple instances, forwarding command-line arguments to the existing instance via `WM_COPYDATA` for memory management.
- 
-- **EXIF Data**:
-  - View commmon EXIF data in a properties window or overlayed on image. 
- 
-
-## Security and Privacy
-
-Minimal Image Viewer is designed for OpSec-sensitive environments, prioritizing a minimal attack surface and zero telemetry.
-
-- **Offline Operation**:
-  - No network activity or telemetry, ensuring complete data privacy.
-
-- **Minimal Attack Surface**:
-  - The modular codebase is easy to audit. It relies exclusively on hardened, native Windows APIs and WIC, avoiding third-party library dependencies.
-  - Strict memory management mitigates buffer overflows and leaks, validated with static analysis tools.
-
-- **Safe File Handling**:
-  - Opens files with shared access (`FILE_SHARE_READ | FILE_SHARE_WRITE`) to prevent lock-based exploits.
-  - Saves via temporary files to ensure atomic writes, minimizing data loss risks.
-  - Deletes to Recycle Bin with user confirmation, preventing accidental permanent data loss.
-
-- **No Registry Modifications**:
-  - Operates without persistent system changes, leaving no forensic footprint beyond the executable.
-
-## Why Modular?
-
-Minimal Image Viewer adheres to the Unix philosophy of “do one thing and do it well,” offering distinct advantages:
-
-- **Efficiency**: Minimal resource usage (<10 MB RAM, ~100 KB disk) enables integration into resource-constrained workflows, outperforming bloated alternatives like Windows Photos (~100 MB RAM).
-- **Security**: Focused functionality reduces attack vectors compared to feature-heavy tools with cloud integration or telemetry (e.g., Windows Photos, Adobe Bridge).
-- **Flexibility**: Complements specialized tools (e.g., ExifTool, RawTherapee) for workflows in photography, digital forensics, or development.
-- **Maintainability**: Small codebase simplifies updates, security patches, and community contributions.
-
-## Comparison with Alternatives
-
-| Feature                     | Minimal Image Viewer | Windows Photos | IrfanView | XnView |
-|-----------------------------|----------------------|----------------|-----------|--------|
-| **Executable Size**         | ~0.08 MB             | ~50 MB         | ~3 MB     | ~5 MB  |
-| **Dependencies**            | None (Windows APIs) | UWP Framework  | Optional Plugins | Optional Plugins |
-| **Telemetry**               | None                | Yes            | Optional  | Optional |
-| **Offline Operation**       | Yes                 | Partial        | Yes       | Yes    |
-| **Image Format Support**    | WIC-dependent (all formats) | Codec-dependent | Plugin-dependent | Plugin-dependent |
-| **Open-Source**             | Yes           | No             | No        | No     |
-| **Footprint (RAM)**         | <10 MB             | ~100 MB        | ~20 MB    | ~30 MB |
-
-Minimal Image Viewer excels in size, privacy, and format support, leveraging WIC’s extensibility for unparalleled compatibility.
-
-## System Requirements
-
-- **OS**: Windows 10 or later (64-bit recommended for optimal WIC codec support).
-- **Dependencies**: None (uses standard Windows libraries: `user32`, `gdi32`, `windowscodecs`, etc.).
-- **Image Format Support**: Supports all WIC-compatible formats; advanced formats (e.g., WebP, HEIF, AVIF) require installed codecs (e.g., Microsoft Store extensions).
-- **Disk Space**: 400 KB.
-- **Memory**: <10 MB runtime for typical images, scaling with image resolution.
-
-## Installation and Usage
-
-1. See the [release page](https://github.com/deminimis/minimalimageviewer/releases) for single .exe, or build yourself (instructions below). 
-
-### File Operations
-
-- **Open Image:** Ctrl+O, Right-click → "Open Image", or **Drag & Drop** a file onto the window.
+- **Animated Image Support**: Plays animated formats (like GIF) by decoding all frames and their metadata-defined delays.
     
-- **Save:** Ctrl+S (overwrites the original file if rotated) or Right-click → "Save".
+- **Asynchronous Pre-loading**: Intelligently pre-loads the next and previous images in a directory on background threads for instantaneous browsing.
     
-- **Save As:** Ctrl+Shift+S or Right-click → "Save As".
+- **Flexible Sorting**: Sorts all images in the current directory by **Name**, **Date Modified**, or **File Size** in ascending or descending order.
     
-- **Delete Image:** `Delete` key or Right-click → "Delete Image" (moves file to Recycle Bin).
+- **Smooth Viewing**:
     
-- **Copy:** Ctrl+C (copies the image file or bitmap to the clipboard).
+    - Smooth zoom (Ctrl + Mouse Wheel).
+        
+    - Pan by clicking and dragging the image.
+        
+    - Fit to Window (Ctrl+0 / Double-Click).
+        
+    - Actual Size (100%) (Ctrl+*).
+        
+- **Configurable Interface**:
     
-- **Paste:** Ctrl+V (pastes an image from the clipboard).
-    
-- **Open Location:** Right-click → "Open File Location".
-    
-- **Properties:** Right-click → "Properties...".
+    - **Backgrounds**: Switch between Grey (default), Black, White, or a transparent checkerboard.
+        
+    - **Always on Top**: Toggle to keep the window on top.
+        
+    - **Default Zoom**: Set the default zoom to "Fit to Window" or "Actual Size (100%)" in Preferences.
+        
 
-- **EXIF overlay:** "i"
+### Editing & Tools
+
+- **Non-Destructive Editing**: All edits (crop, rotate, flip, grayscale) are previewed in real-time without altering the original file until you explicitly save.
+    
+- **Visual Crop**: Press 'C' to enable crop mode. Click and drag to select a region, then press Enter to apply the crop. The save operation will only save the cropped area.
+    
+- **High-Quality Resize**: Resize images to new dimensions with aspect-ratio locking, using a high-quality Fant interpolation scaler.
+    
+- **Rotate & Flip**: Rotate images in 90° increments or flip them horizontally. All changes are saved correctly.
+    
+- **Grayscale Filter**: Instantly apply or remove a non-destructive grayscale filter.
+    
+- **Eyedropper Tool**: Hold the `Alt` key to activate an eyedropper. It displays the **RGB** and **Hex** value of the pixel under your cursor. Click to copy the Hex value to your clipboard.
     
 
-### Image Navigation
+### Data & File Management
 
-- **Next/Previous Image:** `Right Arrow` / `Left Arrow` or Right-click menu.
+- **Detailed Properties Window**: Opens a separate window showing extensive file properties and detailed EXIF metadata, including camera, lens, and shot settings (F-stop, ISO, Exposure, etc.).
     
-- **Pan Image:** When zoomed in, **click and drag** the image to move it.
+- **OSD Overlay**: Press 'I' to toggle an on-screen display (OSD) with key file and image data for quick reference.
     
-
-### Image Viewing
-
-- **Zoom In/Out:** Ctrl+`+` / Ctrl+`-`, **Mouse Wheel**, or Right-click menu.
+- **File Operations**:
     
-- **Fit to Window:** Ctrl+0, **Double-Click** the image, or Right-click → "Fit to Window".
-    
-- **Actual Size (100%):** Ctrl+`*` or Right-click → "Actual Size (100%)".
-    
-- **Rotate:** `Up Arrow` (Clockwise) / `Down Arrow` (Counter-Clockwise) or Right-click menu.
-  
-
-
-3. If you are having difficulties setting as your main image viewer, see [setting as default viwer](https://github.com/deminimis/minimalimageviewer/blob/main/Instructions/Default%20Viewer.md).
-
-
-
-## Technical Highlights
-
-Minimal Image Viewer is built with a modern C++/Win32 architecture using Direct2D for high-performance, hardware-accelerated rendering.
-
-### Core Implementation
-
-- **Direct2D / DirectWrite**:
-  - All rendering is handled by Direct2D (`ID2D1HwndRenderTarget`) for smooth, hardware-accelerated drawing. This avoids legacy GDI limitations and flicker.
-  - Text (like "Loading..." or the help prompt) is rendered using DirectWrite (`IDWriteFactory`, `IDWriteTextFormat`) for superior text clarity and positioning.
-  - Creates a checkerboard `ID2D1BitmapBrush` on the fly to render the "Transparent" background option.
-
-- **Windows Imaging Component (WIC)**:
-  - Decodes all images using `IWICImagingFactory`. This allows the app to load any format Windows supports (JPG, PNG, WebP, HEIF, AVIF, RAW, etc.) without needing custom libraries.
-  - Images are converted to a standard pixel format (`GUID_WICPixelFormat32bppPBGRA`) via `IWICFormatConverter` for compatibility with Direct2D.
-  - The WIC converter is used to create a Direct2D bitmap (`CreateBitmapFromWicBitmap`) for rendering.
-  - Saving images (including rotations) uses `IWICBitmapEncoder` to preserve the original file's container format (e.g., saving a rotated PNG as a PNG).
-
-- **Asynchronous Loading & Preloading**:
-  - To keep the UI fast and responsive, image loading is done on a separate thread (`std::thread` in `LoadImageFromFile`).
-  - A `WM_APP_IMAGE_LOADED` custom message is posted back to the main window thread when loading is complete to safely update the UI.
-  - The application pre-loads the *next* and *previous* images in the directory on background threads (`StartPreloading`) to make navigation instantaneous.
-
-- **Graphics and Transformations**:
-  - Zooming, panning (dragging), and rotation are not done by manipulating the image pixels.
-  - Instead, Direct2D's transformation matrix (`D2D1::Matrix3x2F`) is modified. The `Render` function applies a combination of `Scale`, `Rotation`, and `Translation` matrices. This is extremely fast and high-quality, as all the work is done by the GPU.
-
-- **Settings and State**:
-  - Window position/size and user preferences (Start Full Screen, Background Color) are saved to a simple `settings.ini` file in the application's directory.
-  - Uses `GetPrivateProfileIntW` and `WritePrivateProfileStringW` for easy, registry-free persistence.
-
-- **File System and Shell Integration**:
-  - Supports drag-and-drop (`WM_DROPFILES`), clipboard paste (`CF_HDROP`, `CF_DIB`), and file association registration (`RegisterApp`).
-  - "Delete Image" uses `SHFileOperationW` to send files to the Recycle Bin (`FOF_ALLOWUNDO`).
-  - "Open File Location" uses `SHOpenFolderAndSelectItems` to open Explorer with the current file highlighted.
-
-### Performance Optimizations
-
-- **Minimal Footprint**:
-  - Compiles to a ~82 KB executable with `/O2` optimization, requiring <10 MB runtime memory for most images.
-  - No external dependencies beyond standard Windows libraries (`user32.lib`, `gdi32.lib`, `windowscodecs.lib`, etc.).
-
-- **Resource Management**:
-  - Strictly manages WIC (`Release`) and GDI (`DeleteObject`) resources to prevent memory leaks, verified with tools like Application Verifier.
-  - Closes file handles (`CloseHandle`) immediately after use to ensure system resource availability.
-  - Uses `FindWindowW` to prevent multiple instances, forwarding command-line arguments to the existing instance via `WM_COPYDATA` for memory management.
-
-### Build Process
-
-- **Build Commands**:
-  - **Visual Studio**:
-    ```cmd
-    rc.exe /fo resource.res resource.rc
-    cl.exe /O2 /EHsc /Fe:MinimalImageViewer.exe main.cpp ui_handlers.cpp image_drawing.cpp image_io.cpp settings_handler.cpp registry_handler.cpp resource.res /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib comdlg32.lib shlwapi.lib windowscodecs.lib ole32.lib shell32.lib propsys.lib oleaut32.lib d2d1.lib dwrite.lib advapi32.lib
-    ```
-
-
-
-## Contributing
-
-Contributions are welcome. 
-
-
-
-To contribute:
-
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/YourFeature`).
-3. Commit changes (`git commit -m "Add YourFeature"`).
-4. Push to the branch (`git push origin feature/YourFeature`).
-5. Open a pull request, ensuring alignment with the project’s minimalist and security-focused philosophy.
-
-Include unit tests (e.g., for new WIC format handling) and update documentation for new features.
+    - **Save (Ctrl+S)**: Overwrites the original file with any applied edits (rotate, flip, crop, grayscale).
+        
+    - **Save As (Ctrl+Shift+S)**: Save the edited image to a new file in PNG, JPEG, or BMP format.
+        
+    - **Delete (Delete)**: Securely moves the current file to the Recycle Bin.
+        
+    - **Clipboard**: Copy the image file or bitmap to the clipboard (Ctrl+C) and paste an image or file path from the clipboard (Ctrl+V).
+        
+    - **Drag & Drop**: Open an image by dragging it onto the window.
+        
 
 ---
 
-**Minimal Image Viewer: A fast, secure, and extensible image viewer for privacy-conscious professionals.**
+## Why Minimal Image Viewer?
+
+This viewer is built on the philosophy of "do one thing and do it well," offering distinct advantages in resource-constrained or OpSec-sensitive environments.
+
+- **🔒 Secure & Private**:
+    
+    - **Zero Telemetry**: The application performs **no network activity** and contains no tracking or telemetry, ensuring complete privacy.
+        
+    - **Minimal Attack Surface**: Relies only on hardened, native Windows APIs (Direct2D, WIC) and avoids large third-party libraries.
+        
+    - **Safe File Handling**: Uses atomic save operations via temporary files to prevent data corruption and deletes to the Recycle Bin to prevent accidental data loss.
+        
+- **🚀 Efficient & Portable**:
+    
+    - **Lightweight**: Compiles to a tiny executable (~100 KB) and uses minimal RAM (<10 MB for most images).
+        
+    - **Portable Settings**: Saves all preferences (background color, window size, etc.) to a `minimal_image_viewer_settings.ini` file in the same directory, making it fully portable and leaving no trace in the Windows Registry.
+        
+    - **Hardware Accelerated**: Uses Direct2D for all rendering, ensuring smooth, GPU-accelerated scaling, panning, and animations.
+        
+
+### Comparison with Alternatives
+
+| **Feature**              | **Minimal Image Viewer** | **Windows Photos** | **IrfanView / XnView** |
+| ------------------------ | ------------------------ | ------------------ | ---------------------- |
+| **Executable Size**      | **~100 KB**              | ~50 MB+ (UWP)      | ~3-5 MB+               |
+| **Telemetry / Network**  | **None**                 | Yes                | Optional               |
+| **Settings**             | **Portable `.ini`**      | Registry / UWP     | Portable or Registry   |
+| **Animated GIF Support** | **Yes**                  | Yes                | Yes (with plugins)     |
+| **Open Source**          | **Yes**                  | No                 | No                     |
+
+---
+
+## Installation and Usage
+
+Download the `.exe` from the [Releases](https://github.com/deminimis/minimalimageviewer/releases) page and run it. No installation is required.
+
+To set it as your default viewer, see the [Default Viewer Instructions](https://github.com/deminimis/minimalimageviewer/blob/main/Instructions/Default%20Viewer.md).
+
+### Hotkeys
+
+#### File Operations
+
+- **Open Image**: `Ctrl+O` or **Drag & Drop**
+    
+- **Save (Overwrite)**: `Ctrl+S`
+    
+- **Save As**: `Ctrl+Shift+S`
+    
+- **Delete Image**: `Delete` (Moves to Recycle Bin)
+    
+- **Copy Image**: `Ctrl+C`
+    
+- **Paste Image**: `Ctrl+V`
+    
+- **Open File Location**: Right-Click → "Open File Location"
+    
+- **Properties**: Right-Click → "Properties..."
+    
+
+#### Image Navigation
+
+- **Next/Previous Image**: `Right Arrow` / `Left Arrow`
+    
+- **Pan Image**: **Click and Drag** (when zoomed in)
+    
+- **Sort By**: Right-Click → "Sort By" → (Name/Date/Size)
+    
+
+#### Viewing
+
+- **Zoom In/Out**: `Ctrl+` / `Ctrl-` or **Mouse Wheel**
+    
+- **Fit to Window**: `Ctrl+0` or **Double-Click**
+    
+- **Actual Size (100%)**: `Ctrl+*`
+    
+- **Toggle Fullscreen**: `F11`
+    
+- **Exit**: `Esc`
+    
+
+#### Editing & Tools
+
+- **Rotate Clockwise**: `Up Arrow`
+    
+- **Rotate Counter-Clockwise**: `Down Arrow`
+    
+- **Flip Horizontal**: `F`
+    
+- **Toggle Crop Mode**: `C`
+    
+- **Apply Crop**: `Enter` (while in crop mode)
+    
+- **Cancel Crop**: `Esc` (while in crop mode)
+    
+- **Toggle Grayscale**: Right-Click → "Edit" → "Grayscale"
+    
+- **Resize Image**: Right-Click → "Edit" → "Resize Image..."
+    
+- **Toggle OSD**: `I`
+    
+- **Eyedropper Tool**: **Hold Alt** (Click to copy hex code)
+    
+- **Preferences**: Right-Click → "Preferences..."
+    
+
+---
+
+## Technical Highlights
+
+- **Core Technology**: Built with modern C++ and native Win32 APIs. All rendering is hardware-accelerated via **Direct2D** (`ID2D1HwndRenderTarget`) and text is rendered with **DirectWrite** for superior clarity.
+    
+- **WIC Pipeline**: All image I/O and transformations are handled by the **Windows Imaging Component (WIC)**.
+    
+    - **Loading**: `IWICBitmapDecoder` and `IWICFormatConverter` are used to load and convert any WIC-supported format to a Direct2D-compatible pixel format (`GUID_WICPixelFormat32bppPBGRA`).
+        
+    - **Editing**: Edits are applied by chaining WIC components before saving:
+        
+        - `IWICBitmapFlipRotator` (for rotation/flipping)
+            
+        - `IWICBitmapClipper` (for cropping)
+            
+        - `IWICBitmapScaler` (for resizing)
+            
+        - `IWICFormatConverter` (for grayscale)
+            
+    - **Animation**: `IWICBitmapDecoder::GetFrameCount()` is used to detect multi-frame images. Frame delays are read from the metadata (`/grctlext/Delay`) and a `WM_TIMER` event is used to cycle frames.
+        
+- **Concurrency**: Image loading is fully asynchronous on a separate `std::thread` to keep the UI responsive. A custom `WM_APP_IMAGE_LOADED` message is posted to the main window thread to safely transfer the decoded image. Directory pre-loading (`StartPreloading`) uses two additional threads for the next/previous images.
+    
+- **State Management**: Window state and user preferences are persisted in a portable `minimal_image_viewer_settings.ini` file using `GetPrivateProfileIntW` and `WritePrivateProfileStringW`.
+    
+
+## Build Process
+
+1. Open `MinimalImageViewer-VS.vcxproj` in Visual Studio 2022.
+    
+2. Set the build configuration to "Release" and "x64".
+    
+3. Build the solution.
+    
+
+The project links against the following standard Windows libraries:
+
+user32.lib, gdi32.lib, comdlg32.lib, shlwapi.lib, windowscodecs.lib, ole32.lib, shell32.lib, propsys.lib, oleaut32.lib, d2d1.lib, dwrite.lib, advapi32.lib.
+
+## Contributing
+
+Contributions are welcome! This project adheres to a minimalist and security-focused philosophy.
+
+1. Fork the repository.
+    
+2. Create a feature branch (`git checkout -b feature/YourFeature`).
+    
+3. Commit your changes (`git commit -m "Add YourFeature"`).
+    
+4. Push to the branch (`git push origin feature/YourFeature`).
+    
+5. Open a Pull Request.
+
+
