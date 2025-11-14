@@ -1,6 +1,137 @@
 #include "viewer.h"
+#include <objidl.h>
 
 extern AppContext g_ctx;
+
+ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
+    if ((g_ctx.brightness == 0.0f && g_ctx.contrast == 1.0f && g_ctx.saturation == 1.0f) || !inSource || !g_ctx.wicFactory) {
+        return inSource;
+    }
+
+    UINT width, height;
+    if (FAILED(inSource->GetSize(&width, &height))) {
+        return inSource;
+    }
+
+    ComPtr<IWICFormatConverter> converter;
+    if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+        if (SUCCEEDED(converter->Initialize(inSource, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+            inSource = converter;
+        }
+        else {
+            WICPixelFormatGUID pixelFormat;
+            if (FAILED(inSource->GetPixelFormat(&pixelFormat)) || !IsEqualGUID(pixelFormat, GUID_WICPixelFormat32bppPBGRA)) {
+                return inSource;
+            }
+        }
+    }
+    else {
+        return inSource;
+    }
+
+    ComPtr<IWICBitmap> newBitmap;
+    if (FAILED(g_ctx.wicFactory->CreateBitmap(width, height, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnDemand, &newBitmap))) {
+        return inSource;
+    }
+
+    WICRect rc = { 0, 0, (INT)width, (INT)height };
+    ComPtr<IWICBitmapLock> lock;
+    if (FAILED(newBitmap->Lock(&rc, WICBitmapLockWrite, &lock))) {
+        return inSource;
+    }
+
+    UINT bufferSize = 0;
+    UINT stride = 0;
+    BYTE* pPixels = nullptr;
+    if (FAILED(lock->GetStride(&stride)) || FAILED(lock->GetDataPointer(&bufferSize, &pPixels)) || pPixels == nullptr) {
+        lock->Release();
+        return inSource;
+    }
+
+    if (FAILED(inSource->CopyPixels(&rc, stride, bufferSize, pPixels))) {
+        lock->Release();
+        return inSource;
+    }
+
+    float contrastFactor = g_ctx.contrast;
+    float brightnessFactor = g_ctx.brightness;
+    float saturationFactor = g_ctx.saturation;
+
+    auto clamp = [](int val) -> BYTE {
+        if (val < 0) return 0;
+        if (val > 255) return 255;
+        return static_cast<BYTE>(val);
+        };
+
+    auto clampf = [](float val) -> BYTE {
+        if (val < 0.0f) return 0;
+        if (val > 255.0f) return 255;
+        return static_cast<BYTE>(val);
+        };
+
+    const float lumR = 0.299f;
+    const float lumG = 0.587f;
+    const float lumB = 0.114f;
+
+    for (UINT y = 0; y < height; ++y) {
+        BYTE* pRow = pPixels + (y * stride);
+        for (UINT x = 0; x < width; ++x) {
+            BYTE* pPixel = pRow + (x * 4);
+
+            float b = pPixel[0];
+            float g = pPixel[1];
+            float r = pPixel[2];
+
+            float b_new = ((b - 128.0f) * contrastFactor) + 128.0f;
+            b_new += (brightnessFactor * 255.0f);
+
+            float g_new = ((g - 128.0f) * contrastFactor) + 128.0f;
+            g_new += (brightnessFactor * 255.0f);
+
+            float r_new = ((r - 128.0f) * contrastFactor) + 128.0f;
+            r_new += (brightnessFactor * 255.0f);
+
+            if (saturationFactor != 1.0f) {
+                float luminance = (r_new * lumR) + (g_new * lumG) + (b_new * lumB);
+                r_new = (1.0f - saturationFactor) * luminance + saturationFactor * r_new;
+                g_new = (1.0f - saturationFactor) * luminance + saturationFactor * g_new;
+                b_new = (1.0f - saturationFactor) * luminance + saturationFactor * b_new;
+            }
+
+            pPixel[0] = clampf(b_new);
+            pPixel[1] = clampf(g_new);
+            pPixel[2] = clampf(r_new);
+        }
+    }
+
+    lock->Release();
+
+    return ComPtr<IWICBitmapSource>(newBitmap);
+}
+
+void ApplyEffectsToView() {
+    ComPtr<IWICBitmapSource> source;
+    {
+        CriticalSectionLock lock(g_ctx.wicMutex);
+        if (!g_ctx.wicConverterOriginal) {
+            g_ctx.wicConverter = nullptr;
+            return;
+        }
+        source = g_ctx.wicConverterOriginal;
+    }
+
+    source = ApplyImageEffects(source);
+
+    ComPtr<IWICFormatConverter> converter;
+    if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+        if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+            CriticalSectionLock lock(g_ctx.wicMutex);
+            g_ctx.wicConverter = converter;
+            g_ctx.d2dBitmap = nullptr;
+            g_ctx.animationD2DBitmaps.clear();
+        }
+    }
+}
 
 static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
     CriticalSectionLock lock(g_ctx.wicMutex);
@@ -9,8 +140,8 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
     if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
         source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
     }
-    else if (g_ctx.wicConverter) {
-        source = g_ctx.wicConverter;
+    else if (g_ctx.wicConverterOriginal) {
+        source = g_ctx.wicConverterOriginal;
     }
     else {
         return nullptr;
@@ -104,6 +235,12 @@ void SaveImageAs() {
         return;
     }
 
+    source = ApplyImageEffects(source);
+    if (!source) {
+        MessageBoxW(g_ctx.hWnd, L"Could not apply effects to image for saving.", L"Save Error", MB_ICONERROR);
+        return;
+    }
+
     HRESULT hr = E_FAIL;
     {
         ComPtr<IWICStream> stream;
@@ -141,7 +278,7 @@ void SaveImage() {
 
     const auto& originalPath = g_ctx.imageFiles[g_ctx.currentImageIndex];
 
-    if (g_ctx.rotationAngle == 0 && !g_ctx.isFlippedHorizontal && !g_ctx.isCropActive && !g_ctx.isGrayscale) {
+    if (g_ctx.rotationAngle == 0 && !g_ctx.isFlippedHorizontal && !g_ctx.isCropActive && !g_ctx.isGrayscale && g_ctx.brightness == 0.0f && g_ctx.contrast == 1.0f && g_ctx.saturation == 1.0f) {
         MessageBoxW(g_ctx.hWnd, L"No changes to save.", L"Save", MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -160,6 +297,12 @@ void SaveImage() {
     ComPtr<IWICBitmapSource> source = GetSaveSource(containerFormat);
     if (!source) {
         MessageBoxW(g_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
+        return;
+    }
+
+    source = ApplyImageEffects(source);
+    if (!source) {
+        MessageBoxW(g_ctx.hWnd, L"Could not apply effects to image for saving.", L"Save Error", MB_ICONERROR);
         return;
     }
 
@@ -184,9 +327,6 @@ void SaveImage() {
     if (SUCCEEDED(hr)) {
         if (ReplaceFileW(originalPath.c_str(), tempPath.c_str(), nullptr, REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)) {
             LoadImageFromFile(originalPath.c_str());
-            g_ctx.rotationAngle = 0;
-            g_ctx.isFlippedHorizontal = false;
-            InvalidateRect(g_ctx.hWnd, NULL, FALSE);
         }
         else {
             DeleteFileW(tempPath.c_str());
@@ -206,8 +346,8 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
         if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
             source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
         }
-        else if (g_ctx.wicConverter) {
-            source = g_ctx.wicConverter;
+        else if (g_ctx.wicConverterOriginal) {
+            source = g_ctx.wicConverterOriginal;
         }
         else {
             MessageBoxW(g_ctx.hWnd, L"Could not get image source to resize.", L"Resize Error", MB_ICONERROR);
@@ -256,6 +396,12 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
                 source = grayConverter;
             }
         }
+    }
+
+    source = ApplyImageEffects(source);
+    if (!source) {
+        MessageBoxW(g_ctx.hWnd, L"Could not apply effects to image for resizing.", L"Resize Error", MB_ICONERROR);
+        return;
     }
 
     ComPtr<IWICBitmapScaler> scaler;

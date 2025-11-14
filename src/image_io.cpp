@@ -107,6 +107,7 @@ void LoadImageFromFile(const std::wstring& filePath) {
     {
         CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.wicConverter = nullptr;
+        g_ctx.wicConverterOriginal = nullptr;
         g_ctx.d2dBitmap = nullptr;
         g_ctx.animationD2DBitmaps.clear();
         g_ctx.isAnimated = false;
@@ -160,6 +161,7 @@ void LoadImageFromFile(const std::wstring& filePath) {
         {
             CriticalSectionLock lock(g_ctx.wicMutex);
             g_ctx.stagedWicConverter = preloadedConverter;
+            g_ctx.stagedWicConverterOriginal = preloadedConverter;
             g_ctx.isAnimated = false;
             g_ctx.animationFrameConverters.clear();
             g_ctx.animationFrameDelays.clear();
@@ -265,6 +267,7 @@ void LoadImageFromFile(const std::wstring& filePath) {
         {
             CriticalSectionLock lock(g_ctx.wicMutex);
             g_ctx.stagedWicConverter = firstFrameConverter;
+            g_ctx.stagedWicConverterOriginal = firstFrameConverter;
             g_ctx.isAnimated = isAnimated;
             g_ctx.animationFrameConverters = frameConverters;
             g_ctx.animationFrameDelays = frameDelays;
@@ -292,21 +295,25 @@ void FinalizeImageLoad(bool success, int foundIndex) {
         if (success) {
             if (g_ctx.isAnimated) {
                 g_ctx.wicConverter = nullptr;
+                g_ctx.wicConverterOriginal = nullptr;
             }
             else {
                 g_ctx.wicConverter = g_ctx.stagedWicConverter;
+                g_ctx.wicConverterOriginal = g_ctx.stagedWicConverterOriginal;
                 g_ctx.animationFrameConverters.clear();
                 g_ctx.animationFrameDelays.clear();
             }
         }
         else {
             g_ctx.wicConverter = nullptr;
+            g_ctx.wicConverterOriginal = nullptr;
             g_ctx.isAnimated = false;
             g_ctx.animationFrameConverters.clear();
             g_ctx.animationFrameDelays.clear();
             g_ctx.originalContainerFormat = GUID_NULL;
         }
         g_ctx.stagedWicConverter = nullptr;
+        g_ctx.stagedWicConverterOriginal = nullptr;
         g_ctx.currentAnimationFrame = 0;
     }
 
@@ -479,6 +486,7 @@ void DeleteCurrentImage() {
         {
             CriticalSectionLock lock(g_ctx.wicMutex);
             g_ctx.wicConverter = nullptr;
+            g_ctx.wicConverterOriginal = nullptr;
             g_ctx.d2dBitmap = nullptr;
             g_ctx.isAnimated = false;
             g_ctx.animationFrameConverters.clear();
@@ -552,6 +560,7 @@ void HandlePaste() {
             {
                 CriticalSectionLock lock(g_ctx.wicMutex);
                 g_ctx.wicConverter = nullptr;
+                g_ctx.wicConverterOriginal = nullptr;
                 g_ctx.d2dBitmap = nullptr;
                 g_ctx.isAnimated = false;
                 g_ctx.animationFrameConverters.clear();
@@ -592,9 +601,11 @@ void HandlePaste() {
 
                 CriticalSectionLock lock(g_ctx.wicMutex);
                 g_ctx.wicConverter = localConverter;
+                g_ctx.wicConverterOriginal = localConverter;
                 g_ctx.imageFiles.clear();
                 g_ctx.currentImageIndex = -1;
                 g_ctx.currentDirectory.clear();
+                g_ctx.loadingFilePath.clear();
                 g_ctx.currentFilePathOverride = L"Pasted Image";
                 g_ctx.originalContainerFormat = GUID_ContainerFormatBmp;
                 CenterImage(true);

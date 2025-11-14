@@ -45,6 +45,18 @@ void CreateDeviceResources() {
             );
         }
         if (SUCCEEDED(hr)) {
+            hr = g_ctx.renderTarget->CreateSolidColorBrush(
+                D2D1::ColorF(D2D1::ColorF::White),
+                &g_ctx.ocrMessageBrush
+            );
+        }
+        if (SUCCEEDED(hr)) {
+            hr = g_ctx.renderTarget->CreateSolidColorBrush(
+                D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f),
+                &g_ctx.ocrMessageBgBrush
+            );
+        }
+        if (SUCCEEDED(hr)) {
             hr = g_ctx.writeFactory->CreateTextFormat(
                 L"Segoe UI",
                 NULL,
@@ -102,6 +114,8 @@ void DiscardDeviceResources() {
     g_ctx.checkerboardBrush = nullptr;
     g_ctx.cropRectBrush = nullptr;
     g_ctx.fadeBrush = nullptr;
+    g_ctx.ocrMessageBrush = nullptr;
+    g_ctx.ocrMessageBgBrush = nullptr;
     g_ctx.animationD2DBitmaps.clear();
 }
 
@@ -215,6 +229,58 @@ static void DrawEyedropperOverlay(ID2D1HwndRenderTarget* renderTarget) {
 
     g_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
     renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout, g_ctx.textBrush);
+}
+
+static void DrawOcrMessageOverlay(ID2D1HwndRenderTarget* renderTarget) {
+    if (g_ctx.ocrMessage.empty() || !g_ctx.ocrMessageBrush || !g_ctx.ocrMessageBgBrush || !g_ctx.textFormat) return;
+
+    ULONGLONG elapsedTime = GetTickCount64() - g_ctx.ocrMessageStartTime;
+    float opacity = 1.0f;
+
+    if (elapsedTime > 700) {
+        opacity = std::max(0.0f, 1.0f - static_cast<float>(elapsedTime - 700) / 300.0f);
+    }
+    if (opacity == 0.0f) return;
+
+    D2D1_SIZE_F rtSize = renderTarget->GetSize();
+    float padding = 15.0f;
+
+    renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+
+    ComPtr<IDWriteTextLayout> textLayout;
+    if (FAILED(g_ctx.writeFactory->CreateTextLayout(
+        g_ctx.ocrMessage.c_str(),
+        static_cast<UINT32>(g_ctx.ocrMessage.length()),
+        g_ctx.textFormat,
+        rtSize.width - 4 * padding,
+        rtSize.height,
+        &textLayout
+    ))) return;
+
+    g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
+    DWRITE_TEXT_METRICS metrics;
+    textLayout->GetMetrics(&metrics);
+
+    float bgWidth = metrics.widthIncludingTrailingWhitespace + padding * 2;
+    float bgHeight = metrics.height + padding * 2;
+    float bgX = (rtSize.width - bgWidth) / 2.0f;
+    float bgY = (rtSize.height - bgHeight) / 2.0f;
+
+    D2D1_RECT_F bgRect = D2D1::RectF(bgX, bgY, bgX + bgWidth, bgY + bgHeight);
+    D2D1_ROUNDED_RECT roundedBgRect = D2D1::RoundedRect(bgRect, 5.0f, 5.0f);
+
+    g_ctx.ocrMessageBgBrush->SetOpacity(opacity * 0.7f);
+    g_ctx.ocrMessageBrush->SetOpacity(opacity);
+
+    renderTarget->FillRoundedRectangle(roundedBgRect, g_ctx.ocrMessageBgBrush);
+
+    D2D1_RECT_F textRect = D2D1::RectF(bgX, bgY + padding, bgX + bgWidth, bgY + bgHeight - padding);
+    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout, g_ctx.ocrMessageBrush);
+
+    g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 }
 
 void Render() {
@@ -427,12 +493,18 @@ void Render() {
             DrawEyedropperOverlay(g_ctx.renderTarget);
         }
 
-        if (g_ctx.isSelectingCropRect && g_ctx.cropRectBrush) {
+        if ((g_ctx.isSelectingCropRect || g_ctx.isDraggingOcrRect) && g_ctx.cropRectBrush) {
             g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-            D2D1_RECT_F rect = g_ctx.cropRectWindow;
+            D2D1_RECT_F rect = g_ctx.isSelectingCropRect ? g_ctx.cropRectWindow : g_ctx.ocrRectWindow;
             if (rect.left > rect.right) std::swap(rect.left, rect.right);
             if (rect.top > rect.bottom) std::swap(rect.top, rect.bottom);
-            g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
+
+            if (g_ctx.isDraggingOcrRect) {
+                g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Red, 1.0f));
+            }
+            else {
+                g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
+            }
             g_ctx.renderTarget->DrawRectangle(rect, g_ctx.cropRectBrush, 1.0f);
         }
         else if ((g_ctx.isCropActive || g_ctx.isCropPending) && g_ctx.cropRectBrush) {
@@ -481,6 +553,10 @@ void Render() {
             g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
+    }
+
+    if (g_ctx.isOcrMessageVisible) {
+        DrawOcrMessageOverlay(g_ctx.renderTarget);
     }
 
     HRESULT hr = g_ctx.renderTarget->EndDraw();

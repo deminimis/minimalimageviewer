@@ -1,10 +1,22 @@
 #pragma once
+
+#include <sdkddkver.h>
+#ifdef _WIN32_WINNT
+#undef _WIN32_WINNT
+#endif
+#define _WIN32_WINNT 0x0A00
+#ifdef WINVER
+#undef WINVER
+#endif
+#define WINVER 0x0A00
+
 #define NOMINMAX
 #include <windows.h>
 #include <windowsx.h>
 #include <commdlg.h>
 #include <shlwapi.h>
 #include <wincodec.h>
+#include <wincodecsdk.h>
 #include <shellapi.h>
 #include <propvarutil.h>
 #include <shlobj.h>
@@ -18,6 +30,9 @@
 #include <atomic>
 #include "ComPtr.h"
 #include "resource.h"
+
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Media.Ocr.h>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -34,7 +49,12 @@
 
 constexpr UINT WM_APP_IMAGE_LOADED = (WM_APP + 1);
 constexpr UINT WM_APP_IMAGE_LOAD_FAILED = (WM_APP + 2);
+constexpr UINT WM_APP_OCR_DONE_TEXT = (WM_APP + 3);
+constexpr UINT WM_APP_OCR_DONE_AREA = (WM_APP + 4);
+constexpr UINT WM_APP_OCR_DONE_NOTEXT = (WM_APP + 5);
+constexpr UINT WM_APP_OCR_FAILED = (WM_APP + 6);
 constexpr UINT ANIMATION_TIMER_ID = 1;
+constexpr UINT OCR_MESSAGE_TIMER_ID = 2;
 
 class CriticalSectionLock {
 public:
@@ -108,6 +128,7 @@ struct AppContext {
     ComPtr<ID2D1HwndRenderTarget> renderTarget = nullptr;
     ComPtr<ID2D1Bitmap> d2dBitmap = nullptr;
     ComPtr<IWICFormatConverter> wicConverter = nullptr;
+    ComPtr<IWICFormatConverter> wicConverterOriginal = nullptr;
     ComPtr<IDWriteTextFormat> textFormat = nullptr;
     ComPtr<ID2D1SolidColorBrush> textBrush = nullptr;
     ComPtr<ID2D1BitmapBrush> checkerboardBrush = nullptr;
@@ -136,6 +157,7 @@ struct AppContext {
     std::thread loadingThread;
     CRITICAL_SECTION wicMutex{};
     ComPtr<IWICFormatConverter> stagedWicConverter;
+    ComPtr<IWICFormatConverter> stagedWicConverterOriginal;
     std::wstring loadingFilePath;
     GUID originalContainerFormat = {};
 
@@ -172,12 +194,30 @@ struct AppContext {
     D2D1_RECT_F cropRectLocal = { 0 };
     bool isCropActive = false;
 
+    bool isSelectingOcrRect = false;
+    bool isDraggingOcrRect = false;
+    POINT ocrStartPoint = { 0 };
+    D2D1_RECT_F ocrRectWindow = { 0 };
+
     bool isEyedropperActive = false;
     POINT currentMousePos = { 0 };
     COLORREF hoveredColor = 0;
     std::wstring colorStringRgb;
     std::wstring colorStringHex;
     bool didCopyColor = false;
+
+    bool isOcrMessageVisible = false;
+    std::wstring ocrMessage;
+    ULONGLONG ocrMessageStartTime = 0;
+    ComPtr<ID2D1SolidColorBrush> ocrMessageBrush;
+    ComPtr<ID2D1SolidColorBrush> ocrMessageBgBrush;
+
+    float brightness = 0.0f;
+    float contrast = 1.0f;
+    float saturation = 1.0f;
+    float savedBrightness = 0.0f;
+    float savedContrast = 1.0f;
+    float savedSaturation = 1.0f;
 };
 
 void CenterImage(bool resetZoom);
@@ -194,6 +234,8 @@ void GetImagesInDirectory(const wchar_t* directoryPath);
 void SaveImage();
 void SaveImageAs();
 void ResizeImageAction();
+ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource);
+void ApplyEffectsToView();
 void DeleteCurrentImage();
 void HandleDropFiles(HDROP hDrop);
 void HandlePaste();
@@ -201,6 +243,8 @@ void HandleCopy();
 void OpenFileLocationAction();
 void ShowImageProperties();
 void OpenPreferencesDialog();
+void PerformOcr();
+void PerformOcrArea(D2D1_RECT_F ocrRectLocal);
 void Render();
 void CreateDeviceResources();
 void DiscardDeviceResources();

@@ -2,6 +2,9 @@
 #include "exif_utils.h"
 #include <string>
 #include <stdio.h>
+#include <commctrl.h>
+
+#pragma comment(lib, "comctl32.lib")
 
 extern AppContext g_ctx;
 
@@ -228,10 +231,13 @@ static void OnKeyDown(WPARAM wParam) {
     case VK_F11:   ToggleFullScreen(); break;
     case 'F':      FlipImage(); break;
     case VK_ESCAPE:
-        if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending) {
+        if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending || g_ctx.isSelectingOcrRect) {
             g_ctx.isCropMode = false;
             g_ctx.isSelectingCropRect = false;
             g_ctx.isCropPending = false;
+            g_ctx.isSelectingOcrRect = false;
+            g_ctx.isDraggingOcrRect = false;
+            g_ctx.ocrRectWindow = { 0 };
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             if (GetCapture() == g_ctx.hWnd) {
                 ReleaseCapture();
@@ -271,6 +277,18 @@ static void OnKeyDown(WPARAM wParam) {
     case 'I':
         g_ctx.isOsdVisible = !g_ctx.isOsdVisible;
         InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        break;
+    case 'Q':
+        PerformOcr();
+        break;
+    case 'W':
+        g_ctx.isSelectingOcrRect = true;
+        g_ctx.isDraggingOcrRect = false;
+        g_ctx.isCropMode = false;
+        g_ctx.isSelectingCropRect = false;
+        g_ctx.isCropPending = false;
+        g_ctx.isEyedropperActive = false;
+        SetCursor(LoadCursor(nullptr, IDC_CROSS));
         break;
     case VK_OEM_PLUS:
         if (ctrlPressed) {
@@ -345,6 +363,112 @@ void OpenPreferencesDialog() {
     DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_PREFERENCES_DIALOG), g_ctx.hWnd, PreferencesDialogProc, 0);
 }
 
+static void UpdateEffectLabels(HWND hDlg) {
+    wchar_t buf[64];
+
+    swprintf_s(buf, L"Brightness: %d%%", static_cast<int>(g_ctx.brightness * 100));
+    SetDlgItemTextW(hDlg, IDC_LABEL_BRIGHTNESS, buf);
+
+    swprintf_s(buf, L"Contrast: %d%%", static_cast<int>(g_ctx.contrast * 100));
+    SetDlgItemTextW(hDlg, IDC_LABEL_CONTRAST, buf);
+
+    swprintf_s(buf, L"Saturation: %d%%", static_cast<int>(g_ctx.saturation * 100));
+    SetDlgItemTextW(hDlg, IDC_LABEL_SATURATION, buf);
+}
+
+static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+    case WM_INITDIALOG: {
+        UINT imgWidth, imgHeight;
+        if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
+            EndDialog(hDlg, IDCANCEL);
+            return (INT_PTR)TRUE;
+        }
+
+        g_ctx.savedBrightness = g_ctx.brightness;
+        g_ctx.savedContrast = g_ctx.contrast;
+        g_ctx.savedSaturation = g_ctx.saturation;
+
+        HWND hSliderBright = GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS);
+        HWND hSliderContrast = GetDlgItem(hDlg, IDC_SLIDER_CONTRAST);
+        HWND hSliderSaturation = GetDlgItem(hDlg, IDC_SLIDER_SATURATION);
+
+        SendMessageW(hSliderBright, TBM_SETRANGE, (WPARAM)TRUE, MAKELPARAM(-100, 100));
+        SendMessageW(hSliderBright, TBM_SETPOS, (WPARAM)TRUE, (LPARAM)static_cast<int>(g_ctx.brightness * 100));
+
+        SendMessageW(hSliderContrast, TBM_SETRANGE, (WPARAM)TRUE, MAKELPARAM(0, 300));
+        SendMessageW(hSliderContrast, TBM_SETPOS, (WPARAM)TRUE, (LPARAM)static_cast<int>(g_ctx.contrast * 100));
+
+        SendMessageW(hSliderSaturation, TBM_SETRANGE, (WPARAM)TRUE, MAKELPARAM(0, 300));
+        SendMessageW(hSliderSaturation, TBM_SETPOS, (WPARAM)TRUE, (LPARAM)static_cast<int>(g_ctx.saturation * 100));
+
+        UpdateEffectLabels(hDlg);
+        return (INT_PTR)TRUE;
+    }
+    case WM_HSCROLL: {
+        HWND hSlider = (HWND)lParam;
+        int pos = (int)SendMessageW(hSlider, TBM_GETPOS, 0, 0);
+
+        if (hSlider == GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS)) {
+            g_ctx.brightness = pos / 100.0f;
+        }
+        else if (hSlider == GetDlgItem(hDlg, IDC_SLIDER_CONTRAST)) {
+            g_ctx.contrast = pos / 100.0f;
+        }
+        else if (hSlider == GetDlgItem(hDlg, IDC_SLIDER_SATURATION)) {
+            g_ctx.saturation = pos / 100.0f;
+        }
+
+        ApplyEffectsToView();
+        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        UpdateEffectLabels(hDlg);
+        return (INT_PTR)TRUE;
+    }
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDOK: {
+            g_ctx.savedBrightness = g_ctx.brightness;
+            g_ctx.savedContrast = g_ctx.contrast;
+            g_ctx.savedSaturation = g_ctx.saturation;
+            EndDialog(hDlg, IDOK);
+            return (INT_PTR)TRUE;
+        }
+        case IDCANCEL: {
+            g_ctx.brightness = g_ctx.savedBrightness;
+            g_ctx.contrast = g_ctx.savedContrast;
+            g_ctx.saturation = g_ctx.savedSaturation;
+            ApplyEffectsToView();
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+            EndDialog(hDlg, IDCANCEL);
+            return (INT_PTR)TRUE;
+        }
+        case IDC_BUTTON_RESET_BC: {
+            g_ctx.brightness = 0.0f;
+            g_ctx.contrast = 1.0f;
+            g_ctx.saturation = 1.0f;
+            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS), TBM_SETPOS, (WPARAM)TRUE, (LPARAM)0);
+            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_CONTRAST), TBM_SETPOS, (WPARAM)TRUE, (LPARAM)100);
+            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_SATURATION), TBM_SETPOS, (WPARAM)TRUE, (LPARAM)100);
+            ApplyEffectsToView();
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+            UpdateEffectLabels(hDlg);
+            return (INT_PTR)TRUE;
+        }
+        }
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
+void OpenBrightnessContrastDialog() {
+    UINT imgWidth, imgHeight;
+    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
+        MessageBoxW(g_ctx.hWnd, L"No image loaded to adjust.", L"Image Effects", MB_ICONERROR);
+        return;
+    }
+    DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_BRIGHTNESS_DIALOG), g_ctx.hWnd, BrightnessContrastDialogProc, 0);
+}
+
 static void OnContextMenu(HWND hWnd, POINT pt) {
     HMENU hMenu = CreatePopupMenu();
     AppendMenuW(hMenu, MF_STRING, IDM_OPEN, L"Open Image\tCtrl+O");
@@ -380,6 +504,7 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hEditMenu, MF_STRING | (g_ctx.isGrayscale ? MF_CHECKED : MF_UNCHECKED), IDM_GRAYSCALE, L"Grayscale");
     AppendMenuW(hEditMenu, MF_STRING, IDM_CROP, L"Crop\tC");
     AppendMenuW(hEditMenu, MF_STRING, IDM_RESIZE, L"Resize Image...");
+    AppendMenuW(hEditMenu, MF_STRING, IDM_BRIGHTNESS_CONTRAST, L"Image Effects...");
     AppendMenuW(hEditMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hEditMenu, MF_STRING | MF_GRAYED, 0, L"Eyedropper\tHold Alt Key");
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hEditMenu, L"Edit");
@@ -393,6 +518,8 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hViewMenu, MF_STRING, IDM_FULLSCREEN, L"Full Screen\tF11");
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hViewMenu, L"View");
 
+    AppendMenuW(hMenu, MF_STRING, IDM_OCR, L"Copy Text (OCR)\tQ");
+    AppendMenuW(hMenu, MF_STRING, IDM_OCR_AREA, L"Copy Text from Area\tW");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_SAVE, L"Save\tCtrl+S");
     AppendMenuW(hMenu, MF_STRING, IDM_SAVE_AS, L"Save As\tCtrl+Shift+S");
@@ -456,6 +583,17 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
         SetCursor(LoadCursor(nullptr, IDC_CROSS));
         break;
     case IDM_RESIZE:        ResizeImageAction(); break;
+    case IDM_BRIGHTNESS_CONTRAST: OpenBrightnessContrastDialog(); break;
+    case IDM_OCR:           PerformOcr(); break;
+    case IDM_OCR_AREA:
+        g_ctx.isSelectingOcrRect = true;
+        g_ctx.isDraggingOcrRect = false;
+        g_ctx.isCropMode = false;
+        g_ctx.isSelectingCropRect = false;
+        g_ctx.isCropPending = false;
+        g_ctx.isEyedropperActive = false;
+        SetCursor(LoadCursor(nullptr, IDC_CROSS));
+        break;
     case IDM_SAVE:          SaveImage(); break;
     case IDM_SAVE_AS:       SaveImageAs(); break;
     case IDM_OPEN_LOCATION: OpenFileLocationAction(); break;
@@ -920,6 +1058,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
         FinalizeImageLoad(false, -1);
         break;
+    case WM_APP_OCR_DONE_TEXT:
+        g_ctx.ocrMessage = L"Text copied to clipboard.";
+        g_ctx.isOcrMessageVisible = true;
+        g_ctx.ocrMessageStartTime = GetTickCount64();
+        SetTimer(g_ctx.hWnd, OCR_MESSAGE_TIMER_ID, 16, nullptr);
+        SetCursor(LoadCursor(nullptr, IDC_ARROW));
+        break;
+    case WM_APP_OCR_DONE_AREA:
+        g_ctx.ocrMessage = L"Text from selected area copied.";
+        g_ctx.isOcrMessageVisible = true;
+        g_ctx.ocrMessageStartTime = GetTickCount64();
+        SetTimer(g_ctx.hWnd, OCR_MESSAGE_TIMER_ID, 16, nullptr);
+        SetCursor(LoadCursor(nullptr, IDC_ARROW));
+        break;
+    case WM_APP_OCR_DONE_NOTEXT:
+        g_ctx.ocrMessage = (lParam == 1) ? L"No text found in selected area." : L"No text found on image.";
+        g_ctx.isOcrMessageVisible = true;
+        g_ctx.ocrMessageStartTime = GetTickCount64();
+        SetTimer(g_ctx.hWnd, OCR_MESSAGE_TIMER_ID, 16, nullptr);
+        SetCursor(LoadCursor(nullptr, IDC_ARROW));
+        break;
+    case WM_APP_OCR_FAILED: {
+        SetCursor(LoadCursor(nullptr, IDC_ARROW));
+        std::wstring errorMsg = L"An unknown error occurred during OCR.";
+        switch (lParam) {
+        case 1: errorMsg = L"OCR failed (hresult_error)."; break;
+        case 2: errorMsg = L"An unknown error occurred during OCR."; break;
+        case 3: errorMsg = L"Could not open clipboard."; break;
+        case 4: errorMsg = L"Invalid selection area."; break;
+        case 5: errorMsg = L"OCR engine not available."; break;
+        }
+        MessageBoxW(g_ctx.hWnd, errorMsg.c_str(), L"OCR Error", MB_OK | MB_ICONERROR);
+        break;
+    }
     case WM_TIMER:
         if (wParam == ANIMATION_TIMER_ID) {
             CriticalSectionLock lock(g_ctx.wicMutex);
@@ -928,6 +1100,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 InvalidateRect(hWnd, nullptr, FALSE);
                 KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
                 SetTimer(g_ctx.hWnd, ANIMATION_TIMER_ID, g_ctx.animationFrameDelays[g_ctx.currentAnimationFrame], nullptr);
+            }
+        }
+        else if (wParam == OCR_MESSAGE_TIMER_ID) {
+            ULONGLONG elapsedTime = GetTickCount64() - g_ctx.ocrMessageStartTime;
+            if (elapsedTime > 1000) {
+                g_ctx.isOcrMessageVisible = false;
+                KillTimer(g_ctx.hWnd, OCR_MESSAGE_TIMER_ID);
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+            else {
+                InvalidateRect(hWnd, nullptr, FALSE);
             }
         }
         break;
@@ -971,10 +1154,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         FitImageToWindow();
         break;
     case WM_RBUTTONUP: {
-        if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending) {
+        if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending || g_ctx.isSelectingOcrRect) {
             g_ctx.isCropMode = false;
             g_ctx.isSelectingCropRect = false;
             g_ctx.isCropPending = false;
+            g_ctx.isSelectingOcrRect = false;
+            g_ctx.isDraggingOcrRect = false;
+            g_ctx.ocrRectWindow = { 0 };
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             if (GetCapture() == hWnd) {
                 ReleaseCapture();
@@ -996,7 +1182,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             HandleEyedropperClick();
             break;
         }
-        if (g_ctx.isCropMode) {
+        if (g_ctx.isSelectingOcrRect) {
+            g_ctx.isDraggingOcrRect = true;
+            g_ctx.ocrStartPoint = pt;
+            g_ctx.ocrRectWindow = D2D1::RectF(
+                static_cast<float>(pt.x), static_cast<float>(pt.y),
+                static_cast<float>(pt.x), static_cast<float>(pt.y)
+            );
+            SetCapture(hWnd);
+        }
+        else if (g_ctx.isCropMode) {
             g_ctx.isCropPending = false;
             g_ctx.isSelectingCropRect = true;
             g_ctx.cropStartPoint = pt;
@@ -1018,7 +1213,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     }
     case WM_LBUTTONUP:
-        if (g_ctx.isSelectingCropRect) {
+        if (g_ctx.isSelectingOcrRect) {
+            g_ctx.isSelectingOcrRect = false;
+            g_ctx.isDraggingOcrRect = false;
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            ReleaseCapture();
+
+            float x1, y1, x2, y2;
+            ConvertWindowToImagePoint(g_ctx.ocrStartPoint, x1, y1);
+            POINT endPoint = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ConvertWindowToImagePoint(endPoint, x2, y2);
+
+            D2D1_RECT_F ocrRectLocal = D2D1::RectF(std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2));
+
+            UINT imgWidth, imgHeight;
+            GetCurrentImageSize(&imgWidth, &imgHeight);
+
+            ocrRectLocal.left = std::max(0.0f, ocrRectLocal.left);
+            ocrRectLocal.top = std::max(0.0f, ocrRectLocal.top);
+            ocrRectLocal.right = std::min(static_cast<float>(imgWidth), ocrRectLocal.right);
+            ocrRectLocal.bottom = std::min(static_cast<float>(imgHeight), ocrRectLocal.bottom);
+
+            g_ctx.ocrRectWindow = { 0 };
+            InvalidateRect(hWnd, nullptr, FALSE);
+
+            if (ocrRectLocal.left < ocrRectLocal.right && ocrRectLocal.top < ocrRectLocal.bottom) {
+                PerformOcrArea(ocrRectLocal);
+            }
+        }
+        else if (g_ctx.isSelectingCropRect) {
             g_ctx.isSelectingCropRect = false;
             g_ctx.isCropMode = false;
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
@@ -1060,7 +1283,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
-        if (g_ctx.isSelectingCropRect) {
+        if (g_ctx.isDraggingOcrRect) {
+            g_ctx.ocrRectWindow.right = static_cast<float>(pt.x);
+            g_ctx.ocrRectWindow.bottom = static_cast<float>(pt.y);
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        else if (g_ctx.isSelectingCropRect) {
             g_ctx.cropRectWindow.right = static_cast<float>(pt.x);
             g_ctx.cropRectWindow.bottom = static_cast<float>(pt.y);
             InvalidateRect(hWnd, nullptr, FALSE);
@@ -1079,7 +1307,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 SetCursor(LoadCursor(nullptr, IDC_CROSS));
                 return TRUE;
             }
-            if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending) {
+            if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending || g_ctx.isSelectingOcrRect) {
                 SetCursor(LoadCursor(nullptr, IDC_CROSS));
                 return TRUE;
             }

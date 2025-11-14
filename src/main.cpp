@@ -34,8 +34,12 @@ void CenterImage(bool resetZoom) {
     g_ctx.isCropMode = false;
     g_ctx.isSelectingCropRect = false;
     g_ctx.isCropPending = false;
+    g_ctx.brightness = 0.0f;
+    g_ctx.contrast = 1.0f;
+    g_ctx.saturation = 1.0f;
     {
         CriticalSectionLock lock(g_ctx.wicMutex);
+        g_ctx.wicConverter = g_ctx.wicConverterOriginal;
         g_ctx.d2dBitmap = nullptr;
         g_ctx.animationD2DBitmaps.clear();
     }
@@ -56,8 +60,12 @@ void SetActualSize() {
     g_ctx.isCropMode = false;
     g_ctx.isSelectingCropRect = false;
     g_ctx.isCropPending = false;
+    g_ctx.brightness = 0.0f;
+    g_ctx.contrast = 1.0f;
+    g_ctx.saturation = 1.0f;
     {
         CriticalSectionLock lock(g_ctx.wicMutex);
+        g_ctx.wicConverter = g_ctx.wicConverterOriginal;
         g_ctx.d2dBitmap = nullptr;
         g_ctx.animationD2DBitmaps.clear();
     }
@@ -97,10 +105,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         }
     }
 
-    if (FAILED(CoInitialize(nullptr))) {
-        MessageBoxW(nullptr, L"Failed to initialize COM.", L"Error", MB_OK | MB_ICONERROR);
-        return 1;
-    }
+    winrt::init_apartment(winrt::apartment_type::single_threaded);
 
     InitializeCriticalSection(&g_ctx.wicMutex);
     InitializeCriticalSection(&g_ctx.preloadMutex);
@@ -109,7 +114,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         MessageBoxW(nullptr, L"Failed to create WIC Imaging Factory.", L"Error", MB_OK | MB_ICONERROR);
         DeleteCriticalSection(&g_ctx.wicMutex);
         DeleteCriticalSection(&g_ctx.preloadMutex);
-        CoUninitialize();
+        winrt::uninit_apartment();
         return 1;
     }
 
@@ -117,7 +122,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         MessageBoxW(nullptr, L"Failed to create Direct2D Factory.", L"Error", MB_OK | MB_ICONERROR);
         DeleteCriticalSection(&g_ctx.wicMutex);
         DeleteCriticalSection(&g_ctx.preloadMutex);
-        CoUninitialize();
+        winrt::uninit_apartment();
         return 1;
     }
 
@@ -125,7 +130,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         MessageBoxW(nullptr, L"Failed to create DirectWrite Factory.", L"Error", MB_OK | MB_ICONERROR);
         DeleteCriticalSection(&g_ctx.wicMutex);
         DeleteCriticalSection(&g_ctx.preloadMutex);
-        CoUninitialize();
+        winrt::uninit_apartment();
         return 1;
     }
 
@@ -135,7 +140,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     wcex.hInstance = hInstance;
     wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wcex.hbrBackground = CreateSolidBrush(RGB(30, 30, 30));
+    wcex.hbrBackground = NULL;
     wcex.lpszClassName = L"MinimalImageViewer";
     RegisterClassExW(&wcex);
 
@@ -156,7 +161,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         MessageBoxW(nullptr, L"Failed to create window.", L"Error", MB_OK | MB_ICONERROR);
         DeleteCriticalSection(&g_ctx.wicMutex);
         DeleteCriticalSection(&g_ctx.preloadMutex);
-        CoUninitialize();
+        winrt::uninit_apartment();
         return 1;
     }
 
@@ -166,6 +171,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     if (g_ctx.startFullScreen) {
         ToggleFullScreen();
     }
+
+    g_ctx.isInitialized = true;
 
     ShowWindow(g_ctx.hWnd, nCmdShow);
     UpdateWindow(g_ctx.hWnd);
@@ -177,8 +184,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         LoadImageFromFile(filePath);
     }
 
-    g_ctx.isInitialized = true;
-
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 
     MSG msg{};
@@ -189,6 +194,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
 
     CleanupLoadingThread();
     g_ctx.wicConverter = nullptr;
+    g_ctx.wicConverterOriginal = nullptr;
     g_ctx.d2dBitmap = nullptr;
     g_ctx.animationFrameConverters.clear();
     g_ctx.animationD2DBitmaps.clear();
@@ -201,6 +207,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
 
     DeleteCriticalSection(&g_ctx.wicMutex);
     DeleteCriticalSection(&g_ctx.preloadMutex);
-    CoUninitialize();
+    winrt::uninit_apartment();
     return static_cast<int>(msg.wParam);
 }
