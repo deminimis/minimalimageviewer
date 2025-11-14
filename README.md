@@ -44,6 +44,12 @@ _For a stripped-down 21kb version, you can try the [stable stripped .exe](https:
     - **Always on Top**: Toggle to keep the window on top.
         
     - **Default Zoom**: Set the default zoom to "Fit to Window" or "Actual Size (100%)" in Preferences.
+ 
+
+### OCR
+
+- **Whole Image OCR**: Press 'q' to OCR the entire image.
+- **Area OCR**: Press 'w' to OCR a selected area. 
         
 
 ### Editing & Tools
@@ -59,6 +65,8 @@ _For a stripped-down 21kb version, you can try the [stable stripped .exe](https:
 - **Grayscale Filter**: Instantly apply or remove a non-destructive grayscale filter.
     
 - **Eyedropper Tool**: Hold the `Alt` key to activate an eyedropper. It displays the **RGB** and **Hex** value of the pixel under your cursor. Click to copy the Hex value to your clipboard.
+
+- **Image Effects**: Click to open a box with sliders to adjust the contrast, brightness, and saturation. 
     
 
 ### Data & File Management
