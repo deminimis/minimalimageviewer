@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36616.10
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MinimalImageViewer", "src\MinimalImageViewer.vcxproj", "{0143E017-6166-4F31-8D9A-DA7C2AD9648A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0143E017-6166-4F31-8D9A-DA7C2AD9648A}.Debug|x64.ActiveCfg = Debug|x64
+		{0143E017-6166-4F31-8D9A-DA7C2AD9648A}.Debug|x64.Build.0 = Debug|x64
+		{0143E017-6166-4F31-8D9A-DA7C2AD9648A}.Debug|x86.ActiveCfg = Debug|Win32
+		{0143E017-6166-4F31-8D9A-DA7C2AD9648A}.Debug|x86.Build.0 = Debug|Win32
+		{0143E017-6166-4F31-8D9A-DA7C2AD9648A}.Release|x64.ActiveCfg = Release|x64
+		{0143E017-6166-4F31-8D9A-DA7C2AD9648A}.Release|x64.Build.0 = Release|x64
+		{0143E017-6166-4F31-8D9A-DA7C2AD9648A}.Release|x86.ActiveCfg = Release|Win32
+		{0143E017-6166-4F31-8D9A-DA7C2AD9648A}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {8840F4D0-439A-4059-BF5A-6E5499C27A6B}
+	EndGlobalSection
+EndGlobal
