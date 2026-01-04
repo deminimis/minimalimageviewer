@@ -13,7 +13,7 @@ Minimal Image Viewer is an open-source image viewer and editor (**now with OCR**
 ### 💾 Download the latest version [here](https://github.com/deminimis/minimalimageviewer/releases).
 <br>
 
-_For a stripped-down 21kb version, you can try the [stable stripped .exe](https://github.com/deminimis/minimalimageviewer/releases/tag/v1.6**)_
+_For a stripped-down 21kb version, you can try the [stable stripped .exe](https://github.com/deminimis/minimalimageviewer/releases/tag/v1.6)_
 
 ## Key Features
 
