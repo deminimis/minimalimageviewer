@@ -1,7 +1,7 @@
 # Minimal Image Viewer
 
 <div style="overflow: auto;">
-  <img src="https://github.com/deminimis/minimalimageviewer/blob/main/assets/app.png?raw=true" alt="Project Logo" width="20%" align="left">
+  <img src="https://github.com/deminimis/minimalimageviewer/blob/main/src/app.ico?raw=true" alt="Project Logo" width="20%" align="left">
 </div> 
 
 ### The most 🪶 LIGHTWEIGHT image viewer available for Windows
