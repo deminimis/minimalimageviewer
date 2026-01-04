@@ -8,10 +8,20 @@
 
 extern AppContext g_ctx;
 
+
+static void HandleEyedropperClick();
+void HandleCopy();
+void HandlePaste();
+void DeleteCurrentImage();
+void OpenFileLocationAction();
+void ShowImageProperties();
+void OpenPreferencesDialog();
+static void OpenBrightnessContrastDialog();
+
 static void UpdateEyedropperColor(POINT pt) {
     g_ctx.didCopyColor = false;
-    float localX, localY;
-    UINT imgWidth, imgHeight;
+    float localX = 0, localY = 0;
+    UINT imgWidth = 0, imgHeight = 0;
 
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
         g_ctx.colorStringRgb = L"N/A";
@@ -102,64 +112,6 @@ static void HandleEyedropperClick() {
     CloseClipboard();
 }
 
-HRESULT CreateDecoderFromStream_FullFileRead(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder);
-HRESULT CreateDecoderFromStream_FullFileRead(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder)
-{
-    if (!ppDecoder) return E_POINTER;
-    *ppDecoder = nullptr;
-
-    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    LARGE_INTEGER fileSize;
-    if (!GetFileSizeEx(hFile, &fileSize)) {
-        CloseHandle(hFile);
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-    if (fileSize.QuadPart == 0) {
-        CloseHandle(hFile);
-        return E_FAIL;
-    }
-    DWORD dwFileSize = static_cast<DWORD>(fileSize.QuadPart);
-
-    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, dwFileSize);
-    if (!hMem) {
-        CloseHandle(hFile);
-        return E_OUTOFMEMORY;
-    }
-
-    LPVOID pMem = GlobalLock(hMem);
-    if (!pMem) {
-        CloseHandle(hFile);
-        GlobalFree(hMem);
-        return E_FAIL;
-    }
-
-    DWORD bytesRead = 0;
-    if (!ReadFile(hFile, pMem, dwFileSize, &bytesRead, NULL) || bytesRead != dwFileSize) {
-        GlobalUnlock(hMem);
-        GlobalFree(hMem);
-        CloseHandle(hFile);
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    GlobalUnlock(hMem);
-    CloseHandle(hFile);
-
-    ComPtr<IStream> stream;
-    HRESULT hr = CreateStreamOnHGlobal(hMem, TRUE, &stream);
-    if (FAILED(hr)) {
-        GlobalFree(hMem);
-        return hr;
-    }
-
-    hr = g_ctx.wicFactory->CreateDecoderFromStream(stream, NULL, WICDecodeMetadataCacheOnLoad, ppDecoder);
-
-    return hr;
-}
-
 void ToggleFullScreen() {
     if (!g_ctx.isFullScreen) {
         g_ctx.savedStyle = GetWindowLong(g_ctx.hWnd, GWL_STYLE);
@@ -212,14 +164,14 @@ static void OnKeyDown(WPARAM wParam) {
 
     switch (wParam) {
     case VK_RIGHT:
-        if (!g_ctx.imageFiles.empty()) {
+        if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
             size_t size = g_ctx.imageFiles.size();
             g_ctx.currentImageIndex = (g_ctx.currentImageIndex + 1) % static_cast<int>(size);
             LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str());
         }
         break;
     case VK_LEFT:
-        if (!g_ctx.imageFiles.empty()) {
+        if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
             size_t size = g_ctx.imageFiles.size();
             g_ctx.currentImageIndex = (g_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
             LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str());
@@ -304,6 +256,11 @@ static void OnKeyDown(WPARAM wParam) {
             ZoomImage(0.8f, centerPt);
         }
         break;
+    case VK_F5:
+        if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
+            LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str());
+        }
+        break;
     }
 }
 
@@ -320,6 +277,7 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
         CheckDlgButton(hDlg, IDC_CHECK_ALWAYS_ON_TOP, g_ctx.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_START_FULLSCREEN, g_ctx.startFullScreen ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, g_ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_AUTO_REFRESH, g_ctx.isAutoRefresh ? BST_CHECKED : BST_UNCHECKED);
 
         if (g_ctx.defaultZoomMode == DefaultZoomMode::Fit) {
             CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL, IDC_RADIO_ZOOM_FIT);
@@ -340,6 +298,17 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
             g_ctx.alwaysOnTop = (IsDlgButtonChecked(hDlg, IDC_CHECK_ALWAYS_ON_TOP) == BST_CHECKED);
             g_ctx.startFullScreen = (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
             g_ctx.enforceSingleInstance = (IsDlgButtonChecked(hDlg, IDC_CHECK_SINGLE_INSTANCE) == BST_CHECKED);
+
+            bool newAutoRefresh = (IsDlgButtonChecked(hDlg, IDC_CHECK_AUTO_REFRESH) == BST_CHECKED);
+            if (newAutoRefresh != g_ctx.isAutoRefresh) {
+                g_ctx.isAutoRefresh = newAutoRefresh;
+                if (g_ctx.isAutoRefresh) {
+                    SetTimer(g_ctx.hWnd, AUTO_REFRESH_TIMER_ID, 1000, nullptr);
+                }
+                else {
+                    KillTimer(g_ctx.hWnd, AUTO_REFRESH_TIMER_ID);
+                }
+            }
 
             if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) g_ctx.defaultZoomMode = DefaultZoomMode::Fit;
             else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) g_ctx.defaultZoomMode = DefaultZoomMode::Actual;
@@ -428,8 +397,8 @@ static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WP
         switch (LOWORD(wParam)) {
         case IDOK: {
             g_ctx.savedBrightness = g_ctx.brightness;
-            g_ctx.savedContrast = g_ctx.contrast;
-            g_ctx.savedSaturation = g_ctx.saturation;
+            g_ctx.savedContrast = g_ctx.savedContrast;
+            g_ctx.savedSaturation = g_ctx.savedSaturation;
             EndDialog(hDlg, IDOK);
             return (INT_PTR)TRUE;
         }
@@ -460,7 +429,8 @@ static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WP
     return (INT_PTR)FALSE;
 }
 
-void OpenBrightnessContrastDialog() {
+
+static void OpenBrightnessContrastDialog() {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
         MessageBoxW(g_ctx.hWnd, L"No image loaded to adjust.", L"Image Effects", MB_ICONERROR);
@@ -472,6 +442,7 @@ void OpenBrightnessContrastDialog() {
 static void OnContextMenu(HWND hWnd, POINT pt) {
     HMENU hMenu = CreatePopupMenu();
     AppendMenuW(hMenu, MF_STRING, IDM_OPEN, L"Open Image\tCtrl+O");
+    AppendMenuW(hMenu, MF_STRING, IDM_REFRESH, L"Refresh\tF5");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_COPY, L"Copy\tCtrl+C");
     AppendMenuW(hMenu, MF_STRING, IDM_PASTE, L"Paste\tCtrl+V");
@@ -541,6 +512,7 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
 
     switch (cmd) {
     case IDM_OPEN:          OpenFileAction(); break;
+    case IDM_REFRESH:       OnKeyDown(VK_F5); break; 
     case IDM_COPY:          HandleCopy(); break;
     case IDM_PASTE:         HandlePaste(); break;
     case IDM_NEXT_IMG:      OnKeyDown(VK_RIGHT); break;
@@ -620,10 +592,6 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
         else if (cmd == IDM_SORT_BY_SIZE_DESC) { g_ctx.currentSortCriteria = SortCriteria::ByFileSize; g_ctx.isSortAscending = false; }
 
         if (!g_ctx.currentDirectory.empty()) {
-            GetImagesInDirectory(g_ctx.currentDirectory.c_str());
-        }
-
-        if (!currentFile.empty()) {
             LoadImageFromFile(currentFile);
         }
         break;
@@ -632,7 +600,7 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
 }
 
 static std::wstring FormatFileTime(const FILETIME& ft) {
-    SYSTEMTIME stUTC, stLocal;
+    SYSTEMTIME stUTC = {}, stLocal = {};
     if (!FileTimeToSystemTime(&ft, &stUTC)) {
         return L"N/A";
     }
@@ -652,18 +620,18 @@ static std::wstring FormatFileSize(const LARGE_INTEGER& fileSize) {
     const wchar_t* unit = L"Bytes";
     wchar_t buffer[256];
 
-    if (size >= 1024 * 1024 * 1024) {
-        size /= (1024 * 1024 * 1024);
+    if (size >= 1024.0 * 1024.0 * 1024.0) {
+        size /= (1024.0 * 1024.0 * 1024.0);
         unit = L"GB";
         swprintf_s(buffer, 256, L"%.2f %s (%llu Bytes)", size, unit, fileSize.QuadPart);
     }
-    else if (size >= 1024 * 1024) {
-        size /= (1024 * 1024);
+    else if (size >= 1024.0 * 1024.0) {
+        size /= (1024.0 * 1024.0);
         unit = L"MB";
         swprintf_s(buffer, 256, L"%.2f %s (%llu Bytes)", size, unit, fileSize.QuadPart);
     }
-    else if (size >= 1024) {
-        size /= 1024;
+    else if (size >= 1024.0) {
+        size /= 1024.0;
         unit = L"KB";
         swprintf_s(buffer, 256, L"%.2f %s (%llu Bytes)", size, unit, fileSize.QuadPart);
     }
@@ -686,12 +654,12 @@ ImageProperties GetCurrentOsdProperties() {
     const std::wstring& filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
     pProps.filePath = filePath;
 
-    UINT imgWidth, imgHeight;
+    UINT imgWidth = 0, imgHeight = 0;
     if (GetCurrentImageSize(&imgWidth, &imgHeight)) {
         pProps.dimensions = std::to_wstring(imgWidth) + L" x " + std::to_wstring(imgHeight) + L" pixels";
     }
 
-    WIN32_FILE_ATTRIBUTE_DATA fad;
+    WIN32_FILE_ATTRIBUTE_DATA fad = {};
     if (GetFileAttributesExW(filePath.c_str(), GetFileExInfoStandard, &fad)) {
         LARGE_INTEGER fileSize;
         fileSize.HighPart = fad.nFileSizeHigh;
@@ -709,7 +677,7 @@ ImageProperties GetCurrentOsdProperties() {
     ComPtr<IWICBitmapFrameDecode> frame;
     ComPtr<IWICMetadataQueryReader> metadataReader;
 
-    if (SUCCEEDED(CreateDecoderFromStream_FullFileRead(filePath.c_str(), &decoder))) {
+    if (SUCCEEDED(CreateDecoderFromFile(filePath.c_str(), &decoder))) {
         GUID containerFormat;
         if (SUCCEEDED(decoder->GetContainerFormat(&containerFormat))) {
             pProps.imageFormat = GetContainerFormatName(containerFormat);
@@ -906,15 +874,17 @@ void ShowImageProperties() {
     }
 
     const std::wstring& filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
+
     ImageProperties* pProps = new ImageProperties();
+
     pProps->filePath = filePath;
 
-    UINT imgWidth, imgHeight;
+    UINT imgWidth = 0, imgHeight = 0;
     if (GetCurrentImageSize(&imgWidth, &imgHeight)) {
         pProps->dimensions = std::to_wstring(imgWidth) + L" x " + std::to_wstring(imgHeight) + L" pixels";
     }
 
-    WIN32_FILE_ATTRIBUTE_DATA fad;
+    WIN32_FILE_ATTRIBUTE_DATA fad = {};
     if (GetFileAttributesExW(filePath.c_str(), GetFileExInfoStandard, &fad)) {
         LARGE_INTEGER fileSize;
         fileSize.HighPart = fad.nFileSizeHigh;
@@ -928,7 +898,6 @@ void ShowImageProperties() {
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) pProps->attributes += L"Hidden; ";
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) pProps->attributes += L"System; ";
         if (pProps->attributes.empty()) pProps->attributes = L"Normal";
-
     }
     else {
         pProps->fileSize = L"N/A";
@@ -938,6 +907,7 @@ void ShowImageProperties() {
         pProps->attributes = L"N/A";
     }
 
+    // Initialize defaults
     pProps->imageFormat = L"N/A";
     pProps->bitDepth = L"N/A";
     pProps->dpi = L"N/A";
@@ -963,7 +933,7 @@ void ShowImageProperties() {
     ComPtr<IWICBitmapFrameDecode> frame;
     ComPtr<IWICMetadataQueryReader> metadataReader;
 
-    if (SUCCEEDED(CreateDecoderFromStream_FullFileRead(filePath.c_str(), &decoder))) {
+    if (SUCCEEDED(CreateDecoderFromFile(filePath.c_str(), &decoder))) {
         GUID containerFormat;
         if (SUCCEEDED(decoder->GetContainerFormat(&containerFormat))) {
             pProps->imageFormat = GetContainerFormatName(containerFormat);
@@ -973,7 +943,6 @@ void ShowImageProperties() {
         }
 
         if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
-
             pProps->bitDepth = GetBitDepth(frame);
 
             double dpiX, dpiY;
@@ -1003,7 +972,6 @@ void ShowImageProperties() {
         }
     }
 
-
     static const wchar_t* PROPS_CLASS_NAME = L"MinimalImageViewerProperties";
     static bool classRegistered = false;
     if (!classRegistered) {
@@ -1020,7 +988,7 @@ void ShowImageProperties() {
         }
     }
 
-    RECT rcParent;
+    RECT rcParent = {}; 
     GetWindowRect(g_ctx.hWnd, &rcParent);
     int wndWidth = 600;
     int wndHeight = 700;
@@ -1048,15 +1016,28 @@ void ShowImageProperties() {
 
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    static POINT dragStart{};
+    static POINT dragStart = {};
 
     switch (message) {
+    case WM_APP_IMAGE_READY:
+        OnImageReady(wParam != 0, (int)lParam);
+        break;
+    case WM_APP_DIR_READY:
+        OnDirReady((int)lParam);
+        break;
     case WM_APP_IMAGE_LOADED:
         FinalizeImageLoad(true, static_cast<int>(wParam));
         break;
     case WM_APP_IMAGE_LOAD_FAILED:
         KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
-        FinalizeImageLoad(false, -1);
+        if (lParam != 0) {
+            if (g_ctx.loadSequenceId == (int)lParam) {
+                FinalizeImageLoad(false, -1);
+            }
+        }
+        else {
+            FinalizeImageLoad(false, -1);
+        }
         break;
     case WM_APP_OCR_DONE_TEXT:
         g_ctx.ocrMessage = L"Text copied to clipboard.";
@@ -1111,6 +1092,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
             else {
                 InvalidateRect(hWnd, nullptr, FALSE);
+            }
+        }
+        else if (wParam == AUTO_REFRESH_TIMER_ID) {
+            if (g_ctx.isAutoRefresh && !g_ctx.isLoading && !g_ctx.imageFiles.empty() && g_ctx.currentImageIndex >= 0) {
+                const std::wstring& currentFile = g_ctx.imageFiles[g_ctx.currentImageIndex];
+                WIN32_FILE_ATTRIBUTE_DATA fad;
+                if (GetFileAttributesExW(currentFile.c_str(), GetFileExInfoStandard, &fad)) {
+                    if (CompareFileTime(&fad.ftLastWriteTime, &g_ctx.lastWriteTime) > 0) {
+                        // File has changed. Verify it's accessible (not locked by writer)
+                        HANDLE hFile = CreateFileW(currentFile.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+                        if (hFile != INVALID_HANDLE_VALUE) {
+                            CloseHandle(hFile);
+                            g_ctx.preserveView = true;
+                            LoadImageFromFile(currentFile);
+                        }
+                    }
+                }
             }
         }
         break;
@@ -1202,7 +1200,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetCapture(hWnd);
         }
         else {
-            UINT w, h;
+            UINT w = 0, h = 0;
             if (GetCurrentImageSize(&w, &h) && IsPointInImage(pt, {})) {
                 g_ctx.isDraggingImage = true;
                 dragStart = pt;
@@ -1219,14 +1217,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             ReleaseCapture();
 
-            float x1, y1, x2, y2;
+            float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
             ConvertWindowToImagePoint(g_ctx.ocrStartPoint, x1, y1);
             POINT endPoint = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             ConvertWindowToImagePoint(endPoint, x2, y2);
 
             D2D1_RECT_F ocrRectLocal = D2D1::RectF(std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2));
 
-            UINT imgWidth, imgHeight;
+            UINT imgWidth = 0, imgHeight = 0;
             GetCurrentImageSize(&imgWidth, &imgHeight);
 
             ocrRectLocal.left = std::max(0.0f, ocrRectLocal.left);
@@ -1247,14 +1245,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             ReleaseCapture();
 
-            float x1, y1, x2, y2;
+            float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
             ConvertWindowToImagePoint(g_ctx.cropStartPoint, x1, y1);
             POINT endPoint = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
             ConvertWindowToImagePoint(endPoint, x2, y2);
 
             g_ctx.cropRectLocal = D2D1::RectF(std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2));
 
-            UINT imgWidth, imgHeight;
+            UINT imgWidth = 0, imgHeight = 0;
             GetCurrentImageSize(&imgWidth, &imgHeight);
 
             g_ctx.cropRectLocal.left = std::max(0.0f, g_ctx.cropRectLocal.left);
@@ -1342,12 +1340,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
         }
         if (wParam != SIZE_MINIMIZED) {
-            FitImageToWindow();
-            InvalidateRect(hWnd, nullptr, FALSE);
+            if (!g_ctx.isLoading) {
+                FitImageToWindow();
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
         }
         break;
     case WM_DESTROY:
         KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
+        KillTimer(g_ctx.hWnd, AUTO_REFRESH_TIMER_ID);
         if (g_ctx.hPropsWnd) {
             DestroyWindow(g_ctx.hPropsWnd);
         }
@@ -1363,4 +1364,105 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         return DefWindowProc(hWnd, message, wParam, lParam);
     }
     return 0;
+}
+
+void DeleteCurrentImage() {
+    if (g_ctx.currentImageIndex < 0 || g_ctx.imageFiles.empty()) return;
+
+    std::wstring filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
+    std::wstring pathDoubleNull = filePath + L'\0'; 
+
+    SHFILEOPSTRUCTW fileOp = { 0 };
+    fileOp.hwnd = g_ctx.hWnd;
+    fileOp.wFunc = FO_DELETE;
+    fileOp.pFrom = pathDoubleNull.c_str();
+    fileOp.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
+
+    if (SHFileOperationW(&fileOp) == 0 && !fileOp.fAnyOperationsAborted) {
+        g_ctx.imageFiles.erase(g_ctx.imageFiles.begin() + g_ctx.currentImageIndex);
+
+        if (g_ctx.imageFiles.empty()) {
+            g_ctx.currentImageIndex = -1;
+            {
+                CriticalSectionLock lock(g_ctx.wicMutex);
+                g_ctx.wicConverter = nullptr;
+                g_ctx.wicConverterOriginal = nullptr;
+                g_ctx.d2dBitmap = nullptr;
+                g_ctx.loadingFilePath = L"";
+            }
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+            SetWindowTextW(g_ctx.hWnd, L"Minimal Image Viewer");
+        }
+        else {
+            if (g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
+                g_ctx.currentImageIndex = 0;
+            }
+            LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex]);
+        }
+    }
+}
+
+void HandleDropFiles(HDROP hDrop) {
+    wchar_t filePath[MAX_PATH];
+    if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH)) {
+        LoadImageFromFile(filePath);
+    }
+    DragFinish(hDrop);
+}
+
+void HandleCopy() {
+    if (g_ctx.loadingFilePath.empty()) return;
+
+    if (OpenClipboard(g_ctx.hWnd)) {
+        EmptyClipboard();
+
+        size_t size = (g_ctx.loadingFilePath.length() + 1) * sizeof(wchar_t);
+        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + size + sizeof(wchar_t)); 
+
+        if (hMem) {
+            BYTE* pData = (BYTE*)GlobalLock(hMem);
+            if (pData) {
+                DROPFILES* pDrop = (DROPFILES*)pData;
+                pDrop->pFiles = sizeof(DROPFILES);
+                pDrop->pt = { 0, 0 };
+                pDrop->fNC = FALSE;
+                pDrop->fWide = TRUE;
+
+                wchar_t* pPath = (wchar_t*)(pData + sizeof(DROPFILES));
+                wcscpy_s(pPath, g_ctx.loadingFilePath.length() + 1, g_ctx.loadingFilePath.c_str());
+
+                GlobalUnlock(hMem);
+                SetClipboardData(CF_HDROP, hMem);
+            }
+            else {
+                GlobalFree(hMem);
+            }
+        }
+        CloseClipboard();
+    }
+}
+
+void HandlePaste() {
+    if (OpenClipboard(g_ctx.hWnd)) {
+        if (IsClipboardFormatAvailable(CF_HDROP)) {
+            HANDLE hData = GetClipboardData(CF_HDROP);
+            if (hData) {
+                HDROP hDrop = (HDROP)hData;
+                wchar_t filePath[MAX_PATH];
+                if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH)) {
+                    LoadImageFromFile(filePath);
+                }
+            }
+        }
+        CloseClipboard();
+    }
+}
+
+void OpenFileLocationAction() {
+    if (g_ctx.loadingFilePath.empty()) return;
+    PIDLIST_ABSOLUTE pidl = ILCreateFromPathW(g_ctx.loadingFilePath.c_str());
+    if (pidl) {
+        SHOpenFolderAndSelectItems(pidl, 0, nullptr, 0);
+        ILFree(pidl);
+    }
 }

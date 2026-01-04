@@ -53,8 +53,12 @@ constexpr UINT WM_APP_OCR_DONE_TEXT = (WM_APP + 3);
 constexpr UINT WM_APP_OCR_DONE_AREA = (WM_APP + 4);
 constexpr UINT WM_APP_OCR_DONE_NOTEXT = (WM_APP + 5);
 constexpr UINT WM_APP_OCR_FAILED = (WM_APP + 6);
+constexpr UINT WM_APP_IMAGE_READY = (WM_APP + 7);
+constexpr UINT WM_APP_DIR_READY = (WM_APP + 8);
+
 constexpr UINT ANIMATION_TIMER_ID = 1;
 constexpr UINT OCR_MESSAGE_TIMER_ID = 2;
+constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 
 class CriticalSectionLock {
 public:
@@ -153,14 +157,24 @@ struct AppContext {
     bool isSortAscending = true;
     DefaultZoomMode defaultZoomMode = DefaultZoomMode::Fit;
 
+    // Loading State
     std::atomic<bool> isLoading{ false };
-    std::thread loadingThread;
+    std::atomic<int> loadSequenceId{ 0 }; 
     CRITICAL_SECTION wicMutex{};
-    ComPtr<IWICFormatConverter> stagedWicConverter;
-    ComPtr<IWICFormatConverter> stagedWicConverterOriginal;
+
     std::wstring loadingFilePath;
     GUID originalContainerFormat = {};
 
+    std::vector<BYTE> stagedPixels;
+    UINT stagedWidth = 0;
+    UINT stagedHeight = 0;
+    bool stagedIsAnimated = false;
+    std::vector<UINT> stagedFrameDelays;
+
+    std::vector<std::wstring> stagedImageFiles;
+    int stagedFoundIndex = -1;
+
+    // Preloading
     ComPtr<IWICFormatConverter> preloadedNextConverter;
     ComPtr<IWICFormatConverter> preloadedPrevConverter;
     GUID preloadedNextFormat = {};
@@ -218,6 +232,11 @@ struct AppContext {
     float savedBrightness = 0.0f;
     float savedContrast = 1.0f;
     float savedSaturation = 1.0f;
+
+    // Auto Refresh variables
+    bool isAutoRefresh = false;
+    FILETIME lastWriteTime = { 0 };
+    bool preserveView = false;
 };
 
 void CenterImage(bool resetZoom);
@@ -227,10 +246,12 @@ LRESULT CALLBACK PropsWndProc(HWND, UINT, WPARAM, LPARAM);
 void ToggleFullScreen();
 void LoadImageFromFile(const std::wstring& filePath);
 void FinalizeImageLoad(bool success, int foundIndex);
+void OnImageReady(bool success, int seqId);
+void OnDirReady(int seqId);
 void CleanupLoadingThread();
 void CleanupPreloadingThreads();
 void StartPreloading();
-void GetImagesInDirectory(const wchar_t* directoryPath);
+std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int seqId);
 void SaveImage();
 void SaveImageAs();
 void ResizeImageAction();
@@ -260,3 +281,5 @@ void ConvertImageToWindowPoint(float localX, float localY, POINT& pt);
 
 void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop);
 void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop);
+
+HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder);

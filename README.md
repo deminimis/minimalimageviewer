@@ -86,6 +86,8 @@ _For a stripped-down 21kb version, you can try the [stable stripped .exe](https:
     - **Clipboard**: Copy the image file or bitmap to the clipboard (Ctrl+C) and paste an image or file path from the clipboard (Ctrl+V).
         
     - **Drag & Drop**: Open an image by dragging it onto the window.
+
+    - **Auto Refresh**: Polls the image to see if it has changed elsewhere, and automatically updates if you have auto-refresh turned on. 
         
 
 ---

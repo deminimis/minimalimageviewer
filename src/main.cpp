@@ -2,25 +2,6 @@
 
 AppContext g_ctx;
 
-void CleanupPreloadingThreads() {
-    if (g_ctx.preloadingNextThread.joinable()) {
-        g_ctx.preloadingNextThread.join();
-    }
-    if (g_ctx.preloadingPrevThread.joinable()) {
-        g_ctx.preloadingPrevThread.join();
-    }
-}
-
-void CleanupLoadingThread() {
-    g_ctx.cancelPreloading = true;
-    CleanupPreloadingThreads();
-    if (g_ctx.loadingThread.joinable()) {
-        g_ctx.loadingThread.join();
-    }
-    g_ctx.cancelPreloading = false;
-    KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
-}
-
 void CenterImage(bool resetZoom) {
     if (resetZoom) {
         g_ctx.zoomFactor = 1.0f;

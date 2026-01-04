@@ -33,6 +33,7 @@
 #define IDM_GRAYSCALE               1040
 #define IDM_OCR                     1041
 #define IDM_OCR_AREA                1042
+#define IDM_REFRESH                 1051  
 
 #define IDD_RESIZE_DIALOG           201
 #define IDC_EDIT_WIDTH              2001
@@ -52,6 +53,7 @@
 #define IDC_STATIC_BG_GROUP         2013
 #define IDC_STATIC_APP_GROUP        2014
 #define IDC_STATIC_ZOOM_GROUP       2015
+#define IDC_CHECK_AUTO_REFRESH      2023  
 
 #define IDD_BRIGHTNESS_DIALOG       203
 #define IDC_SLIDER_BRIGHTNESS       2016
