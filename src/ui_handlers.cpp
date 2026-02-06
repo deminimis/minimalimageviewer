@@ -183,13 +183,19 @@ static void OnKeyDown(WPARAM wParam) {
     case VK_F11:   ToggleFullScreen(); break;
     case 'F':      FlipImage(); break;
     case VK_ESCAPE:
-        if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending || g_ctx.isSelectingOcrRect) {
+        if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending || g_ctx.isSelectingOcrRect || g_ctx.isEyedropperActive) {
             g_ctx.isCropMode = false;
             g_ctx.isSelectingCropRect = false;
             g_ctx.isCropPending = false;
             g_ctx.isSelectingOcrRect = false;
             g_ctx.isDraggingOcrRect = false;
+            g_ctx.isEyedropperActive = false;
             g_ctx.ocrRectWindow = { 0 };
+
+            // Revert any pending views (like full image if we were in crop mode)
+            ApplyEffectsToView();
+            FitImageToWindow();
+
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             if (GetCapture() == g_ctx.hWnd) {
                 ReleaseCapture();
@@ -211,6 +217,11 @@ static void OnKeyDown(WPARAM wParam) {
             g_ctx.isCropActive = false;
             g_ctx.isCropPending = false;
             g_ctx.isSelectingCropRect = false;
+
+            // Refresh view to show full image if we just toggled crop mode
+            ApplyEffectsToView();
+            FitImageToWindow();
+
             InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
             SetCursor(LoadCursor(nullptr, g_ctx.isCropMode ? IDC_CROSS : IDC_ARROW));
         }
@@ -223,6 +234,11 @@ static void OnKeyDown(WPARAM wParam) {
             g_ctx.isCropActive = true;
             g_ctx.isCropPending = false;
             g_ctx.isCropMode = false;
+
+            // Apply crop to the actual view
+            ApplyEffectsToView();
+            FitImageToWindow();
+
             InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
         }
         break;
@@ -242,6 +258,7 @@ static void OnKeyDown(WPARAM wParam) {
         g_ctx.isEyedropperActive = false;
         SetCursor(LoadCursor(nullptr, IDC_CROSS));
         break;
+    case VK_ADD:
     case VK_OEM_PLUS:
         if (ctrlPressed) {
             RECT cr; GetClientRect(g_ctx.hWnd, &cr);
@@ -249,6 +266,7 @@ static void OnKeyDown(WPARAM wParam) {
             ZoomImage(1.25f, centerPt);
         }
         break;
+    case VK_SUBTRACT:
     case VK_OEM_MINUS:
         if (ctrlPressed) {
             RECT cr; GetClientRect(g_ctx.hWnd, &cr);
@@ -477,7 +495,7 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hEditMenu, MF_STRING, IDM_RESIZE, L"Resize Image...");
     AppendMenuW(hEditMenu, MF_STRING, IDM_BRIGHTNESS_CONTRAST, L"Image Effects...");
     AppendMenuW(hEditMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hEditMenu, MF_STRING | MF_GRAYED, 0, L"Eyedropper\tHold Alt Key");
+    AppendMenuW(hEditMenu, MF_STRING | (g_ctx.isEyedropperActive ? MF_CHECKED : MF_UNCHECKED), IDM_EYEDROPPER, L"Pick Color");
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hEditMenu, L"Edit");
 
     HMENU hViewMenu = CreatePopupMenu();
@@ -512,7 +530,7 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
 
     switch (cmd) {
     case IDM_OPEN:          OpenFileAction(); break;
-    case IDM_REFRESH:       OnKeyDown(VK_F5); break; 
+    case IDM_REFRESH:       OnKeyDown(VK_F5); break;
     case IDM_COPY:          HandleCopy(); break;
     case IDM_PASTE:         HandlePaste(); break;
     case IDM_NEXT_IMG:      OnKeyDown(VK_RIGHT); break;
@@ -551,11 +569,24 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
         g_ctx.isCropActive = false;
         g_ctx.isCropPending = false;
         g_ctx.isSelectingCropRect = false;
+
+        // Reset full view when starting new crop
+        ApplyEffectsToView();
+        FitImageToWindow();
+
         InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
         SetCursor(LoadCursor(nullptr, IDC_CROSS));
         break;
     case IDM_RESIZE:        ResizeImageAction(); break;
     case IDM_BRIGHTNESS_CONTRAST: OpenBrightnessContrastDialog(); break;
+    case IDM_EYEDROPPER:
+        g_ctx.isEyedropperActive = !g_ctx.isEyedropperActive;
+        g_ctx.didCopyColor = false;
+        SetCursor(LoadCursor(nullptr, g_ctx.isEyedropperActive ? IDC_CROSS : IDC_ARROW));
+        if (g_ctx.isEyedropperActive) SetCapture(g_ctx.hWnd);
+        else ReleaseCapture();
+        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        break;
     case IDM_OCR:           PerformOcr(); break;
     case IDM_OCR_AREA:
         g_ctx.isSelectingOcrRect = true;
@@ -894,6 +925,7 @@ void ShowImageProperties() {
         pProps->modifiedDate = FormatFileTime(fad.ftLastWriteTime);
         pProps->accessedDate = FormatFileTime(fad.ftLastAccessTime);
 
+        // FIX: Ensure '->' is used here, not '.'
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_READONLY) pProps->attributes += L"Read-only; ";
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) pProps->attributes += L"Hidden; ";
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) pProps->attributes += L"System; ";
@@ -988,7 +1020,7 @@ void ShowImageProperties() {
         }
     }
 
-    RECT rcParent = {}; 
+    RECT rcParent = {};
     GetWindowRect(g_ctx.hWnd, &rcParent);
     int wndWidth = 600;
     int wndHeight = 700;
@@ -1120,28 +1152,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_KEYUP:
         break;
-    case WM_SYSKEYDOWN:
-        if (wParam == VK_MENU && !g_ctx.isEyedropperActive) {
-            g_ctx.isEyedropperActive = true;
-            g_ctx.didCopyColor = false;
-            GetCursorPos(&g_ctx.currentMousePos);
-            ScreenToClient(g_ctx.hWnd, &g_ctx.currentMousePos);
-            UpdateEyedropperColor(g_ctx.currentMousePos);
-            SetCursor(LoadCursor(nullptr, IDC_CROSS));
-            SetCapture(g_ctx.hWnd);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return 0;
-        }
-        break;
-    case WM_SYSKEYUP:
-        if (wParam == VK_MENU && g_ctx.isEyedropperActive) {
-            g_ctx.isEyedropperActive = false;
-            SetCursor(LoadCursor(nullptr, IDC_ARROW));
-            ReleaseCapture();
-            InvalidateRect(hWnd, nullptr, FALSE);
-            return 0;
-        }
-        break;
     case WM_MOUSEWHEEL: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         ScreenToClient(hWnd, &pt);
@@ -1159,6 +1169,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_ctx.isSelectingOcrRect = false;
             g_ctx.isDraggingOcrRect = false;
             g_ctx.ocrRectWindow = { 0 };
+
+            // Revert cropped view if we cancel
+            ApplyEffectsToView();
+            FitImageToWindow();
+
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             if (GetCapture() == hWnd) {
                 ReleaseCapture();
@@ -1178,6 +1193,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
         if (g_ctx.isEyedropperActive) {
             HandleEyedropperClick();
+            g_ctx.isEyedropperActive = false; // Turn off after click
+            ReleaseCapture();
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
         if (g_ctx.isSelectingOcrRect) {
@@ -1370,7 +1389,7 @@ void DeleteCurrentImage() {
     if (g_ctx.currentImageIndex < 0 || g_ctx.imageFiles.empty()) return;
 
     std::wstring filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
-    std::wstring pathDoubleNull = filePath + L'\0'; 
+    std::wstring pathDoubleNull = filePath + L'\0';
 
     SHFILEOPSTRUCTW fileOp = { 0 };
     fileOp.hwnd = g_ctx.hWnd;
@@ -1417,7 +1436,7 @@ void HandleCopy() {
         EmptyClipboard();
 
         size_t size = (g_ctx.loadingFilePath.length() + 1) * sizeof(wchar_t);
-        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + size + sizeof(wchar_t)); 
+        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + size + sizeof(wchar_t));
 
         if (hMem) {
             BYTE* pData = (BYTE*)GlobalLock(hMem);

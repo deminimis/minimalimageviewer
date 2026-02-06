@@ -120,6 +120,24 @@ void ApplyEffectsToView() {
         source = g_ctx.wicConverterOriginal;
     }
 
+    // apply crop if active first.
+    if (g_ctx.isCropActive) {
+        ComPtr<IWICBitmapClipper> clipper;
+        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+            WICRect rc;
+            rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
+            rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
+            rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
+            rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
+
+            if (rc.Width > 0 && rc.Height > 0) {
+                if (SUCCEEDED(clipper->Initialize(source, &rc))) {
+                    source = clipper;
+                }
+            }
+        }
+    }
+
     source = ApplyImageEffects(source);
 
     ComPtr<IWICFormatConverter> converter;
@@ -147,6 +165,25 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
         return nullptr;
     }
 
+    // 1. crop first
+    if (g_ctx.isCropActive) {
+        ComPtr<IWICBitmapClipper> clipper;
+        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+            WICRect rc;
+            rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
+            rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
+            rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
+            rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
+
+            if (rc.Width > 0 && rc.Height > 0) {
+                if (SUCCEEDED(clipper->Initialize(source, &rc))) {
+                    source = clipper;
+                }
+            }
+        }
+    }
+
+    // 2. rotate flip second
     if (g_ctx.rotationAngle != 0 || g_ctx.isFlippedHorizontal) {
         ComPtr<IWICBitmapFlipRotator> rotator;
         if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
@@ -162,23 +199,6 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
 
             if (SUCCEEDED(rotator->Initialize(source, options))) {
                 source = rotator;
-            }
-        }
-    }
-
-    if (g_ctx.isCropActive) {
-        ComPtr<IWICBitmapClipper> clipper;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
-            WICRect rc;
-            rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
-            rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
-            rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
-            rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
-
-            if (rc.Width > 0 && rc.Height > 0) {
-                if (SUCCEEDED(clipper->Initialize(source, &rc))) {
-                    source = clipper;
-                }
             }
         }
     }
@@ -276,7 +296,7 @@ void SaveImage() {
         return;
     }
 
-    const auto& originalPath = g_ctx.imageFiles[g_ctx.currentImageIndex];
+    const std::wstring& originalPath = g_ctx.imageFiles[g_ctx.currentImageIndex];
 
     if (g_ctx.rotationAngle == 0 && !g_ctx.isFlippedHorizontal && !g_ctx.isCropActive && !g_ctx.isGrayscale && g_ctx.brightness == 0.0f && g_ctx.contrast == 1.0f && g_ctx.saturation == 1.0f) {
         MessageBoxW(g_ctx.hWnd, L"No changes to save.", L"Save", MB_OK | MB_ICONINFORMATION);
@@ -355,6 +375,24 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
         }
     }
 
+    // apply crop first
+    if (g_ctx.isCropActive) {
+        ComPtr<IWICBitmapClipper> clipper;
+        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+            WICRect rc;
+            rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
+            rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
+            rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
+            rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
+            if (rc.Width > 0 && rc.Height > 0) {
+                if (SUCCEEDED(clipper->Initialize(source, &rc))) {
+                    source = clipper;
+                }
+            }
+        }
+    }
+
+    // Apply Rotate/Flip Second
     if (g_ctx.rotationAngle != 0 || g_ctx.isFlippedHorizontal) {
         ComPtr<IWICBitmapFlipRotator> rotator;
         if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
@@ -369,22 +407,6 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
             }
             if (SUCCEEDED(rotator->Initialize(source, options))) {
                 source = rotator;
-            }
-        }
-    }
-
-    if (g_ctx.isCropActive) {
-        ComPtr<IWICBitmapClipper> clipper;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
-            WICRect rc;
-            rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
-            rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
-            rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
-            rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
-            if (rc.Width > 0 && rc.Height > 0) {
-                if (SUCCEEDED(clipper->Initialize(source, &rc))) {
-                    source = clipper;
-                }
             }
         }
     }
