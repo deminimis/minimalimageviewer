@@ -1,7 +1,7 @@
 # Minimal Image Viewer
 
 <div style="overflow: auto;">
-  <img src="https://github.com/deminimis/minimalimageviewer/blob/main/assets/app.png?raw=true" alt="Project Logo" width="20%" align="left">
+  <img src="https://github.com/deminimis/minimalimageviewer/blob/main/src/app.ico?raw=true" alt="Project Logo" width="20%" align="left">
 </div> 
 
 ### The most 🪶 LIGHTWEIGHT image viewer available for Windows
@@ -13,7 +13,7 @@ Minimal Image Viewer is an open-source image viewer and editor (**now with OCR**
 ### 💾 Download the latest version [here](https://github.com/deminimis/minimalimageviewer/releases).
 <br>
 
-_For a stripped-down 21kb version, you can try the [stable stripped .exe](https://github.com/deminimis/minimalimageviewer/releases/tag/v1.6**)_
+_For a stripped-down 21kb version, you can try the [stable stripped .exe](https://github.com/deminimis/minimalimageviewer/releases/tag/v1.6)_
 
 ## Key Features
 
