@@ -18,6 +18,18 @@ void ShowImageProperties();
 void OpenPreferencesDialog();
 static void OpenBrightnessContrastDialog();
 
+void UpdateViewToCurrentFrame() {
+    {
+        CriticalSectionLock lock(g_ctx.wicMutex);
+        if (g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
+            g_ctx.wicConverterOriginal = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+        }
+    }
+    // Re-apply rotation, brightness, etc. to the new frame
+    ApplyEffectsToView();
+    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+}
+
 static void UpdateEyedropperColor(POINT pt) {
     g_ctx.didCopyColor = false;
     float localX = 0, localY = 0;
@@ -164,17 +176,30 @@ static void OnKeyDown(WPARAM wParam) {
 
     switch (wParam) {
     case VK_RIGHT:
-        if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
+        // tiff support
+        if (!g_ctx.isAnimated && g_ctx.animationFrameConverters.size() > 1 &&
+            g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size() - 1) {
+            g_ctx.currentAnimationFrame++;
+            UpdateViewToCurrentFrame();
+        }
+        else if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
             size_t size = g_ctx.imageFiles.size();
             g_ctx.currentImageIndex = (g_ctx.currentImageIndex + 1) % static_cast<int>(size);
             LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str());
         }
         break;
     case VK_LEFT:
-        if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
+        // tiff support
+        if (!g_ctx.isAnimated && g_ctx.animationFrameConverters.size() > 1 &&
+            g_ctx.currentAnimationFrame > 0) {
+            g_ctx.currentAnimationFrame--;
+            UpdateViewToCurrentFrame();
+        }
+        else if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
             size_t size = g_ctx.imageFiles.size();
             g_ctx.currentImageIndex = (g_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
-            LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str());
+            // Pass true to open at the last frame of the previous image
+            LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str(), true);
         }
         break;
     case VK_UP:    RotateImage(true); break;
@@ -192,7 +217,7 @@ static void OnKeyDown(WPARAM wParam) {
             g_ctx.isEyedropperActive = false;
             g_ctx.ocrRectWindow = { 0 };
 
-            // Revert any pending views (like full image if we were in crop mode)
+            // revert any pending views
             ApplyEffectsToView();
             FitImageToWindow();
 
@@ -218,7 +243,7 @@ static void OnKeyDown(WPARAM wParam) {
             g_ctx.isCropPending = false;
             g_ctx.isSelectingCropRect = false;
 
-            // Refresh view to show full image if we just toggled crop mode
+            // refresh view to show full image if we just toggled crop mode
             ApplyEffectsToView();
             FitImageToWindow();
 
@@ -235,7 +260,7 @@ static void OnKeyDown(WPARAM wParam) {
             g_ctx.isCropPending = false;
             g_ctx.isCropMode = false;
 
-            // Apply crop to the actual view
+            // apply crop to the actual view
             ApplyEffectsToView();
             FitImageToWindow();
 
@@ -570,7 +595,7 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
         g_ctx.isCropPending = false;
         g_ctx.isSelectingCropRect = false;
 
-        // Reset full view when starting new crop
+        // reset full view when starting new crop
         ApplyEffectsToView();
         FitImageToWindow();
 
@@ -925,7 +950,7 @@ void ShowImageProperties() {
         pProps->modifiedDate = FormatFileTime(fad.ftLastWriteTime);
         pProps->accessedDate = FormatFileTime(fad.ftLastAccessTime);
 
-        // FIX: Ensure '->' is used here, not '.'
+        // FIX: Changed dots (.) to arrows (->) below
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_READONLY) pProps->attributes += L"Read-only; ";
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) pProps->attributes += L"Hidden; ";
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) pProps->attributes += L"System; ";
@@ -1132,7 +1157,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 WIN32_FILE_ATTRIBUTE_DATA fad;
                 if (GetFileAttributesExW(currentFile.c_str(), GetFileExInfoStandard, &fad)) {
                     if (CompareFileTime(&fad.ftLastWriteTime, &g_ctx.lastWriteTime) > 0) {
-                        // File has changed. Verify it's accessible (not locked by writer)
+                        // verify file is not locked
                         HANDLE hFile = CreateFileW(currentFile.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
                         if (hFile != INVALID_HANDLE_VALUE) {
                             CloseHandle(hFile);
@@ -1170,7 +1195,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_ctx.isDraggingOcrRect = false;
             g_ctx.ocrRectWindow = { 0 };
 
-            // Revert cropped view if we cancel
+            // revert cropped view if canceled
             ApplyEffectsToView();
             FitImageToWindow();
 
@@ -1193,7 +1218,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
         if (g_ctx.isEyedropperActive) {
             HandleEyedropperClick();
-            g_ctx.isEyedropperActive = false; // Turn off after click
+            g_ctx.isEyedropperActive = false;
             ReleaseCapture();
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             InvalidateRect(hWnd, nullptr, FALSE);
@@ -1470,6 +1495,52 @@ void HandlePaste() {
                 wchar_t filePath[MAX_PATH];
                 if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH)) {
                     LoadImageFromFile(filePath);
+                }
+            }
+        }
+        else if (IsClipboardFormatAvailable(CF_BITMAP) || IsClipboardFormatAvailable(CF_DIB)) {
+            HBITMAP hBitmap = (HBITMAP)GetClipboardData(CF_BITMAP);
+            if (hBitmap) {
+                CriticalSectionLock lock(g_ctx.wicMutex);
+
+                ComPtr<IWICBitmap> wicBitmap;
+                HRESULT hr = g_ctx.wicFactory->CreateBitmapFromHBITMAP(hBitmap, NULL, WICBitmapUseAlpha, &wicBitmap);
+
+                if (SUCCEEDED(hr)) {
+                    ComPtr<IWICFormatConverter> converter;
+                    hr = g_ctx.wicFactory->CreateFormatConverter(&converter);
+
+                    if (SUCCEEDED(hr)) {
+                        hr = converter->Initialize(wicBitmap, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+
+                        if (SUCCEEDED(hr)) {
+                            // reset state for new pasted image
+                            g_ctx.wicConverter = converter;
+                            g_ctx.wicConverterOriginal = converter;
+                            g_ctx.d2dBitmap = nullptr;
+                            g_ctx.animationD2DBitmaps.clear();
+                            g_ctx.animationFrameConverters.clear();
+                            g_ctx.animationFrameDelays.clear();
+                            g_ctx.isAnimated = false;
+
+                            // clear file context
+                            g_ctx.imageFiles.clear();
+                            g_ctx.currentImageIndex = -1;
+                            g_ctx.currentDirectory = L"";
+                            g_ctx.loadingFilePath = L"Clipboard Image";
+                            g_ctx.originalContainerFormat = GUID_ContainerFormatPng;
+
+                            g_ctx.zoomFactor = 1.0f;
+                            g_ctx.offsetX = 0;
+                            g_ctx.offsetY = 0;
+
+                            // stop animations
+                            KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
+
+                            SetWindowTextW(g_ctx.hWnd, L"Clipboard Image");
+                            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+                        }
+                    }
                 }
             }
         }

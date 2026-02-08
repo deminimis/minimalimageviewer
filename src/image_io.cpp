@@ -5,7 +5,6 @@
 
 extern AppContext g_ctx;
 
-// Helper to check if the sequence is still valid
 static bool IsSequenceValid(int seqId) {
     return g_ctx.loadSequenceId == seqId;
 }
@@ -91,7 +90,7 @@ HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDec
 
 static bool IsImageFile(IWICImagingFactory* pFactory, const wchar_t* filePath) {
     ComPtr<IWICBitmapDecoder> decoder;
-    // open lightly (in case editor not done saving)
+    // Open lightly (in case editor not done saving)
     HRESULT hr = pFactory->CreateDecoderFromFilename(
         filePath, nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder
     );
@@ -176,8 +175,7 @@ std::vector<std::wstring> ScanDirectory(IWICImagingFactory* pFactory, const std:
     return result;
 }
 
-void LoadImageFromFile(const std::wstring& filePath) {
-    // Stop any existing preloading
+void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
     CleanupPreloadingThreads();
     g_ctx.cancelPreloading = false;
 
@@ -185,8 +183,8 @@ void LoadImageFromFile(const std::wstring& filePath) {
 
     g_ctx.isLoading = true;
     g_ctx.loadingFilePath = filePath;
+    g_ctx.startAtEnd = startAtEnd;
 
-    // Reset view state immediately
     {
         CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.wicConverter = nullptr;
@@ -199,8 +197,8 @@ void LoadImageFromFile(const std::wstring& filePath) {
         g_ctx.currentAnimationFrame = 0;
         g_ctx.originalContainerFormat = GUID_NULL;
 
-        // Clear staging
-        g_ctx.stagedPixels.clear();
+        g_ctx.stagedFrames.clear();
+        g_ctx.stagedDelays.clear();
         g_ctx.stagedWidth = 0;
         g_ctx.stagedHeight = 0;
     }
@@ -236,7 +234,7 @@ void LoadImageFromFile(const std::wstring& filePath) {
             return;
         }
 
-        // PHASE 1: Load Image to Memory Buffer
+        // Load Image to Memory Buffer (Handles Animation)
         ComPtr<IWICBitmapDecoder> decoder;
         hr = CreateDecoderFromStream_FullFileRead(localFactory, filePath.c_str(), &decoder, mySeqId);
 
@@ -251,13 +249,35 @@ void LoadImageFromFile(const std::wstring& filePath) {
         GUID containerFormat = {};
         decoder->GetContainerFormat(&containerFormat);
 
-        ComPtr<IWICBitmapFrameDecode> frame;
-        hr = decoder->GetFrame(0, &frame);
+        UINT frameCount = 0;
+        decoder->GetFrameCount(&frameCount);
+        if (frameCount == 0) frameCount = 1;
 
-        std::vector<BYTE> rawPixels;
+        std::vector<std::vector<BYTE>> allFramesPixels;
+        std::vector<UINT> allFramesDelays;
         UINT width = 0, height = 0;
 
-        if (SUCCEEDED(hr)) {
+        for (UINT i = 0; i < frameCount; ++i) {
+            ComPtr<IWICBitmapFrameDecode> frame;
+            if (FAILED(decoder->GetFrame(i, &frame))) continue;
+
+            // delay metadata
+            UINT delay = 100;
+            ComPtr<IWICMetadataQueryReader> metadataReader;
+            if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
+                PROPVARIANT propValue;
+                PropVariantInit(&propValue);
+                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Delay", &propValue))) {
+                    if (propValue.vt == VT_UI2) {
+                        delay = propValue.uiVal * 10;
+                    }
+                    PropVariantClear(&propValue);
+                }
+            }
+            if (delay < 10) delay = 100;
+            allFramesDelays.push_back(delay);
+
+            // Get Pixels
             ComPtr<IWICFormatConverter> converter;
             if (SUCCEEDED(localFactory->CreateFormatConverter(&converter))) {
                 if (SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
@@ -265,15 +285,17 @@ void LoadImageFromFile(const std::wstring& filePath) {
 
                     UINT stride = width * 4;
                     UINT size = stride * height;
-                    rawPixels.resize(size);
-                    hr = converter->CopyPixels(nullptr, stride, size, rawPixels.data());
+                    std::vector<BYTE> rawPixels(size);
+                    if (SUCCEEDED(converter->CopyPixels(nullptr, stride, size, rawPixels.data()))) {
+                        allFramesPixels.push_back(std::move(rawPixels));
+                    }
                 }
             }
+
+            if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
         }
 
-        if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
-
-        if (FAILED(hr) || rawPixels.empty()) {
+        if (allFramesPixels.empty()) {
             PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             CoUninitialize();
             return;
@@ -281,7 +303,8 @@ void LoadImageFromFile(const std::wstring& filePath) {
 
         {
             CriticalSectionLock lock(g_ctx.wicMutex);
-            g_ctx.stagedPixels = std::move(rawPixels);
+            g_ctx.stagedFrames = std::move(allFramesPixels);
+            g_ctx.stagedDelays = std::move(allFramesDelays);
             g_ctx.stagedWidth = width;
             g_ctx.stagedHeight = height;
             g_ctx.originalContainerFormat = containerFormat;
@@ -289,7 +312,7 @@ void LoadImageFromFile(const std::wstring& filePath) {
 
         PostMessage(g_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
 
-        // PHASE 2: Background Scan
+        // Background Scan
         wchar_t folder[MAX_PATH] = { 0 };
         wcscpy_s(folder, MAX_PATH, filePath.c_str());
         PathRemoveFileSpecW(folder);
@@ -322,34 +345,71 @@ void OnImageReady(bool success, int seqId) {
     if (success) {
         CriticalSectionLock lock(g_ctx.wicMutex);
 
-        if (g_ctx.stagedPixels.empty()) {
+        if (g_ctx.stagedFrames.empty()) {
             g_ctx.isLoading = false;
             return;
         }
 
-        // Reconstruct WIC objects on main thread
-        ComPtr<IWICBitmap> memoryBitmap;
-        HRESULT hr = g_ctx.wicFactory->CreateBitmapFromMemory(
-            g_ctx.stagedWidth,
-            g_ctx.stagedHeight,
-            GUID_WICPixelFormat32bppPBGRA,
-            g_ctx.stagedWidth * 4,
-            static_cast<UINT>(g_ctx.stagedPixels.size()),
-            g_ctx.stagedPixels.data(),
-            &memoryBitmap
-        );
+        bool animated = g_ctx.stagedFrames.size() > 1;
 
-        if (SUCCEEDED(hr)) {
-            ComPtr<IWICFormatConverter> converter;
-            g_ctx.wicFactory->CreateFormatConverter(&converter);
-            converter->Initialize(memoryBitmap, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
-
-            g_ctx.wicConverter = converter;
-            g_ctx.wicConverterOriginal = converter; // For reset zoom
-
-            // Clear raw buffer to save RAM
-            g_ctx.stagedPixels.clear();
+        // Disable automatic animation for TIFFs 
+        if (g_ctx.originalContainerFormat == GUID_ContainerFormatTiff) {
+            animated = false;
         }
+
+        g_ctx.isAnimated = animated;
+        g_ctx.animationFrameConverters.clear();
+        g_ctx.animationFrameDelays.clear();
+
+        // Determine start frame
+        g_ctx.currentAnimationFrame = 0;
+        if (g_ctx.startAtEnd && !animated && !g_ctx.stagedFrames.empty()) {
+            g_ctx.currentAnimationFrame = static_cast<UINT>(g_ctx.stagedFrames.size() - 1);
+        }
+        // Reset flag
+        g_ctx.startAtEnd = false;
+
+        UINT stride = g_ctx.stagedWidth * 4;
+
+        // Reconstruct WIC 
+        for (const auto& pixels : g_ctx.stagedFrames) {
+            ComPtr<IWICBitmap> memoryBitmap;
+            HRESULT hr = g_ctx.wicFactory->CreateBitmapFromMemory(
+                g_ctx.stagedWidth,
+                g_ctx.stagedHeight,
+                GUID_WICPixelFormat32bppPBGRA,
+                stride,
+                static_cast<UINT>(pixels.size()),
+                const_cast<BYTE*>(pixels.data()),
+                &memoryBitmap
+            );
+
+            if (SUCCEEDED(hr)) {
+                ComPtr<IWICFormatConverter> converter;
+                g_ctx.wicFactory->CreateFormatConverter(&converter);
+                converter->Initialize(memoryBitmap, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+                g_ctx.animationFrameConverters.push_back(converter);
+            }
+        }
+
+        if (!g_ctx.animationFrameConverters.empty()) {
+            // Set the primary converter based on calculated start frame
+            if (g_ctx.currentAnimationFrame >= g_ctx.animationFrameConverters.size()) {
+                g_ctx.currentAnimationFrame = 0;
+            }
+            g_ctx.wicConverter = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+            g_ctx.wicConverterOriginal = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+
+            if (animated) {
+                g_ctx.animationFrameDelays = g_ctx.stagedDelays;
+                // Start animation timer
+                SetTimer(g_ctx.hWnd, ANIMATION_TIMER_ID, g_ctx.animationFrameDelays[0], nullptr);
+            }
+        }
+
+
+        g_ctx.stagedFrames.clear();
+        g_ctx.stagedDelays.clear();
 
         g_ctx.isLoading = false;
 
@@ -392,7 +452,7 @@ void OnDirReady(int seqId) {
 
 }
 
-// Fallback legacy handler
+// Fallback  handler
 void FinalizeImageLoad(bool success, int foundIndex) {
     g_ctx.isLoading = false;
     KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
@@ -403,8 +463,7 @@ void FinalizeImageLoad(bool success, int foundIndex) {
         g_ctx.animationD2DBitmaps.clear();
         g_ctx.wicConverter = nullptr;
         g_ctx.wicConverterOriginal = nullptr;
-
-        g_ctx.stagedPixels.clear();
+        g_ctx.stagedFrames.clear();
     }
 
     if (success) {

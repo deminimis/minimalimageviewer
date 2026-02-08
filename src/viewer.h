@@ -159,17 +159,18 @@ struct AppContext {
 
     // Loading State
     std::atomic<bool> isLoading{ false };
-    std::atomic<int> loadSequenceId{ 0 }; 
+    std::atomic<int> loadSequenceId{ 0 };
     CRITICAL_SECTION wicMutex{};
 
     std::wstring loadingFilePath;
     GUID originalContainerFormat = {};
+    bool startAtEnd = false; // cycling backwards
 
-    std::vector<BYTE> stagedPixels;
+    // Staging for loading thread - animation support
+    std::vector<std::vector<BYTE>> stagedFrames; 
+    std::vector<UINT> stagedDelays;              
     UINT stagedWidth = 0;
     UINT stagedHeight = 0;
-    bool stagedIsAnimated = false;
-    std::vector<UINT> stagedFrameDelays;
 
     std::vector<std::wstring> stagedImageFiles;
     int stagedFoundIndex = -1;
@@ -186,6 +187,7 @@ struct AppContext {
 
     HWND hPropsWnd = nullptr;
 
+    // Animation State
     bool isAnimated = false;
     std::vector<ComPtr<IWICFormatConverter>> animationFrameConverters;
     std::vector<ComPtr<ID2D1Bitmap>> animationD2DBitmaps;
@@ -233,7 +235,6 @@ struct AppContext {
     float savedContrast = 1.0f;
     float savedSaturation = 1.0f;
 
-    // Auto Refresh variables
     bool isAutoRefresh = false;
     FILETIME lastWriteTime = { 0 };
     bool preserveView = false;
@@ -244,7 +245,7 @@ void SetActualSize();
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK PropsWndProc(HWND, UINT, WPARAM, LPARAM);
 void ToggleFullScreen();
-void LoadImageFromFile(const std::wstring& filePath);
+void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd = false);
 void FinalizeImageLoad(bool success, int foundIndex);
 void OnImageReady(bool success, int seqId);
 void OnDirReady(int seqId);
@@ -257,6 +258,7 @@ void SaveImageAs();
 void ResizeImageAction();
 ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource);
 void ApplyEffectsToView();
+void UpdateViewToCurrentFrame();
 void DeleteCurrentImage();
 void HandleDropFiles(HDROP hDrop);
 void HandlePaste();
