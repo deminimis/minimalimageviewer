@@ -27,25 +27,20 @@ void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& 
 }
 
 void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop) {
-    std::wstring fs_val = fullscreen ? L"1" : L"0";
-    WritePrivateProfileStringW(L"Settings", L"StartFullScreen", fs_val.c_str(), path.c_str());
+    auto writeInt = [&](LPCWSTR section, LPCWSTR key, int val) {
+        WritePrivateProfileStringW(section, key, std::to_wstring(val).c_str(), path.c_str());
+        };
 
-    std::wstring si_val = singleInstance ? L"1" : L"0";
-    WritePrivateProfileStringW(L"Settings", L"EnforceSingleInstance", si_val.c_str(), path.c_str());
-
-    std::wstring aot_val = alwaysOnTop ? L"1" : L"0";
-    WritePrivateProfileStringW(L"Settings", L"AlwaysOnTop", aot_val.c_str(), path.c_str());
-
-    std::wstring bg_val = std::to_wstring(static_cast<int>(g_ctx.bgColor));
-    WritePrivateProfileStringW(L"Settings", L"BackgroundColor", bg_val.c_str(), path.c_str());
-
-    std::wstring zoom_val = std::to_wstring(static_cast<int>(g_ctx.defaultZoomMode));
-    WritePrivateProfileStringW(L"Settings", L"DefaultZoomMode", zoom_val.c_str(), path.c_str());
+    writeInt(L"Settings", L"StartFullScreen", fullscreen ? 1 : 0);
+    writeInt(L"Settings", L"EnforceSingleInstance", singleInstance ? 1 : 0);
+    writeInt(L"Settings", L"AlwaysOnTop", alwaysOnTop ? 1 : 0);
+    writeInt(L"Settings", L"BackgroundColor", static_cast<int>(g_ctx.bgColor));
+    writeInt(L"Settings", L"DefaultZoomMode", static_cast<int>(g_ctx.defaultZoomMode));
 
     if (!IsRectEmpty(&rect) && !IsIconic(g_ctx.hWnd) && !IsZoomed(g_ctx.hWnd)) {
-        WritePrivateProfileStringW(L"Window", L"left", std::to_wstring(rect.left).c_str(), path.c_str());
-        WritePrivateProfileStringW(L"Window", L"top", std::to_wstring(rect.top).c_str(), path.c_str());
-        WritePrivateProfileStringW(L"Window", L"right", std::to_wstring(rect.right).c_str(), path.c_str());
-        WritePrivateProfileStringW(L"Window", L"bottom", std::to_wstring(rect.bottom).c_str(), path.c_str());
+        writeInt(L"Window", L"left", rect.left);
+        writeInt(L"Window", L"top", rect.top);
+        writeInt(L"Window", L"right", rect.right);
+        writeInt(L"Window", L"bottom", rect.bottom);
     }
 }

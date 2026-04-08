@@ -13,6 +13,28 @@ using namespace Windows::Graphics::Imaging;
 using namespace Windows::Media::Ocr;
 using namespace Windows::Storage;
 
+static void CopyToClipboardAndNotify(HWND hWnd, const std::wstring& text, UINT successMsg) {
+    if (OpenClipboard(nullptr)) {
+        EmptyClipboard();
+        size_t sizeInBytes = (text.length() + 1) * sizeof(wchar_t);
+        HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, sizeInBytes);
+        if (hg) {
+            void* pData = GlobalLock(hg);
+            if (pData) {
+                memcpy(pData, text.c_str(), sizeInBytes);
+                GlobalUnlock(hg);
+                SetClipboardData(CF_UNICODETEXT, hg);
+                PostMessage(hWnd, successMsg, 0, 0);
+                CloseClipboard();
+                return;
+            }
+            GlobalFree(hg);
+        }
+        CloseClipboard();
+    }
+    PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)3);
+}
+
 static void PerformOcr_Thread(std::wstring filePath, HWND hWnd) {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
 
@@ -43,31 +65,7 @@ static void PerformOcr_Thread(std::wstring filePath, HWND hWnd) {
             allText += L"\r\n";
         }
 
-        if (OpenClipboard(nullptr)) {
-            EmptyClipboard();
-            size_t sizeInBytes = (allText.length() + 1) * sizeof(wchar_t);
-            HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, sizeInBytes);
-            if (hg) {
-                void* pData = GlobalLock(hg);
-                if (pData) {
-                    memcpy(pData, allText.c_str(), sizeInBytes);
-                    GlobalUnlock(hg);
-                    SetClipboardData(CF_UNICODETEXT, hg);
-                    PostMessage(hWnd, WM_APP_OCR_DONE_TEXT, 0, 0);
-                }
-                else {
-                    GlobalFree(hg);
-                    PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)3);
-                }
-            }
-            else {
-                PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)3);
-            }
-            CloseClipboard();
-        }
-        else {
-            PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)3);
-        }
+        CopyToClipboardAndNotify(hWnd, allText, WM_APP_OCR_DONE_TEXT);
     }
     catch (winrt::hresult_error const&) {
         PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)1);
@@ -148,31 +146,7 @@ static void PerformOcrArea_Thread(std::wstring filePath, D2D1_RECT_F ocrRectLoca
             allText += L"\r\n";
         }
 
-        if (OpenClipboard(nullptr)) {
-            EmptyClipboard();
-            size_t sizeInBytes = (allText.length() + 1) * sizeof(wchar_t);
-            HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, sizeInBytes);
-            if (hg) {
-                void* pData = GlobalLock(hg);
-                if (pData) {
-                    memcpy(pData, allText.c_str(), sizeInBytes);
-                    GlobalUnlock(hg);
-                    SetClipboardData(CF_UNICODETEXT, hg);
-                    PostMessage(hWnd, WM_APP_OCR_DONE_AREA, 0, 0);
-                }
-                else {
-                    GlobalFree(hg);
-                    PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)3);
-                }
-            }
-            else {
-                PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)3);
-            }
-            CloseClipboard();
-        }
-        else {
-            PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)3);
-        }
+        CopyToClipboardAndNotify(hWnd, allText, WM_APP_OCR_DONE_AREA);
     }
     catch (winrt::hresult_error const&) {
         PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)1);

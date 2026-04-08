@@ -136,120 +136,43 @@ LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
             int x_value = 160;
             int y_step = 20;
 
-            TextOutW(hdc, x_label, y, L"File Path:", 10);
-            TextOutW(hdc, x_value, y, pProps->filePath.c_str(), (int)pProps->filePath.length());
-            y += y_step;
+            auto drawProp = [&](const wchar_t* label, const std::wstring& val, bool extraSpace = false) {
+                if (extraSpace) y += y_step / 2;
+                TextOutW(hdc, x_label, y, label, (int)wcslen(label));
+                TextOutW(hdc, x_value, y, val.c_str(), (int)val.length());
+                y += y_step;
+                };
 
-            y += y_step / 2;
+            drawProp(L"File Path:", pProps->filePath);
+            drawProp(L"Image Format:", pProps->imageFormat, true);
+            drawProp(L"Dimensions:", pProps->dimensions);
+            drawProp(L"Bit Depth:", pProps->bitDepth);
+            drawProp(L"DPI:", pProps->dpi);
 
-            TextOutW(hdc, x_label, y, L"Image Format:", 13);
-            TextOutW(hdc, x_value, y, pProps->imageFormat.c_str(), (int)pProps->imageFormat.length());
-            y += y_step;
+            drawProp(L"File Size:", pProps->fileSize, true);
+            drawProp(L"Attributes:", pProps->attributes);
+            drawProp(L"Created:", pProps->createdDate);
+            drawProp(L"Modified:", pProps->modifiedDate);
+            drawProp(L"Accessed:", pProps->accessedDate);
 
-            TextOutW(hdc, x_label, y, L"Dimensions:", 11);
-            TextOutW(hdc, x_value, y, pProps->dimensions.c_str(), (int)pProps->dimensions.length());
-            y += y_step;
+            drawProp(L"Camera Make:", pProps->cameraMake, true);
+            drawProp(L"Camera Model:", pProps->cameraModel);
+            drawProp(L"Date Taken:", pProps->dateTaken);
+            drawProp(L"F-stop:", pProps->fStop);
+            drawProp(L"Exposure:", pProps->exposureTime);
+            drawProp(L"ISO:", pProps->iso);
+            drawProp(L"Focal Length:", pProps->focalLength);
+            drawProp(L"35mm Focal Length:", pProps->focalLength35mm);
+            drawProp(L"Exposure Bias:", pProps->exposureBias);
+            drawProp(L"Exposure Program:", pProps->exposureProgram);
+            drawProp(L"White Balance:", pProps->whiteBalance);
+            drawProp(L"Metering Mode:", pProps->meteringMode);
+            drawProp(L"Flash:", pProps->flash);
+            drawProp(L"Lens Model:", pProps->lensModel);
 
-            TextOutW(hdc, x_label, y, L"Bit Depth:", 10);
-            TextOutW(hdc, x_value, y, pProps->bitDepth.c_str(), (int)pProps->bitDepth.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"DPI:", 4);
-            TextOutW(hdc, x_value, y, pProps->dpi.c_str(), (int)pProps->dpi.length());
-            y += y_step;
-
-            y += y_step / 2;
-
-            TextOutW(hdc, x_label, y, L"File Size:", 10);
-            TextOutW(hdc, x_value, y, pProps->fileSize.c_str(), (int)pProps->fileSize.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Attributes:", 11);
-            TextOutW(hdc, x_value, y, pProps->attributes.c_str(), (int)pProps->attributes.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Created:", 8);
-            TextOutW(hdc, x_value, y, pProps->createdDate.c_str(), (int)pProps->createdDate.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Modified:", 9);
-            TextOutW(hdc, x_value, y, pProps->modifiedDate.c_str(), (int)pProps->modifiedDate.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Accessed:", 9);
-            TextOutW(hdc, x_value, y, pProps->accessedDate.c_str(), (int)pProps->accessedDate.length());
-            y += y_step;
-
-            y += y_step / 2;
-
-            TextOutW(hdc, x_label, y, L"Camera Make:", 12);
-            TextOutW(hdc, x_value, y, pProps->cameraMake.c_str(), (int)pProps->cameraMake.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Camera Model:", 13);
-            TextOutW(hdc, x_value, y, pProps->cameraModel.c_str(), (int)pProps->cameraModel.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Date Taken:", 11);
-            TextOutW(hdc, x_value, y, pProps->dateTaken.c_str(), (int)pProps->dateTaken.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"F-stop:", 7);
-            TextOutW(hdc, x_value, y, pProps->fStop.c_str(), (int)pProps->fStop.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Exposure:", 9);
-            TextOutW(hdc, x_value, y, pProps->exposureTime.c_str(), (int)pProps->exposureTime.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"ISO:", 4);
-            TextOutW(hdc, x_value, y, pProps->iso.c_str(), (int)pProps->iso.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Focal Length:", 13);
-            TextOutW(hdc, x_value, y, pProps->focalLength.c_str(), (int)pProps->focalLength.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"35mm Focal Length:", 18);
-            TextOutW(hdc, x_value, y, pProps->focalLength35mm.c_str(), (int)pProps->focalLength35mm.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Exposure Bias:", 14);
-            TextOutW(hdc, x_value, y, pProps->exposureBias.c_str(), (int)pProps->exposureBias.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Exposure Program:", 17);
-            TextOutW(hdc, x_value, y, pProps->exposureProgram.c_str(), (int)pProps->exposureProgram.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"White Balance:", 14);
-            TextOutW(hdc, x_value, y, pProps->whiteBalance.c_str(), (int)pProps->whiteBalance.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Metering Mode:", 14);
-            TextOutW(hdc, x_value, y, pProps->meteringMode.c_str(), (int)pProps->meteringMode.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Flash:", 6);
-            TextOutW(hdc, x_value, y, pProps->flash.c_str(), (int)pProps->flash.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Lens Model:", 11);
-            TextOutW(hdc, x_value, y, pProps->lensModel.c_str(), (int)pProps->lensModel.length());
-            y += y_step;
-
-            y += y_step / 2;
-
-            TextOutW(hdc, x_label, y, L"Author:", 7);
-            TextOutW(hdc, x_value, y, pProps->author.c_str(), (int)pProps->author.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Copyright:", 10);
-            TextOutW(hdc, x_value, y, pProps->copyright.c_str(), (int)pProps->copyright.length());
-            y += y_step;
-
-            TextOutW(hdc, x_label, y, L"Software:", 9);
-            TextOutW(hdc, x_value, y, pProps->software.c_str(), (int)pProps->software.length());
+            drawProp(L"Author:", pProps->author, true);
+            drawProp(L"Copyright:", pProps->copyright);
+            drawProp(L"Software:", pProps->software);
         }
         EndPaint(hWnd, &ps);
         break;
@@ -358,23 +281,24 @@ void ShowImageProperties() {
             }
 
             if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
-                pProps->dateTaken = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=36867}");
-                pProps->cameraMake = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=271}");
-                pProps->cameraModel = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=272}");
-                pProps->fStop = GetMetadataString(metadataReader, L"/app1/ifd/exif/{rational=33437}");
-                pProps->exposureTime = GetMetadataString(metadataReader, L"/app1/ifd/exif/{rational=33434}");
-                pProps->iso = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=34855}");
-                pProps->software = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=305}");
-                pProps->focalLength = GetMetadataString(metadataReader, L"/app1/ifd/exif/{rational=37386}");
-                pProps->focalLength35mm = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=41989}");
-                pProps->exposureBias = GetMetadataString(metadataReader, L"/app1/ifd/exif/{srational=37380}");
-                pProps->meteringMode = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=37383}");
-                pProps->flash = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=37385}");
-                pProps->exposureProgram = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=34850}");
-                pProps->whiteBalance = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=41987}");
-                pProps->author = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=315}");
-                pProps->copyright = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=33432}");
-                pProps->lensModel = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=42036}");
+                auto getMeta = [&](const wchar_t* query) { return GetMetadataString(metadataReader, query); };
+                pProps->dateTaken = getMeta(L"/app1/ifd/exif/{ushort=36867}");
+                pProps->cameraMake = getMeta(L"/app1/ifd/{ushort=271}");
+                pProps->cameraModel = getMeta(L"/app1/ifd/{ushort=272}");
+                pProps->fStop = getMeta(L"/app1/ifd/exif/{rational=33437}");
+                pProps->exposureTime = getMeta(L"/app1/ifd/exif/{rational=33434}");
+                pProps->iso = getMeta(L"/app1/ifd/exif/{ushort=34855}");
+                pProps->software = getMeta(L"/app1/ifd/{ushort=305}");
+                pProps->focalLength = getMeta(L"/app1/ifd/exif/{rational=37386}");
+                pProps->focalLength35mm = getMeta(L"/app1/ifd/exif/{ushort=41989}");
+                pProps->exposureBias = getMeta(L"/app1/ifd/exif/{srational=37380}");
+                pProps->meteringMode = getMeta(L"/app1/ifd/exif/{ushort=37383}");
+                pProps->flash = getMeta(L"/app1/ifd/exif/{ushort=37385}");
+                pProps->exposureProgram = getMeta(L"/app1/ifd/exif/{ushort=34850}");
+                pProps->whiteBalance = getMeta(L"/app1/ifd/exif/{ushort=41987}");
+                pProps->author = getMeta(L"/app1/ifd/{ushort=315}");
+                pProps->copyright = getMeta(L"/app1/ifd/{ushort=33432}");
+                pProps->lensModel = getMeta(L"/app1/ifd/exif/{ushort=42036}");
             }
         }
     }

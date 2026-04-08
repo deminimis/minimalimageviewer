@@ -3,6 +3,24 @@
 
 extern AppContext g_ctx;
 
+static HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::wstring& filePath, const GUID& containerFormat) {
+    ComPtr<IWICStream> stream;
+    ComPtr<IWICBitmapEncoder> encoder;
+    ComPtr<IWICBitmapFrameEncode> frame;
+    ComPtr<IPropertyBag2> props;
+
+    HRESULT hr = g_ctx.wicFactory->CreateStream(&stream);
+    if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(filePath.c_str(), GENERIC_WRITE);
+    if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
+    if (SUCCEEDED(hr)) hr = encoder->Initialize(stream, WICBitmapEncoderNoCache);
+    if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, &props);
+    if (SUCCEEDED(hr)) hr = frame->Initialize(props);
+    if (SUCCEEDED(hr)) hr = frame->WriteSource(source, nullptr);
+    if (SUCCEEDED(hr)) hr = frame->Commit();
+    if (SUCCEEDED(hr)) hr = encoder->Commit();
+    return hr;
+}
+
 ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
     if ((g_ctx.brightness == 0.0f && g_ctx.contrast == 1.0f && g_ctx.saturation == 1.0f) || !inSource || !g_ctx.wicFactory) {
         return inSource;
@@ -261,23 +279,7 @@ void SaveImageAs() {
         return;
     }
 
-    HRESULT hr = E_FAIL;
-    {
-        ComPtr<IWICStream> stream;
-        ComPtr<IWICBitmapEncoder> encoder;
-        ComPtr<IWICBitmapFrameEncode> frame;
-        ComPtr<IPropertyBag2> props;
-
-        hr = g_ctx.wicFactory->CreateStream(&stream);
-        if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(ofn.lpstrFile, GENERIC_WRITE);
-        if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
-        if (SUCCEEDED(hr)) hr = encoder->Initialize(stream, WICBitmapEncoderNoCache);
-        if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, &props);
-        if (SUCCEEDED(hr)) hr = frame->Initialize(props);
-        if (SUCCEEDED(hr)) hr = frame->WriteSource(source, nullptr);
-        if (SUCCEEDED(hr)) hr = frame->Commit();
-        if (SUCCEEDED(hr)) hr = encoder->Commit();
-    }
+    HRESULT hr = EncodeAndSaveImage(source, ofn.lpstrFile, containerFormat);
 
     if (SUCCEEDED(hr)) {
         LoadImageFromFile(ofn.lpstrFile);
@@ -327,22 +329,7 @@ void SaveImage() {
     }
 
     std::wstring tempPath = originalPath + L".tmp_save";
-    HRESULT hr = E_FAIL;
-    {
-        ComPtr<IWICStream> stream;
-        ComPtr<IWICBitmapEncoder> encoder;
-        ComPtr<IWICBitmapFrameEncode> frame;
-
-        hr = g_ctx.wicFactory->CreateStream(&stream);
-        if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(tempPath.c_str(), GENERIC_WRITE);
-        if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
-        if (SUCCEEDED(hr)) hr = encoder->Initialize(stream, WICBitmapEncoderNoCache);
-        if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, nullptr);
-        if (SUCCEEDED(hr)) hr = frame->Initialize(nullptr);
-        if (SUCCEEDED(hr)) hr = frame->WriteSource(source, nullptr);
-        if (SUCCEEDED(hr)) hr = frame->Commit();
-        if (SUCCEEDED(hr)) hr = encoder->Commit();
-    }
+    HRESULT hr = EncodeAndSaveImage(source, tempPath, containerFormat);
 
     if (SUCCEEDED(hr)) {
         if (ReplaceFileW(originalPath.c_str(), tempPath.c_str(), nullptr, REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)) {
@@ -453,23 +440,7 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
         }
     }
 
-    HRESULT hr = E_FAIL;
-    {
-        ComPtr<IWICStream> stream;
-        ComPtr<IWICBitmapEncoder> encoder;
-        ComPtr<IWICBitmapFrameEncode> frame;
-        ComPtr<IPropertyBag2> props;
-
-        hr = g_ctx.wicFactory->CreateStream(&stream);
-        if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(filePath.c_str(), GENERIC_WRITE);
-        if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
-        if (SUCCEEDED(hr)) hr = encoder->Initialize(stream, WICBitmapEncoderNoCache);
-        if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, &props);
-        if (SUCCEEDED(hr)) hr = frame->Initialize(props);
-        if (SUCCEEDED(hr)) hr = frame->WriteSource(source, nullptr);
-        if (SUCCEEDED(hr)) hr = frame->Commit();
-        if (SUCCEEDED(hr)) hr = encoder->Commit();
-    }
+    HRESULT hr = EncodeAndSaveImage(source, filePath, containerFormat);
 
     if (SUCCEEDED(hr)) {
         LoadImageFromFile(filePath.c_str());
