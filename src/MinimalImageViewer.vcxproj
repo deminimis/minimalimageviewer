@@ -18,18 +18,20 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="exif_utils.cpp" />
-    <ClCompile Include="image_drawing.cpp" />
-    <ClCompile Include="image_edit.cpp" />
-    <ClCompile Include="image_io.cpp" />
-    <ClCompile Include="main.cpp" />
-    <ClCompile Include="ocr_handler.cpp" />
-    <ClCompile Include="settings_handler.cpp" />
-    <ClCompile Include="ui_dialogs.cpp" />
-    <ClCompile Include="ui_handlers.cpp" />
-    <ClCompile Include="ui_properties.cpp" />
-  </ItemGroup>
+	<ItemGroup>
+		<ClCompile Include="exif_utils.cpp" />
+		<ClCompile Include="image_drawing.cpp" />
+		<ClCompile Include="image_edit.cpp" />
+		<ClCompile Include="image_io.cpp" />
+		<ClCompile Include="main.cpp" />
+		<ClCompile Include="ocr_handler.cpp" />
+		<ClCompile Include="settings_handler.cpp" />
+		<ClCompile Include="ui_actions.cpp" />
+		<ClCompile Include="ui_dialogs.cpp" />
+		<ClCompile Include="ui_handlers.cpp" />
+		<ClCompile Include="ui_properties.cpp" />
+		<ClCompile Include="ui_tools.cpp" />
+	</ItemGroup>
   <ItemGroup>
     <ClInclude Include="ComPtr.h" />
     <ClInclude Include="exif_utils.h" />

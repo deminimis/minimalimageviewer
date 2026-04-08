@@ -88,17 +88,25 @@ HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDec
 }
 
 
-static bool IsImageFile(IWICImagingFactory* pFactory, const wchar_t* filePath) {
-    ComPtr<IWICBitmapDecoder> decoder;
-    // Open lightly (in case editor not done saving)
-    HRESULT hr = pFactory->CreateDecoderFromFilename(
-        filePath, nullptr, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder
-    );
-    return SUCCEEDED(hr);
+static bool IsImageFile(const wchar_t* filePath) {
+    const wchar_t* ext = PathFindExtensionW(filePath);
+    if (!ext) return false;
+
+    static const wchar_t* validExts[] = {
+        L".jpg", L".jpeg", L".png", L".bmp", L".gif",
+        L".tiff", L".tif", L".ico", L".webp", L".heic",
+        L".heif", L".avif", L".cr2", L".cr3", L".nef",
+        L".dng", L".arw", L".orf", L".rw2"
+    };
+
+    for (const auto& validExt : validExts) {
+        if (_wcsicmp(ext, validExt) == 0) return true;
+    }
+    return false;
 }
 
 // directory scanner that checks sequence validity
-std::vector<std::wstring> ScanDirectory(IWICImagingFactory* pFactory, const std::wstring& directoryPath, int seqId) {
+std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int seqId) {
     struct FileInfo {
         std::wstring path;
         FILETIME writeTime = {};
@@ -127,7 +135,7 @@ std::vector<std::wstring> ScanDirectory(IWICImagingFactory* pFactory, const std:
                 wchar_t fullPath[MAX_PATH] = { 0 };
                 PathCombineW(fullPath, directoryPath.c_str(), fd.cFileName);
 
-                if (IsImageFile(pFactory, fullPath)) {
+                if (IsImageFile(fullPath)) {
                     FileInfo info;
                     info.path = fullPath;
                     info.writeTime = fd.ftLastWriteTime;
@@ -178,13 +186,11 @@ std::vector<std::wstring> ScanDirectory(IWICImagingFactory* pFactory, const std:
 void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
     CleanupPreloadingThreads();
     g_ctx.cancelPreloading = false;
-
     int mySeqId = ++g_ctx.loadSequenceId;
 
     g_ctx.isLoading = true;
     g_ctx.loadingFilePath = filePath;
     g_ctx.startAtEnd = startAtEnd;
-
     {
         CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.wicConverter = nullptr;
@@ -216,7 +222,6 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
     }
 
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
-
     std::thread([filePath, mySeqId]() {
         if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
             if (IsSequenceValid(mySeqId)) {
@@ -226,7 +231,8 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         }
 
         ComPtr<IWICImagingFactory> localFactory;
-        HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
+        HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+            CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
 
         if (FAILED(hr)) {
             PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
@@ -256,7 +262,6 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         std::vector<std::vector<BYTE>> allFramesPixels;
         std::vector<UINT> allFramesDelays;
         UINT width = 0, height = 0;
-
         for (UINT i = 0; i < frameCount; ++i) {
             ComPtr<IWICBitmapFrameDecode> frame;
             if (FAILED(decoder->GetFrame(i, &frame))) continue;
@@ -282,7 +287,6 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
             if (SUCCEEDED(localFactory->CreateFormatConverter(&converter))) {
                 if (SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                     converter->GetSize(&width, &height);
-
                     UINT stride = width * 4;
                     UINT size = stride * height;
                     std::vector<BYTE> rawPixels(size);
@@ -311,47 +315,20 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         }
 
         PostMessage(g_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
-
-        // Background Scan
-        wchar_t folder[MAX_PATH] = { 0 };
-        wcscpy_s(folder, MAX_PATH, filePath.c_str());
-        PathRemoveFileSpecW(folder);
-
-        std::vector<std::wstring> newFiles = ScanDirectory(localFactory, folder, mySeqId);
-
-        if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
-
-        int foundIndex = -1;
-        auto it = std::find_if(newFiles.begin(), newFiles.end(),
-            [&](const std::wstring& s) { return _wcsicmp(s.c_str(), filePath.c_str()) == 0; }
-        );
-        foundIndex = (it != newFiles.end()) ? static_cast<int>(std::distance(newFiles.begin(), it)) : -1;
-
-        {
-            CriticalSectionLock lock(g_ctx.wicMutex);
-            g_ctx.stagedImageFiles = std::move(newFiles);
-            g_ctx.stagedFoundIndex = foundIndex;
-        }
-
-        PostMessage(g_ctx.hWnd, WM_APP_DIR_READY, 0, (LPARAM)mySeqId);
-
         CoUninitialize();
         }).detach();
 }
 
 void OnImageReady(bool success, int seqId) {
     if (g_ctx.loadSequenceId != seqId) return;
-
     if (success) {
         CriticalSectionLock lock(g_ctx.wicMutex);
-
         if (g_ctx.stagedFrames.empty()) {
             g_ctx.isLoading = false;
             return;
         }
 
         bool animated = g_ctx.stagedFrames.size() > 1;
-
         // Disable automatic animation for TIFFs 
         if (g_ctx.originalContainerFormat == GUID_ContainerFormatTiff) {
             animated = false;
@@ -360,7 +337,6 @@ void OnImageReady(bool success, int seqId) {
         g_ctx.isAnimated = animated;
         g_ctx.animationFrameConverters.clear();
         g_ctx.animationFrameDelays.clear();
-
         // Determine start frame
         g_ctx.currentAnimationFrame = 0;
         if (g_ctx.startAtEnd && !animated && !g_ctx.stagedFrames.empty()) {
@@ -368,7 +344,6 @@ void OnImageReady(bool success, int seqId) {
         }
         // Reset flag
         g_ctx.startAtEnd = false;
-
         UINT stride = g_ctx.stagedWidth * 4;
 
         // Reconstruct WIC 
@@ -383,7 +358,6 @@ void OnImageReady(bool success, int seqId) {
                 const_cast<BYTE*>(pixels.data()),
                 &memoryBitmap
             );
-
             if (SUCCEEDED(hr)) {
                 ComPtr<IWICFormatConverter> converter;
                 g_ctx.wicFactory->CreateFormatConverter(&converter);
@@ -399,7 +373,6 @@ void OnImageReady(bool success, int seqId) {
             }
             g_ctx.wicConverter = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
             g_ctx.wicConverterOriginal = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
-
             if (animated) {
                 g_ctx.animationFrameDelays = g_ctx.stagedDelays;
                 // Start animation timer
@@ -407,10 +380,8 @@ void OnImageReady(bool success, int seqId) {
             }
         }
 
-
         g_ctx.stagedFrames.clear();
         g_ctx.stagedDelays.clear();
-
         g_ctx.isLoading = false;
 
         if (g_ctx.preserveView) {
@@ -429,6 +400,34 @@ void OnImageReady(bool success, int seqId) {
         if (GetFileAttributesExW(g_ctx.loadingFilePath.c_str(), GetFileExInfoStandard, &fad)) {
             g_ctx.lastWriteTime = fad.ftLastWriteTime;
         }
+
+        // Start background folder scan ONLY AFTER image is ready to display
+        std::wstring currentFilePath = g_ctx.loadingFilePath;
+        int currentSeqId = seqId;
+        std::thread([currentFilePath, currentSeqId]() {
+            wchar_t folder[MAX_PATH] = { 0 };
+            wcscpy_s(folder, MAX_PATH, currentFilePath.c_str());
+            PathRemoveFileSpecW(folder);
+
+            std::vector<std::wstring> newFiles = ScanDirectory(folder, currentSeqId);
+
+            if (!IsSequenceValid(currentSeqId)) return;
+
+            int foundIndex = -1;
+            auto it = std::find_if(newFiles.begin(), newFiles.end(),
+                [&](const std::wstring& s) { return _wcsicmp(s.c_str(), currentFilePath.c_str()) == 0; }
+            );
+            foundIndex = (it != newFiles.end()) ? static_cast<int>(std::distance(newFiles.begin(), it)) : -1;
+
+            {
+                CriticalSectionLock lock(g_ctx.wicMutex);
+                g_ctx.stagedImageFiles = std::move(newFiles);
+                g_ctx.stagedFoundIndex = foundIndex;
+            }
+
+            PostMessage(g_ctx.hWnd, WM_APP_DIR_READY, 0, (LPARAM)currentSeqId);
+            }).detach();
+
     }
     else {
         g_ctx.isLoading = false;
