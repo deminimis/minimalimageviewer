@@ -10,6 +10,17 @@ void CenterImage(bool resetZoom) {
     g_ctx.offsetX = 0.0f;
     g_ctx.offsetY = 0.0f;
     g_ctx.isFlippedHorizontal = false;
+
+    switch (g_ctx.currentOrientation) {
+    case 2: g_ctx.isFlippedHorizontal = true; break;
+    case 3: g_ctx.rotationAngle = 180; break;
+    case 4: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 180; break;
+    case 5: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 270; break;
+    case 6: g_ctx.rotationAngle = 90; break;
+    case 7: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 90; break;
+    case 8: g_ctx.rotationAngle = 270; break;
+    }
+
     g_ctx.isGrayscale = false;
     g_ctx.isCropActive = false;
     g_ctx.isCropMode = false;
@@ -36,6 +47,17 @@ void SetActualSize() {
     g_ctx.offsetX = 0.0f;
     g_ctx.offsetY = 0.0f;
     g_ctx.isFlippedHorizontal = false;
+
+    switch (g_ctx.currentOrientation) {
+    case 2: g_ctx.isFlippedHorizontal = true; break;
+    case 3: g_ctx.rotationAngle = 180; break;
+    case 4: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 180; break;
+    case 5: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 270; break;
+    case 6: g_ctx.rotationAngle = 90; break;
+    case 7: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 90; break;
+    case 8: g_ctx.rotationAngle = 270; break;
+    }
+
     g_ctx.isGrayscale = false;
     g_ctx.isCropActive = false;
     g_ctx.isCropMode = false;
@@ -51,6 +73,15 @@ void SetActualSize() {
         g_ctx.animationD2DBitmaps.clear();
     }
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+}
+
+void UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor) {
+    // Enable dark mode for Black or Grey backgrounds.
+    BOOL useDarkMode = (bgColor == BackgroundColor::Black || bgColor == BackgroundColor::Grey) ? TRUE : FALSE;
+    // 20 for W11; 19 for older
+    if (FAILED(DwmSetWindowAttribute(hWnd, 20, &useDarkMode, sizeof(useDarkMode)))) {
+        DwmSetWindowAttribute(hWnd, 19, &useDarkMode, sizeof(useDarkMode));
+    }
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
@@ -148,6 +179,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
 
     SetWindowLongPtr(g_ctx.hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&g_ctx));
     DragAcceptFiles(g_ctx.hWnd, TRUE);
+    UpdateTitleBarTheme(g_ctx.hWnd, g_ctx.bgColor);
 
     if (g_ctx.startFullScreen) {
         ToggleFullScreen();

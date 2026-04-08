@@ -26,6 +26,7 @@
 #include <cmath>
 #include <d2d1.h>
 #include <dwrite.h>
+#include <dwmapi.h>
 #include <thread>
 #include <atomic>
 #include "ComPtr.h"
@@ -46,6 +47,7 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
+#pragma comment(lib, "dwmapi.lib")
 
 constexpr UINT WM_APP_IMAGE_LOADED = (WM_APP + 1);
 constexpr UINT WM_APP_IMAGE_LOAD_FAILED = (WM_APP + 2);
@@ -147,6 +149,7 @@ struct AppContext {
     LONG savedStyle = 0;
     RECT savedRect = { 0 };
     std::wstring currentFilePathOverride;
+    UINT currentOrientation = 1;
     bool startFullScreen = false;
     bool enforceSingleInstance = true;
     bool alwaysOnTop = false;
@@ -164,13 +167,14 @@ struct AppContext {
 
     std::wstring loadingFilePath;
     GUID originalContainerFormat = {};
-    bool startAtEnd = false; // cycling backwards
+    bool startAtEnd = false;
 
-    // Staging for loading thread - animation support
+ 
     std::vector<std::vector<BYTE>> stagedFrames; 
     std::vector<UINT> stagedDelays;              
     UINT stagedWidth = 0;
     UINT stagedHeight = 0;
+    UINT stagedOrientation = 1;
 
     std::vector<std::wstring> stagedImageFiles;
     int stagedFoundIndex = -1;
@@ -284,6 +288,7 @@ bool GetCurrentImageSize(UINT* width, UINT* height);
 ImageProperties GetCurrentOsdProperties();
 void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY);
 void ConvertImageToWindowPoint(float localX, float localY, POINT& pt);
+void UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor);
 
 void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop);
 void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop);

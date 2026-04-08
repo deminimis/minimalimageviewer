@@ -55,6 +55,7 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
             else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) g_ctx.defaultZoomMode = DefaultZoomMode::Actual;
 
             SetWindowPos(g_ctx.hWnd, (g_ctx.alwaysOnTop) ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            UpdateTitleBarTheme(g_ctx.hWnd, g_ctx.bgColor);
             InvalidateRect(g_ctx.hWnd, NULL, FALSE);
 
             EndDialog(hDlg, IDOK);

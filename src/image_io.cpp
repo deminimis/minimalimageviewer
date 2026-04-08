@@ -207,6 +207,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         g_ctx.stagedDelays.clear();
         g_ctx.stagedWidth = 0;
         g_ctx.stagedHeight = 0;
+        g_ctx.stagedOrientation = 1;
     }
     g_ctx.currentFilePathOverride.clear();
 
@@ -280,6 +281,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
 
         std::vector<BYTE> compositeBuffer;
         std::vector<BYTE> previousCompositeBuffer;
+        UINT exifOrientation = 1;
 
         for (UINT i = 0; i < frameCount; ++i) {
             ComPtr<IWICBitmapFrameDecode> frame;
@@ -318,6 +320,12 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
                 if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Top", &propValue))) {
                     if (propValue.vt == VT_UI2) top = propValue.uiVal;
                     PropVariantClear(&propValue);
+                }
+                if (i == 0) {
+                    if (SUCCEEDED(metadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &propValue))) {
+                        if (propValue.vt == VT_UI2) exifOrientation = propValue.uiVal;
+                        PropVariantClear(&propValue);
+                    }
                 }
             }
             if (delay < 10) delay = 100;
@@ -418,6 +426,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
             g_ctx.stagedWidth = canvasWidth;
             g_ctx.stagedHeight = canvasHeight;
             g_ctx.originalContainerFormat = containerFormat;
+            g_ctx.stagedOrientation = exifOrientation;
         }
 
         PostMessage(g_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
@@ -489,6 +498,7 @@ void OnImageReady(bool success, int seqId) {
         g_ctx.stagedFrames.clear();
         g_ctx.stagedDelays.clear();
         g_ctx.isLoading = false;
+        g_ctx.currentOrientation = g_ctx.stagedOrientation;
 
         if (g_ctx.preserveView) {
             g_ctx.preserveView = false;
