@@ -59,28 +59,106 @@ void HandleDropFiles(HDROP hDrop) {
 }
 
 void HandleCopy() {
-    if (g_ctx.loadingFilePath.empty()) return;
-
     if (OpenClipboard(g_ctx.hWnd)) {
         EmptyClipboard();
-        size_t size = (g_ctx.loadingFilePath.length() + 1) * sizeof(wchar_t);
-        HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + size + sizeof(wchar_t));
-        if (hMem) {
-            BYTE* pData = (BYTE*)GlobalLock(hMem);
-            if (pData) {
-                DROPFILES* pDrop = (DROPFILES*)pData;
-                pDrop->pFiles = sizeof(DROPFILES);
-                pDrop->pt = { 0, 0 };
-                pDrop->fNC = FALSE;
-                pDrop->fWide = TRUE;
-                wchar_t* pPath = (wchar_t*)(pData + sizeof(DROPFILES));
-                wcscpy_s(pPath, g_ctx.loadingFilePath.length() + 1, g_ctx.loadingFilePath.c_str());
 
-                GlobalUnlock(hMem);
-                SetClipboardData(CF_HDROP, hMem);
+        // Copy as CF_HDROP
+        if (!g_ctx.loadingFilePath.empty() && g_ctx.loadingFilePath != L"Clipboard Image") {
+            size_t size = (g_ctx.loadingFilePath.length() + 1) * sizeof(wchar_t);
+            HGLOBAL hMemDrop = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + size + sizeof(wchar_t));
+            if (hMemDrop) {
+                BYTE* pData = (BYTE*)GlobalLock(hMemDrop);
+                if (pData) {
+                    DROPFILES* pDrop = (DROPFILES*)pData;
+                    pDrop->pFiles = sizeof(DROPFILES);
+                    pDrop->pt = { 0, 0 };
+                    pDrop->fNC = FALSE;
+                    pDrop->fWide = TRUE;
+                    wchar_t* pPath = (wchar_t*)(pData + sizeof(DROPFILES));
+                    wcscpy_s(pPath, g_ctx.loadingFilePath.length() + 1, g_ctx.loadingFilePath.c_str());
+
+                    GlobalUnlock(hMemDrop);
+                    SetClipboardData(CF_HDROP, hMemDrop);
+                }
+                else {
+                    GlobalFree(hMemDrop);
+                }
             }
-            else {
-                GlobalFree(hMem);
+        }
+
+        // Copy as CF_DIB 
+        ComPtr<IWICBitmapSource> source;
+        int rotAngle = 0;
+        bool flipped = false;
+
+        {
+            CriticalSectionLock lock(g_ctx.wicMutex);
+            source = g_ctx.wicConverter;
+            rotAngle = g_ctx.rotationAngle;
+            flipped = g_ctx.isFlippedHorizontal;
+        }
+
+        if (source && g_ctx.wicFactory) {
+            // Apply rotation/flip so the clipboard matches the current view
+            if (rotAngle != 0 || flipped) {
+                ComPtr<IWICBitmapFlipRotator> rotator;
+                if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
+                    WICBitmapTransformOptions options = WICBitmapTransformRotate0;
+                    switch (rotAngle) {
+                    case 90:  options = WICBitmapTransformRotate90; break;
+                    case 180: options = WICBitmapTransformRotate180; break;
+                    case 270: options = WICBitmapTransformRotate270; break;
+                    }
+                    if (flipped) {
+                        options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
+                    }
+                    if (SUCCEEDED(rotator->Initialize(source, options))) {
+                        source = rotator;
+                    }
+                }
+            }
+
+            // Convert to 32bpp BGRA for DIB
+            ComPtr<IWICFormatConverter> converter;
+            if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+                if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                    UINT width = 0, height = 0;
+                    if (SUCCEEDED(converter->GetSize(&width, &height))) {
+                        UINT stride = width * 4;
+                        UINT cbImage = stride * height;
+                        UINT cbHeader = sizeof(BITMAPINFOHEADER);
+                        UINT cbTotal = cbHeader + cbImage;
+
+                        HGLOBAL hMemDib = GlobalAlloc(GMEM_MOVEABLE, cbTotal);
+                        if (hMemDib) {
+                            BYTE* pData = (BYTE*)GlobalLock(hMemDib);
+                            if (pData) {
+                                BITMAPINFOHEADER* bmi = (BITMAPINFOHEADER*)pData;
+                                ZeroMemory(bmi, sizeof(BITMAPINFOHEADER));
+                                bmi->biSize = sizeof(BITMAPINFOHEADER);
+                                bmi->biWidth = width;
+                                bmi->biHeight = -(LONG)height; 
+                                bmi->biPlanes = 1;
+                                bmi->biBitCount = 32;
+                                bmi->biCompression = BI_RGB;
+
+                                BYTE* pPixels = pData + cbHeader;
+                                WICRect rc = { 0, 0, (INT)width, (INT)height };
+                                if (SUCCEEDED(converter->CopyPixels(&rc, stride, cbImage, pPixels))) {
+                                    GlobalUnlock(hMemDib);
+                                    SetClipboardData(CF_DIB, hMemDib);
+                                }
+                                else {
+                                    GlobalUnlock(hMemDib);
+                                    GlobalFree(hMemDib);
+                                }
+                            }
+                            else {
+                                GlobalFree(hMemDib);
+                            }
+                        }
+                    }
+                }
             }
         }
         CloseClipboard();
