@@ -266,6 +266,7 @@ void HandleCopy();
 void OpenFileLocationAction();
 void ShowImageProperties();
 void OpenPreferencesDialog();
+void OpenBrightnessContrastDialog();
 void PerformOcr();
 void PerformOcrArea(D2D1_RECT_F ocrRectLocal);
 void Render();
