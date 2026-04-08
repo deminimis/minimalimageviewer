@@ -172,19 +172,16 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
     HMENU hSortMenu = CreatePopupMenu();
-    bool isNameAsc = (g_ctx.currentSortCriteria == SortCriteria::ByName && g_ctx.isSortAscending);
-    bool isNameDesc = (g_ctx.currentSortCriteria == SortCriteria::ByName && !g_ctx.isSortAscending);
-    bool isDateAsc = (g_ctx.currentSortCriteria == SortCriteria::ByDateModified && g_ctx.isSortAscending);
-    bool isDateDesc = (g_ctx.currentSortCriteria == SortCriteria::ByDateModified && !g_ctx.isSortAscending);
-    bool isSizeAsc = (g_ctx.currentSortCriteria == SortCriteria::ByFileSize && g_ctx.isSortAscending);
-    bool isSizeDesc = (g_ctx.currentSortCriteria == SortCriteria::ByFileSize && !g_ctx.isSortAscending);
-
-    AppendMenuW(hSortMenu, MF_STRING | (isNameAsc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_NAME_ASC, L"Name (Ascending)");
-    AppendMenuW(hSortMenu, MF_STRING | (isNameDesc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_NAME_DESC, L"Name (Descending)");
-    AppendMenuW(hSortMenu, MF_STRING | (isDateAsc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_DATE_ASC, L"Date Modified (Ascending)");
-    AppendMenuW(hSortMenu, MF_STRING | (isDateDesc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_DATE_DESC, L"Date Modified (Descending)");
-    AppendMenuW(hSortMenu, MF_STRING | (isSizeAsc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_SIZE_ASC, L"File Size (Ascending)");
-    AppendMenuW(hSortMenu, MF_STRING | (isSizeDesc ? MF_CHECKED : MF_UNCHECKED), IDM_SORT_BY_SIZE_DESC, L"File Size (Descending)");
+    auto addSortItem = [&](UINT id, SortCriteria crit, bool asc, LPCWSTR text) {
+        UINT flags = MF_STRING | ((g_ctx.currentSortCriteria == crit && g_ctx.isSortAscending == asc) ? MF_CHECKED : MF_UNCHECKED);
+        AppendMenuW(hSortMenu, flags, id, text);
+        };
+    addSortItem(IDM_SORT_BY_NAME_ASC, SortCriteria::ByName, true, L"Name (Ascending)");
+    addSortItem(IDM_SORT_BY_NAME_DESC, SortCriteria::ByName, false, L"Name (Descending)");
+    addSortItem(IDM_SORT_BY_DATE_ASC, SortCriteria::ByDateModified, true, L"Date Modified (Ascending)");
+    addSortItem(IDM_SORT_BY_DATE_DESC, SortCriteria::ByDateModified, false, L"Date Modified (Descending)");
+    addSortItem(IDM_SORT_BY_SIZE_ASC, SortCriteria::ByFileSize, true, L"File Size (Ascending)");
+    addSortItem(IDM_SORT_BY_SIZE_DESC, SortCriteria::ByFileSize, false, L"File Size (Descending)");
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSortMenu, L"Sort By");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
@@ -317,12 +314,10 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
             currentFile = g_ctx.imageFiles[g_ctx.currentImageIndex];
         }
 
-        if (cmd == IDM_SORT_BY_NAME_ASC) { g_ctx.currentSortCriteria = SortCriteria::ByName; g_ctx.isSortAscending = true; }
-        else if (cmd == IDM_SORT_BY_NAME_DESC) { g_ctx.currentSortCriteria = SortCriteria::ByName; g_ctx.isSortAscending = false; }
-        else if (cmd == IDM_SORT_BY_DATE_ASC) { g_ctx.currentSortCriteria = SortCriteria::ByDateModified; g_ctx.isSortAscending = true; }
-        else if (cmd == IDM_SORT_BY_DATE_DESC) { g_ctx.currentSortCriteria = SortCriteria::ByDateModified; g_ctx.isSortAscending = false; }
-        else if (cmd == IDM_SORT_BY_SIZE_ASC) { g_ctx.currentSortCriteria = SortCriteria::ByFileSize; g_ctx.isSortAscending = true; }
-        else if (cmd == IDM_SORT_BY_SIZE_DESC) { g_ctx.currentSortCriteria = SortCriteria::ByFileSize; g_ctx.isSortAscending = false; }
+        g_ctx.isSortAscending = (cmd == IDM_SORT_BY_NAME_ASC || cmd == IDM_SORT_BY_DATE_ASC || cmd == IDM_SORT_BY_SIZE_ASC);
+        if (cmd == IDM_SORT_BY_NAME_ASC || cmd == IDM_SORT_BY_NAME_DESC) g_ctx.currentSortCriteria = SortCriteria::ByName;
+        else if (cmd == IDM_SORT_BY_DATE_ASC || cmd == IDM_SORT_BY_DATE_DESC) g_ctx.currentSortCriteria = SortCriteria::ByDateModified;
+        else g_ctx.currentSortCriteria = SortCriteria::ByFileSize;
 
         if (!g_ctx.currentDirectory.empty()) {
             LoadImageFromFile(currentFile);

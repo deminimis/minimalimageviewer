@@ -8,33 +8,24 @@ extern AppContext g_ctx;
 static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_INITDIALOG: {
-        switch (g_ctx.bgColor) {
-        case BackgroundColor::Grey:       CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, IDC_RADIO_BG_GREY); break;
-        case BackgroundColor::Black:      CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, IDC_RADIO_BG_BLACK); break;
-        case BackgroundColor::White:      CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, IDC_RADIO_BG_WHITE); break;
-        case BackgroundColor::Transparent:CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, IDC_RADIO_BG_TRANSPARENT); break;
-        }
+        int bgRadio = IDC_RADIO_BG_GREY + static_cast<int>(g_ctx.bgColor);
+        CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, bgRadio);
 
         CheckDlgButton(hDlg, IDC_CHECK_ALWAYS_ON_TOP, g_ctx.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_START_FULLSCREEN, g_ctx.startFullScreen ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, g_ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_AUTO_REFRESH, g_ctx.isAutoRefresh ? BST_CHECKED : BST_UNCHECKED);
 
-        if (g_ctx.defaultZoomMode == DefaultZoomMode::Fit) {
-            CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL, IDC_RADIO_ZOOM_FIT);
-        }
-        else {
-            CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL, IDC_RADIO_ZOOM_ACTUAL);
-        }
+        CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL,
+            g_ctx.defaultZoomMode == DefaultZoomMode::Fit ? IDC_RADIO_ZOOM_FIT : IDC_RADIO_ZOOM_ACTUAL);
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case IDOK: {
-            if (IsDlgButtonChecked(hDlg, IDC_RADIO_BG_GREY)) g_ctx.bgColor = BackgroundColor::Grey;
-            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_BG_BLACK)) g_ctx.bgColor = BackgroundColor::Black;
-            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_BG_WHITE)) g_ctx.bgColor = BackgroundColor::White;
-            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_BG_TRANSPARENT)) g_ctx.bgColor = BackgroundColor::Transparent;
+            for (int id = IDC_RADIO_BG_GREY; id <= IDC_RADIO_BG_TRANSPARENT; ++id) {
+                if (IsDlgButtonChecked(hDlg, id)) g_ctx.bgColor = static_cast<BackgroundColor>(id - IDC_RADIO_BG_GREY);
+            }
 
             g_ctx.alwaysOnTop = (IsDlgButtonChecked(hDlg, IDC_CHECK_ALWAYS_ON_TOP) == BST_CHECKED);
             g_ctx.startFullScreen = (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
@@ -100,18 +91,14 @@ static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WP
         g_ctx.savedContrast = g_ctx.contrast;
         g_ctx.savedSaturation = g_ctx.saturation;
 
-        HWND hSliderBright = GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS);
-        HWND hSliderContrast = GetDlgItem(hDlg, IDC_SLIDER_CONTRAST);
-        HWND hSliderSaturation = GetDlgItem(hDlg, IDC_SLIDER_SATURATION);
-
-        SendMessageW(hSliderBright, TBM_SETRANGE, (WPARAM)TRUE, MAKELPARAM(-100, 100));
-        SendMessageW(hSliderBright, TBM_SETPOS, (WPARAM)TRUE, (LPARAM)static_cast<int>(g_ctx.brightness * 100));
-
-        SendMessageW(hSliderContrast, TBM_SETRANGE, (WPARAM)TRUE, MAKELPARAM(0, 300));
-        SendMessageW(hSliderContrast, TBM_SETPOS, (WPARAM)TRUE, (LPARAM)static_cast<int>(g_ctx.contrast * 100));
-
-        SendMessageW(hSliderSaturation, TBM_SETRANGE, (WPARAM)TRUE, MAKELPARAM(0, 300));
-        SendMessageW(hSliderSaturation, TBM_SETPOS, (WPARAM)TRUE, (LPARAM)static_cast<int>(g_ctx.saturation * 100));
+        auto setupSlider = [&](int id, int minV, int maxV, float val) {
+            HWND hSlider = GetDlgItem(hDlg, id);
+            SendMessageW(hSlider, TBM_SETRANGE, TRUE, MAKELPARAM(minV, maxV));
+            SendMessageW(hSlider, TBM_SETPOS, TRUE, static_cast<int>(val * 100));
+            };
+        setupSlider(IDC_SLIDER_BRIGHTNESS, -100, 100, g_ctx.brightness);
+        setupSlider(IDC_SLIDER_CONTRAST, 0, 300, g_ctx.contrast);
+        setupSlider(IDC_SLIDER_SATURATION, 0, 300, g_ctx.saturation);
 
         UpdateEffectLabels(hDlg);
         return (INT_PTR)TRUE;
