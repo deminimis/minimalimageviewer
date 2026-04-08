@@ -226,6 +226,9 @@ struct AppContext {
     std::wstring colorStringHex;
     bool didCopyColor = false;
 
+    bool isFading = false;
+    ULONGLONG fadeStartTime = 0;
+
     bool isOcrMessageVisible = false;
     std::wstring ocrMessage;
     ULONGLONG ocrMessageStartTime = 0;

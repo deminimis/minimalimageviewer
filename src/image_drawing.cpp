@@ -414,15 +414,27 @@ void Render() {
             float scaleY = g_ctx.zoomFactor;
 
             g_ctx.renderTarget->SetTransform(
-                D2D1::Matrix3x2F::Rotation(static_cast<float>(g_ctx.rotationAngle), bmpCenter) *
-                D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter) *
+                D2D1::Matrix3x2F::Rotation(static_cast<float>(g_ctx.rotationAngle), bmpCenter)*
+                D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter)*
                 D2D1::Matrix3x2F::Translation(windowCenter.x - bmpCenter.x + g_ctx.offsetX, windowCenter.y - bmpCenter.y + g_ctx.offsetY)
             );
+
+            float opacity = 1.0f;
+            if (g_ctx.isFading) {
+                ULONGLONG elapsed = GetTickCount64() - g_ctx.fadeStartTime;
+                const float FADE_DURATION = 120.0f; 
+                if (elapsed >= FADE_DURATION) {
+                    g_ctx.isFading = false;
+                }
+                else {
+                    opacity = static_cast<float>(elapsed) / FADE_DURATION;
+                }
+            }
 
             g_ctx.renderTarget->DrawBitmap(
                 bitmapToDraw,
                 nullptr,
-                1.0f,
+                opacity,
                 g_ctx.zoomFactor < 1.0f ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
             );
 
@@ -562,6 +574,9 @@ void Render() {
     HRESULT hr = g_ctx.renderTarget->EndDraw();
     if (hr == D2DERR_RECREATE_TARGET) {
         DiscardDeviceResources();
+        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    }
+    else if (g_ctx.isFading && !g_ctx.isLoading) {
         InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
     }
 }

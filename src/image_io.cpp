@@ -500,6 +500,9 @@ void OnImageReady(bool success, int seqId) {
         g_ctx.isLoading = false;
         g_ctx.currentOrientation = g_ctx.stagedOrientation;
 
+        g_ctx.isFading = true;
+        g_ctx.fadeStartTime = GetTickCount64();
+
         if (g_ctx.preserveView) {
             g_ctx.preserveView = false;
         }
