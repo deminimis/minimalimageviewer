@@ -2,15 +2,11 @@
 
 AppContext g_ctx;
 
-void CenterImage(bool resetZoom) {
-    if (resetZoom) {
-        g_ctx.zoomFactor = 1.0f;
-    }
+static void ResetImageState() {
     g_ctx.rotationAngle = 0;
     g_ctx.offsetX = 0.0f;
     g_ctx.offsetY = 0.0f;
     g_ctx.isFlippedHorizontal = false;
-
     switch (g_ctx.currentOrientation) {
     case 2: g_ctx.isFlippedHorizontal = true; break;
     case 3: g_ctx.rotationAngle = 180; break;
@@ -35,6 +31,11 @@ void CenterImage(bool resetZoom) {
         g_ctx.d2dBitmap = nullptr;
         g_ctx.animationD2DBitmaps.clear();
     }
+}
+
+void CenterImage(bool resetZoom) {
+    if (resetZoom) g_ctx.zoomFactor = 1.0f;
+    ResetImageState();
     FitImageToWindow();
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
@@ -43,35 +44,7 @@ void SetActualSize() {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
     g_ctx.zoomFactor = 1.0f;
-    g_ctx.rotationAngle = 0;
-    g_ctx.offsetX = 0.0f;
-    g_ctx.offsetY = 0.0f;
-    g_ctx.isFlippedHorizontal = false;
-
-    switch (g_ctx.currentOrientation) {
-    case 2: g_ctx.isFlippedHorizontal = true; break;
-    case 3: g_ctx.rotationAngle = 180; break;
-    case 4: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 180; break;
-    case 5: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 270; break;
-    case 6: g_ctx.rotationAngle = 90; break;
-    case 7: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 90; break;
-    case 8: g_ctx.rotationAngle = 270; break;
-    }
-
-    g_ctx.isGrayscale = false;
-    g_ctx.isCropActive = false;
-    g_ctx.isCropMode = false;
-    g_ctx.isSelectingCropRect = false;
-    g_ctx.isCropPending = false;
-    g_ctx.brightness = 0.0f;
-    g_ctx.contrast = 1.0f;
-    g_ctx.saturation = 1.0f;
-    {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        g_ctx.wicConverter = g_ctx.wicConverterOriginal;
-        g_ctx.d2dBitmap = nullptr;
-        g_ctx.animationD2DBitmaps.clear();
-    }
+    ResetImageState();
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
 

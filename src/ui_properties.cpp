@@ -49,64 +49,63 @@ static std::wstring FormatFileSize(const LARGE_INTEGER& fileSize) {
 
 ImageProperties GetCurrentOsdProperties() {
     ImageProperties pProps = {};
-
     if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
-        if (!g_ctx.currentFilePathOverride.empty()) {
-            pProps.filePath = g_ctx.currentFilePathOverride;
-        }
+        if (!g_ctx.currentFilePathOverride.empty()) pProps.filePath = g_ctx.currentFilePathOverride;
         return pProps;
     }
 
-    const std::wstring& filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
-    pProps.filePath = filePath;
-
-    UINT imgWidth = 0, imgHeight = 0;
-    if (GetCurrentImageSize(&imgWidth, &imgHeight)) {
-        pProps.dimensions = std::to_wstring(imgWidth) + L" x " + std::to_wstring(imgHeight) + L" pixels";
-    }
+    pProps.filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
+    UINT w = 0, h = 0;
+    if (GetCurrentImageSize(&w, &h)) pProps.dimensions = std::to_wstring(w) + L" x " + std::to_wstring(h) + L" pixels";
 
     WIN32_FILE_ATTRIBUTE_DATA fad = {};
-    if (GetFileAttributesExW(filePath.c_str(), GetFileExInfoStandard, &fad)) {
-        LARGE_INTEGER fileSize;
-        fileSize.HighPart = fad.nFileSizeHigh;
-        fileSize.LowPart = fad.nFileSizeLow;
-        pProps.fileSize = FormatFileSize(fileSize);
-
+    if (GetFileAttributesExW(pProps.filePath.c_str(), GetFileExInfoStandard, &fad)) {
+        LARGE_INTEGER fs; fs.HighPart = fad.nFileSizeHigh; fs.LowPart = fad.nFileSizeLow;
+        pProps.fileSize = FormatFileSize(fs);
+        pProps.createdDate = FormatFileTime(fad.ftCreationTime);
+        pProps.modifiedDate = FormatFileTime(fad.ftLastWriteTime);
+        pProps.accessedDate = FormatFileTime(fad.ftLastAccessTime);
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_READONLY) pProps.attributes += L"Read-only; ";
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) pProps.attributes += L"Hidden; ";
         if (fad.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) pProps.attributes += L"System; ";
         if (pProps.attributes.empty()) pProps.attributes = L"Normal";
-
+    }
+    else {
+        pProps.attributes = L"N/A";
     }
 
     ComPtr<IWICBitmapDecoder> decoder;
-    ComPtr<IWICBitmapFrameDecode> frame;
-    ComPtr<IWICMetadataQueryReader> metadataReader;
-
-    if (SUCCEEDED(CreateDecoderFromFile(filePath.c_str(), &decoder))) {
-        GUID containerFormat;
-        if (SUCCEEDED(decoder->GetContainerFormat(&containerFormat))) {
-            pProps.imageFormat = GetContainerFormatName(containerFormat);
-            if (g_ctx.isAnimated) {
-                pProps.imageFormat += L" (Animated)";
-            }
+    if (SUCCEEDED(CreateDecoderFromFile(pProps.filePath.c_str(), &decoder))) {
+        GUID fmt;
+        if (SUCCEEDED(decoder->GetContainerFormat(&fmt))) {
+            pProps.imageFormat = GetContainerFormatName(fmt) + (g_ctx.isAnimated ? L" (Animated)" : L"");
         }
-
+        ComPtr<IWICBitmapFrameDecode> frame;
         if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
-
             pProps.bitDepth = GetBitDepth(frame);
-
             double dpiX, dpiY;
-            if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) {
-                pProps.dpi = std::to_wstring(static_cast<int>(dpiX + 0.5)) + L" x " + std::to_wstring(static_cast<int>(dpiY + 0.5)) + L" DPI";
-            }
+            if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) pProps.dpi = std::to_wstring(static_cast<int>(dpiX + 0.5)) + L" x " + std::to_wstring(static_cast<int>(dpiY + 0.5)) + L" DPI";
 
-            if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
-                pProps.fStop = GetMetadataString(metadataReader, L"/app1/ifd/exif/{rational=33437}");
-                pProps.exposureTime = GetMetadataString(metadataReader, L"/app1/ifd/exif/{rational=33434}");
-                pProps.iso = GetMetadataString(metadataReader, L"/app1/ifd/exif/{ushort=34855}");
-                pProps.software = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=305}");
-                pProps.author = GetMetadataString(metadataReader, L"/app1/ifd/{ushort=315}");
+            ComPtr<IWICMetadataQueryReader> meta;
+            if (SUCCEEDED(frame->GetMetadataQueryReader(&meta))) {
+                auto getMeta = [&](const wchar_t* q) { return GetMetadataString(meta, q); };
+                pProps.dateTaken = getMeta(L"/app1/ifd/exif/{ushort=36867}");
+                pProps.cameraMake = getMeta(L"/app1/ifd/{ushort=271}");
+                pProps.cameraModel = getMeta(L"/app1/ifd/{ushort=272}");
+                pProps.fStop = getMeta(L"/app1/ifd/exif/{rational=33437}");
+                pProps.exposureTime = getMeta(L"/app1/ifd/exif/{rational=33434}");
+                pProps.iso = getMeta(L"/app1/ifd/exif/{ushort=34855}");
+                pProps.software = getMeta(L"/app1/ifd/{ushort=305}");
+                pProps.focalLength = getMeta(L"/app1/ifd/exif/{rational=37386}");
+                pProps.focalLength35mm = getMeta(L"/app1/ifd/exif/{ushort=41989}");
+                pProps.exposureBias = getMeta(L"/app1/ifd/exif/{srational=37380}");
+                pProps.meteringMode = getMeta(L"/app1/ifd/exif/{ushort=37383}");
+                pProps.flash = getMeta(L"/app1/ifd/exif/{ushort=37385}");
+                pProps.exposureProgram = getMeta(L"/app1/ifd/exif/{ushort=34850}");
+                pProps.whiteBalance = getMeta(L"/app1/ifd/exif/{ushort=41987}");
+                pProps.author = getMeta(L"/app1/ifd/{ushort=315}");
+                pProps.copyright = getMeta(L"/app1/ifd/{ushort=33432}");
+                pProps.lensModel = getMeta(L"/app1/ifd/exif/{ushort=42036}");
             }
         }
     }
@@ -202,80 +201,7 @@ void ShowImageProperties() {
         return;
     }
 
-    const std::wstring& filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
-
-    ImageProperties* pProps = new ImageProperties();
-
-    pProps->filePath = filePath;
-
-    UINT imgWidth = 0, imgHeight = 0;
-    if (GetCurrentImageSize(&imgWidth, &imgHeight)) {
-        pProps->dimensions = std::to_wstring(imgWidth) + L" x " + std::to_wstring(imgHeight) + L" pixels";
-    }
-
-    WIN32_FILE_ATTRIBUTE_DATA fad = {};
-    if (GetFileAttributesExW(filePath.c_str(), GetFileExInfoStandard, &fad)) {
-        LARGE_INTEGER fileSize;
-        fileSize.HighPart = fad.nFileSizeHigh;
-        fileSize.LowPart = fad.nFileSizeLow;
-        pProps->fileSize = FormatFileSize(fileSize);
-        pProps->createdDate = FormatFileTime(fad.ftCreationTime);
-        pProps->modifiedDate = FormatFileTime(fad.ftLastWriteTime);
-        pProps->accessedDate = FormatFileTime(fad.ftLastAccessTime);
-
-        // FIX: Changed dots (.) to arrows (->) below
-        if (fad.dwFileAttributes & FILE_ATTRIBUTE_READONLY) pProps->attributes += L"Read-only; ";
-        if (fad.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN) pProps->attributes += L"Hidden; ";
-        if (fad.dwFileAttributes & FILE_ATTRIBUTE_SYSTEM) pProps->attributes += L"System; ";
-        if (pProps->attributes.empty()) pProps->attributes = L"Normal";
-    }
-    else {
-        pProps->attributes = L"N/A";
-    }
-
-    ComPtr<IWICBitmapDecoder> decoder;
-    ComPtr<IWICBitmapFrameDecode> frame;
-    ComPtr<IWICMetadataQueryReader> metadataReader;
-
-    if (SUCCEEDED(CreateDecoderFromFile(filePath.c_str(), &decoder))) {
-        GUID containerFormat;
-        if (SUCCEEDED(decoder->GetContainerFormat(&containerFormat))) {
-            pProps->imageFormat = GetContainerFormatName(containerFormat);
-            if (g_ctx.isAnimated) {
-                pProps->imageFormat += L" (Animated)";
-            }
-        }
-
-        if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
-            pProps->bitDepth = GetBitDepth(frame);
-
-            double dpiX, dpiY;
-            if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) {
-                pProps->dpi = std::to_wstring(static_cast<int>(dpiX + 0.5)) + L" x " + std::to_wstring(static_cast<int>(dpiY + 0.5)) + L" DPI";
-            }
-
-            if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
-                auto getMeta = [&](const wchar_t* query) { return GetMetadataString(metadataReader, query); };
-                pProps->dateTaken = getMeta(L"/app1/ifd/exif/{ushort=36867}");
-                pProps->cameraMake = getMeta(L"/app1/ifd/{ushort=271}");
-                pProps->cameraModel = getMeta(L"/app1/ifd/{ushort=272}");
-                pProps->fStop = getMeta(L"/app1/ifd/exif/{rational=33437}");
-                pProps->exposureTime = getMeta(L"/app1/ifd/exif/{rational=33434}");
-                pProps->iso = getMeta(L"/app1/ifd/exif/{ushort=34855}");
-                pProps->software = getMeta(L"/app1/ifd/{ushort=305}");
-                pProps->focalLength = getMeta(L"/app1/ifd/exif/{rational=37386}");
-                pProps->focalLength35mm = getMeta(L"/app1/ifd/exif/{ushort=41989}");
-                pProps->exposureBias = getMeta(L"/app1/ifd/exif/{srational=37380}");
-                pProps->meteringMode = getMeta(L"/app1/ifd/exif/{ushort=37383}");
-                pProps->flash = getMeta(L"/app1/ifd/exif/{ushort=37385}");
-                pProps->exposureProgram = getMeta(L"/app1/ifd/exif/{ushort=34850}");
-                pProps->whiteBalance = getMeta(L"/app1/ifd/exif/{ushort=41987}");
-                pProps->author = getMeta(L"/app1/ifd/{ushort=315}");
-                pProps->copyright = getMeta(L"/app1/ifd/{ushort=33432}");
-                pProps->lensModel = getMeta(L"/app1/ifd/exif/{ushort=42036}");
-            }
-        }
-    }
+    ImageProperties* pProps = new ImageProperties(GetCurrentOsdProperties());
 
     static const wchar_t* PROPS_CLASS_NAME = L"MinimalImageViewerProperties";
     static bool classRegistered = false;
