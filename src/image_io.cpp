@@ -240,7 +240,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
             return;
         }
 
-        // Load Image to Memory Buffer (Handles Animation)
+      
         ComPtr<IWICBitmapDecoder> decoder;
         hr = CreateDecoderFromStream_FullFileRead(localFactory, filePath.c_str(), &decoder, mySeqId);
 
@@ -261,39 +261,143 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
 
         std::vector<std::vector<BYTE>> allFramesPixels;
         std::vector<UINT> allFramesDelays;
-        UINT width = 0, height = 0;
+        UINT canvasWidth = 0, canvasHeight = 0;
+
+        // Retrieve global logical screen descriptor 
+        ComPtr<IWICMetadataQueryReader> decoderMetadata;
+        if (SUCCEEDED(decoder->GetMetadataQueryReader(&decoderMetadata))) {
+            PROPVARIANT propValue;
+            PropVariantInit(&propValue);
+            if (SUCCEEDED(decoderMetadata->GetMetadataByName(L"/logscrdesc/Width", &propValue))) {
+                if (propValue.vt == VT_UI2) canvasWidth = propValue.uiVal;
+                PropVariantClear(&propValue);
+            }
+            if (SUCCEEDED(decoderMetadata->GetMetadataByName(L"/logscrdesc/Height", &propValue))) {
+                if (propValue.vt == VT_UI2) canvasHeight = propValue.uiVal;
+                PropVariantClear(&propValue);
+            }
+        }
+
+        std::vector<BYTE> compositeBuffer;
+        std::vector<BYTE> previousCompositeBuffer;
+
         for (UINT i = 0; i < frameCount; ++i) {
             ComPtr<IWICBitmapFrameDecode> frame;
             if (FAILED(decoder->GetFrame(i, &frame))) continue;
 
-            // delay metadata
+            UINT frameWidth = 0, frameHeight = 0;
+            frame->GetSize(&frameWidth, &frameHeight);
+
+            // Fallback if global dimensions aren't found in metadata
+            if (canvasWidth == 0 || canvasHeight == 0) {
+                canvasWidth = frameWidth;
+                canvasHeight = frameHeight;
+            }
+
             UINT delay = 100;
+            UINT disposal = 0;
+            UINT left = 0;
+            UINT top = 0;
+
             ComPtr<IWICMetadataQueryReader> metadataReader;
             if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
                 PROPVARIANT propValue;
                 PropVariantInit(&propValue);
                 if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Delay", &propValue))) {
-                    if (propValue.vt == VT_UI2) {
-                        delay = propValue.uiVal * 10;
-                    }
+                    if (propValue.vt == VT_UI2) delay = propValue.uiVal * 10;
+                    PropVariantClear(&propValue);
+                }
+                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Disposal", &propValue))) {
+                    if (propValue.vt == VT_UI1) disposal = propValue.bVal;
+                    PropVariantClear(&propValue);
+                }
+                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Left", &propValue))) {
+                    if (propValue.vt == VT_UI2) left = propValue.uiVal;
+                    PropVariantClear(&propValue);
+                }
+                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Top", &propValue))) {
+                    if (propValue.vt == VT_UI2) top = propValue.uiVal;
                     PropVariantClear(&propValue);
                 }
             }
             if (delay < 10) delay = 100;
             allFramesDelays.push_back(delay);
 
-            // Get Pixels
+            UINT canvasStride = canvasWidth * 4;
+            UINT canvasSize = canvasStride * canvasHeight;
+
+            if (compositeBuffer.size() != canvasSize) {
+                compositeBuffer.assign(canvasSize, 0);
+                previousCompositeBuffer.assign(canvasSize, 0);
+            }
+
+            if (disposal == 3) {
+                previousCompositeBuffer = compositeBuffer;
+            }
+
             ComPtr<IWICFormatConverter> converter;
             if (SUCCEEDED(localFactory->CreateFormatConverter(&converter))) {
                 if (SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                    converter->GetSize(&width, &height);
-                    UINT stride = width * 4;
-                    UINT size = stride * height;
-                    std::vector<BYTE> rawPixels(size);
-                    if (SUCCEEDED(converter->CopyPixels(nullptr, stride, size, rawPixels.data()))) {
-                        allFramesPixels.push_back(std::move(rawPixels));
+
+                    UINT frameStride = frameWidth * 4;
+                    UINT frameSize = frameStride * frameHeight;
+                    std::vector<BYTE> framePixels(frameSize);
+
+                    if (SUCCEEDED(converter->CopyPixels(nullptr, frameStride, frameSize, framePixels.data()))) {
+
+                        
+                        for (UINT y = 0; y < frameHeight; ++y) {
+                            if (top + y >= canvasHeight) break; 
+
+                            BYTE* destRow = compositeBuffer.data() + (top + y) * canvasStride + (left * 4);
+                            BYTE* srcRow = framePixels.data() + y * frameStride;
+
+                            for (UINT x = 0; x < frameWidth; ++x) {
+                                if (left + x >= canvasWidth) break; 
+
+                                UINT dp = x * 4;
+                                UINT sp = x * 4;
+
+                                BYTE alpha = srcRow[sp + 3];
+                                if (alpha == 255) {
+                                    destRow[dp] = srcRow[sp];
+                                    destRow[dp + 1] = srcRow[sp + 1];
+                                    destRow[dp + 2] = srcRow[sp + 2];
+                                    destRow[dp + 3] = 255;
+                                }
+                                else if (alpha > 0) {
+                                    BYTE invAlpha = 255 - alpha;
+                                    destRow[dp] = srcRow[sp] + (destRow[dp] * invAlpha) / 255;
+                                    destRow[dp + 1] = srcRow[sp + 1] + (destRow[dp + 1] * invAlpha) / 255;
+                                    destRow[dp + 2] = srcRow[sp + 2] + (destRow[dp + 2] * invAlpha) / 255;
+                                    destRow[dp + 3] = alpha + (destRow[dp + 3] * invAlpha) / 255;
+                                }
+                            }
+                        }
+
+                        allFramesPixels.push_back(compositeBuffer);
                     }
                 }
+            }
+
+            // Apply disposal method for the NEXT frame
+            if (disposal == 2) {
+               
+                for (UINT y = 0; y < frameHeight; ++y) {
+                    if (top + y >= canvasHeight) break;
+                    BYTE* destRow = compositeBuffer.data() + (top + y) * canvasStride + (left * 4);
+                    for (UINT x = 0; x < frameWidth; ++x) {
+                        if (left + x >= canvasWidth) break;
+                        UINT dp = x * 4;
+                        destRow[dp] = 0;
+                        destRow[dp + 1] = 0;
+                        destRow[dp + 2] = 0;
+                        destRow[dp + 3] = 0;
+                    }
+                }
+            }
+            else if (disposal == 3) {
+                compositeBuffer = previousCompositeBuffer; 
             }
 
             if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
@@ -309,8 +413,10 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
             CriticalSectionLock lock(g_ctx.wicMutex);
             g_ctx.stagedFrames = std::move(allFramesPixels);
             g_ctx.stagedDelays = std::move(allFramesDelays);
-            g_ctx.stagedWidth = width;
-            g_ctx.stagedHeight = height;
+
+            // Stage using the global canvas dimensions
+            g_ctx.stagedWidth = canvasWidth;
+            g_ctx.stagedHeight = canvasHeight;
             g_ctx.originalContainerFormat = containerFormat;
         }
 
