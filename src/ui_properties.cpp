@@ -230,34 +230,8 @@ void ShowImageProperties() {
         if (pProps->attributes.empty()) pProps->attributes = L"Normal";
     }
     else {
-        pProps->fileSize = L"N/A";
-        pProps->createdDate = L"N/A";
-        pProps->modifiedDate = L"N/A";
-        pProps->accessedDate = L"N/A";
         pProps->attributes = L"N/A";
     }
-
-    // Initialize defaults
-    pProps->imageFormat = L"N/A";
-    pProps->bitDepth = L"N/A";
-    pProps->dpi = L"N/A";
-    pProps->cameraMake = L"N/A";
-    pProps->cameraModel = L"N/A";
-    pProps->dateTaken = L"N/A";
-    pProps->fStop = L"N/A";
-    pProps->exposureTime = L"N/A";
-    pProps->iso = L"N/A";
-    pProps->software = L"N/A";
-    pProps->focalLength = L"N/A";
-    pProps->focalLength35mm = L"N/A";
-    pProps->exposureBias = L"N/A";
-    pProps->meteringMode = L"N/A";
-    pProps->flash = L"N/A";
-    pProps->exposureProgram = L"N/A";
-    pProps->whiteBalance = L"N/A";
-    pProps->author = L"N/A";
-    pProps->copyright = L"N/A";
-    pProps->lensModel = L"N/A";
 
     ComPtr<IWICBitmapDecoder> decoder;
     ComPtr<IWICBitmapFrameDecode> frame;

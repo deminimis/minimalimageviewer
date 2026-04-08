@@ -97,32 +97,32 @@ enum class DefaultZoomMode {
 class ImageProperties {
 public:
     std::wstring filePath;
-    std::wstring dimensions;
-    std::wstring fileSize;
-    std::wstring createdDate;
-    std::wstring modifiedDate;
-    std::wstring accessedDate;
+    std::wstring dimensions = L"N/A";
+    std::wstring fileSize = L"N/A";
+    std::wstring createdDate = L"N/A";
+    std::wstring modifiedDate = L"N/A";
+    std::wstring accessedDate = L"N/A";
     std::wstring attributes;
-    std::wstring imageFormat;
-    std::wstring bitDepth;
-    std::wstring dpi;
-    std::wstring cameraMake;
-    std::wstring cameraModel;
-    std::wstring dateTaken;
-    std::wstring fStop;
-    std::wstring exposureTime;
-    std::wstring iso;
-    std::wstring software;
-    std::wstring focalLength;
-    std::wstring focalLength35mm;
-    std::wstring exposureBias;
-    std::wstring meteringMode;
-    std::wstring flash;
-    std::wstring exposureProgram;
-    std::wstring whiteBalance;
-    std::wstring author;
-    std::wstring copyright;
-    std::wstring lensModel;
+    std::wstring imageFormat = L"N/A";
+    std::wstring bitDepth = L"N/A";
+    std::wstring dpi = L"N/A";
+    std::wstring cameraMake = L"N/A";
+    std::wstring cameraModel = L"N/A";
+    std::wstring dateTaken = L"N/A";
+    std::wstring fStop = L"N/A";
+    std::wstring exposureTime = L"N/A";
+    std::wstring iso = L"N/A";
+    std::wstring software = L"N/A";
+    std::wstring focalLength = L"N/A";
+    std::wstring focalLength35mm = L"N/A";
+    std::wstring exposureBias = L"N/A";
+    std::wstring meteringMode = L"N/A";
+    std::wstring flash = L"N/A";
+    std::wstring exposureProgram = L"N/A";
+    std::wstring whiteBalance = L"N/A";
+    std::wstring author = L"N/A";
+    std::wstring copyright = L"N/A";
+    std::wstring lensModel = L"N/A";
 };
 
 struct AppContext {
