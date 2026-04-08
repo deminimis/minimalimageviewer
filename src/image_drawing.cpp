@@ -343,9 +343,18 @@ void Render() {
 
         if (g_ctx.isAnimated) {
             CriticalSectionLock lock(g_ctx.wicMutex);
-            if (g_ctx.animationD2DBitmaps.empty() && !g_ctx.animationFrameConverters.empty()) {
-                for (const auto& converter : g_ctx.animationFrameConverters) {
-                    ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(converter));
+
+            if (g_ctx.animationD2DBitmaps.size() != g_ctx.animationFrameConverters.size()) {
+                g_ctx.animationD2DBitmaps.assign(g_ctx.animationFrameConverters.size(), nullptr);
+                g_ctx.d2dBitmap = nullptr;
+                g_ctx.wicConverter = nullptr;
+            }
+
+            // Lazy load 
+            if (g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
+                if (!g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame]) {
+
+                    ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame]));
 
                     if (g_ctx.isGrayscale) {
                         ComPtr<IWICFormatConverter> grayConverter;
@@ -363,16 +372,12 @@ void Render() {
 
                     ComPtr<ID2D1Bitmap> d2dFrameBitmap;
                     if (SUCCEEDED(g_ctx.renderTarget->CreateBitmapFromWicBitmap(source, nullptr, &d2dFrameBitmap))) {
-                        g_ctx.animationD2DBitmaps.push_back(d2dFrameBitmap);
+                        g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame] = d2dFrameBitmap;
                     }
                 }
-                g_ctx.d2dBitmap = nullptr;
-                g_ctx.wicConverter = nullptr;
-            }
-            if (g_ctx.currentAnimationFrame < g_ctx.animationD2DBitmaps.size()) {
                 bitmapToDraw = g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame];
             }
-            hasImage = !g_ctx.animationD2DBitmaps.empty();
+            hasImage = (bitmapToDraw != nullptr);
         }
         else {
             CriticalSectionLock lock(g_ctx.wicMutex);

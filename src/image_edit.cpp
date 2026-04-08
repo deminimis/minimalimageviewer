@@ -75,50 +75,50 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
     float brightnessFactor = g_ctx.brightness;
     float saturationFactor = g_ctx.saturation;
 
-    auto clamp = [](int val) -> BYTE {
-        if (val < 0) return 0;
-        if (val > 255) return 255;
-        return static_cast<BYTE>(val);
-        };
-
     auto clampf = [](float val) -> BYTE {
         if (val < 0.0f) return 0;
         if (val > 255.0f) return 255;
         return static_cast<BYTE>(val);
         };
 
+    // precompute brightness/contrast
+    BYTE bcLut[256];
+    for (int i = 0; i < 256; ++i) {
+        float val = ((i - 128.0f) * contrastFactor) + 128.0f + (brightnessFactor * 255.0f);
+        bcLut[i] = clampf(val);
+    }
+
     const float lumR = 0.299f;
     const float lumG = 0.587f;
     const float lumB = 0.114f;
+    bool adjustSat = (saturationFactor != 1.0f);
 
     for (UINT y = 0; y < height; ++y) {
         BYTE* pRow = pPixels + (y * stride);
         for (UINT x = 0; x < width; ++x) {
+
+            if ((y * stride) + (x * 4) + 2 >= bufferSize) break;
+
             BYTE* pPixel = pRow + (x * 4);
 
-            float b = pPixel[0];
-            float g = pPixel[1];
-            float r = pPixel[2];
+            BYTE b = bcLut[pPixel[0]];
+            BYTE g = bcLut[pPixel[1]];
+            BYTE r = bcLut[pPixel[2]];
 
-            float b_new = ((b - 128.0f) * contrastFactor) + 128.0f;
-            b_new += (brightnessFactor * 255.0f);
+            if (adjustSat) {
+                float luminance = (r * lumR) + (g * lumG) + (b * lumB);
+                float invSat = 1.0f - saturationFactor;
+                float lumBase = invSat * luminance;
 
-            float g_new = ((g - 128.0f) * contrastFactor) + 128.0f;
-            g_new += (brightnessFactor * 255.0f);
-
-            float r_new = ((r - 128.0f) * contrastFactor) + 128.0f;
-            r_new += (brightnessFactor * 255.0f);
-
-            if (saturationFactor != 1.0f) {
-                float luminance = (r_new * lumR) + (g_new * lumG) + (b_new * lumB);
-                r_new = (1.0f - saturationFactor) * luminance + saturationFactor * r_new;
-                g_new = (1.0f - saturationFactor) * luminance + saturationFactor * g_new;
-                b_new = (1.0f - saturationFactor) * luminance + saturationFactor * b_new;
+                pPixel[0] = clampf(lumBase + saturationFactor * b);
+                pPixel[1] = clampf(lumBase + saturationFactor * g);
+                pPixel[2] = clampf(lumBase + saturationFactor * r);
             }
-
-            pPixel[0] = clampf(b_new);
-            pPixel[1] = clampf(g_new);
-            pPixel[2] = clampf(r_new);
+            else {
+                pPixel[0] = b;
+                pPixel[1] = g;
+                pPixel[2] = r;
+            }
         }
     }
 
