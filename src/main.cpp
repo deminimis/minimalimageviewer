@@ -75,12 +75,37 @@ void SetActualSize() {
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
 }
 
+// Try dark mode menus
+enum PreferredAppMode { AppModeDefault = 0, AllowDark = 1, ForceDark = 2, ForceLight = 3, MaxAppMode = 4 };
+using fnSetPreferredAppMode = PreferredAppMode(WINAPI*)(PreferredAppMode appMode);
+using fnFlushMenuThemes = void(WINAPI*)();
+
 void UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor) {
-    // Enable dark mode for Black or Grey backgrounds.
+    // dark mode for black/grey backgrounds
     BOOL useDarkMode = (bgColor == BackgroundColor::Black || bgColor == BackgroundColor::Grey) ? TRUE : FALSE;
-    // 20 for W11; 19 for older
+
+    // title bar dark: 20 for W11; 19 for older
     if (FAILED(DwmSetWindowAttribute(hWnd, 20, &useDarkMode, sizeof(useDarkMode)))) {
         DwmSetWindowAttribute(hWnd, 19, &useDarkMode, sizeof(useDarkMode));
+    }
+
+    // dark mode context menu for newer Windows (1903+)
+    HMODULE hUxtheme = GetModuleHandleW(L"uxtheme.dll");
+    if (!hUxtheme) {
+        hUxtheme = LoadLibraryW(L"uxtheme.dll");
+    }
+
+    if (hUxtheme) {
+        // Fetch  ordinals 135 and 136
+        fnSetPreferredAppMode pSetPreferredAppMode = (fnSetPreferredAppMode)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(135));
+        fnFlushMenuThemes pFlushMenuThemes = (fnFlushMenuThemes)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(136));
+
+        if (pSetPreferredAppMode && pFlushMenuThemes) {
+            // Force the app mode to Dark or Light
+            pSetPreferredAppMode(useDarkMode ? ForceDark : ForceLight);
+            // apply instantly without restart
+            pFlushMenuThemes();
+        }
     }
 }
 
