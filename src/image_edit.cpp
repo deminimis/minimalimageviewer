@@ -92,22 +92,18 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
     const float lumG = 0.587f;
     const float lumB = 0.114f;
     bool adjustSat = (saturationFactor != 1.0f);
-
+    float invSat = 1.0f - saturationFactor; 
     for (UINT y = 0; y < height; ++y) {
         BYTE* pRow = pPixels + (y * stride);
         for (UINT x = 0; x < width; ++x) {
-
-            if ((y * stride) + (x * 4) + 2 >= bufferSize) break;
 
             BYTE* pPixel = pRow + (x * 4);
 
             BYTE b = bcLut[pPixel[0]];
             BYTE g = bcLut[pPixel[1]];
             BYTE r = bcLut[pPixel[2]];
-
             if (adjustSat) {
                 float luminance = (r * lumR) + (g * lumG) + (b * lumB);
-                float invSat = 1.0f - saturationFactor;
                 float lumBase = invSat * luminance;
 
                 pPixel[0] = clampf(lumBase + saturationFactor * b);

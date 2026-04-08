@@ -131,17 +131,15 @@ std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int s
                 return {};
             }
 
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                wchar_t fullPath[MAX_PATH] = { 0 };
-                PathCombineW(fullPath, directoryPath.c_str(), fd.cFileName);
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {ed
+                if (IsImageFile(fd.cFileName)) {
+                    wchar_t fullPath[MAX_PATH] = { 0 };
+                    PathCombineW(fullPath, directoryPath.c_str(), fd.cFileName);
 
-                if (IsImageFile(fullPath)) {
                     FileInfo info;
                     info.path = fullPath;
                     info.writeTime = fd.ftLastWriteTime;
                     info.fileSize.LowPart = fd.nFileSizeLow;
-                    info.fileSize.HighPart = fd.nFileSizeHigh;
-                    foundFiles.push_back(info);
                 }
             }
         } while (FindNextFileW(hFind, &fd));
