@@ -57,11 +57,14 @@ constexpr UINT WM_APP_OCR_DONE_NOTEXT = (WM_APP + 5);
 constexpr UINT WM_APP_OCR_FAILED = (WM_APP + 6);
 constexpr UINT WM_APP_IMAGE_READY = (WM_APP + 7);
 constexpr UINT WM_APP_DIR_READY = (WM_APP + 8);
+constexpr UINT WM_APP_HQ_READY = (WM_APP + 9);
 
 constexpr UINT ANIMATION_TIMER_ID = 1;
 constexpr UINT OCR_MESSAGE_TIMER_ID = 2;
 constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 constexpr UINT LOADING_TIMER_ID = 4;
+constexpr UINT HQ_RENDER_TIMER_ID = 5;
+constexpr UINT NAV_DEBOUNCE_TIMER_ID = 6;
 
 class CriticalSectionLock {
 public:
@@ -134,6 +137,10 @@ struct AppContext {
     ComPtr<IDWriteFactory> writeFactory = nullptr;
     ComPtr<ID2D1HwndRenderTarget> renderTarget = nullptr;
     ComPtr<ID2D1Bitmap> d2dBitmap = nullptr;
+    ComPtr<ID2D1Bitmap> d2dBitmapHq = nullptr;
+    float hqZoomFactor = 1.0f;
+    bool isHqPending = false;
+    int pendingNavIndex = -1;
     ComPtr<IWICFormatConverter> wicConverter = nullptr;
     ComPtr<IWICFormatConverter> wicConverterOriginal = nullptr;
     std::vector<ComPtr<IWICFormatConverter>> undoStack;
@@ -253,6 +260,7 @@ struct AppContext {
 
 void CenterImage(bool resetZoom);
 void SetActualSize();
+void TriggerHqRender();
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK PropsWndProc(HWND, UINT, WPARAM, LPARAM);
 void ToggleFullScreen();

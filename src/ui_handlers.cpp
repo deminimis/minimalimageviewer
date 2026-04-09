@@ -26,30 +26,31 @@ static void OnKeyDown(WPARAM wParam) {
 
     switch (wParam) {
     case VK_RIGHT:
-        // tiff support
-        if (!g_ctx.isAnimated && g_ctx.animationFrameConverters.size() > 1 &&
-            g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size() - 1) {
+        if (!g_ctx.isAnimated && g_ctx.animationFrameConverters.size() > 1 && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size() - 1) {
             g_ctx.currentAnimationFrame++;
             UpdateViewToCurrentFrame();
         }
         else if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
             size_t size = g_ctx.imageFiles.size();
             g_ctx.currentImageIndex = (g_ctx.currentImageIndex + 1) % static_cast<int>(size);
-            LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str());
+            g_ctx.pendingNavIndex = g_ctx.currentImageIndex;
+            g_ctx.startAtEnd = false;
+            SetWindowTextW(g_ctx.hWnd, (g_ctx.imageFiles[g_ctx.currentImageIndex] + L"  [Loading...]").c_str());
+            SetTimer(g_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID, 150, nullptr);
         }
         break;
     case VK_LEFT:
-        // tiff support
-        if (!g_ctx.isAnimated && g_ctx.animationFrameConverters.size() > 1 &&
-            g_ctx.currentAnimationFrame > 0) {
+        if (!g_ctx.isAnimated && g_ctx.animationFrameConverters.size() > 1 && g_ctx.currentAnimationFrame > 0) {
             g_ctx.currentAnimationFrame--;
             UpdateViewToCurrentFrame();
         }
         else if (!g_ctx.imageFiles.empty() && g_ctx.currentImageIndex != -1) {
             size_t size = g_ctx.imageFiles.size();
             g_ctx.currentImageIndex = (g_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
-            // Pass true to open at the last frame of the previous image
-            LoadImageFromFile(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str(), true);
+            g_ctx.pendingNavIndex = g_ctx.currentImageIndex;
+            g_ctx.startAtEnd = true;
+            SetWindowTextW(g_ctx.hWnd, (g_ctx.imageFiles[g_ctx.currentImageIndex] + L"  [Loading...]").c_str());
+            SetTimer(g_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID, 150, nullptr);
         }
         break;
     case VK_UP:    RotateImage(true); break;
@@ -360,6 +361,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     case WM_APP_IMAGE_LOADED:
         FinalizeImageLoad(true, static_cast<int>(wParam));
         break;
+    case WM_APP_HQ_READY: {
+        IWICBitmap* pBitmap = reinterpret_cast<IWICBitmap*>(wParam);
+        if (pBitmap) {
+            float bitmapZoom = static_cast<float>(lParam) / 10000.0f;
+            if (abs(bitmapZoom - g_ctx.zoomFactor) < 0.01f) {
+                CriticalSectionLock lock(g_ctx.wicMutex);
+                if (g_ctx.renderTarget) {
+                    ComPtr<ID2D1Bitmap> d2dBitmapHqTemp;
+                    if (SUCCEEDED(g_ctx.renderTarget->CreateBitmapFromWicBitmap(pBitmap, nullptr, &d2dBitmapHqTemp))) {
+                        g_ctx.d2dBitmapHq = d2dBitmapHqTemp;
+                        g_ctx.hqZoomFactor = bitmapZoom;
+                        InvalidateRect(hWnd, nullptr, FALSE);
+                    }
+                }
+            }
+            pBitmap->Release();
+        }
+        break;
+    }
     case WM_APP_IMAGE_LOAD_FAILED:
         KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
         if (lParam != 0) {
@@ -430,6 +450,45 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             KillTimer(g_ctx.hWnd, LOADING_TIMER_ID);
             if (g_ctx.isLoading) {
                 InvalidateRect(hWnd, nullptr, FALSE);
+            }
+        }
+        else if (wParam == HQ_RENDER_TIMER_ID) {
+            KillTimer(g_ctx.hWnd, HQ_RENDER_TIMER_ID);
+            if (g_ctx.isHqPending && g_ctx.wicConverter && !g_ctx.isAnimated) {
+                g_ctx.isHqPending = false;
+                float targetZoom = g_ctx.zoomFactor;
+                ComPtr<IWICFormatConverter> source = g_ctx.wicConverter;
+
+                std::thread([source, targetZoom]() {
+                    if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
+                    ComPtr<IWICImagingFactory> localFactory;
+                    if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory)))) {
+                        UINT w, h;
+                        if (SUCCEEDED(source->GetSize(&w, &h))) {
+                            UINT newW = static_cast<UINT>(std::max(1.0f, w * targetZoom));
+                            UINT newH = static_cast<UINT>(std::max(1.0f, h * targetZoom));
+                            ComPtr<IWICBitmapScaler> scaler;
+                            if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
+                                if (SUCCEEDED(scaler->Initialize(source, newW, newH, WICBitmapInterpolationModeFant))) {
+                                    ComPtr<IWICBitmap> hqBitmap;
+                                    if (SUCCEEDED(localFactory->CreateBitmapFromSource(scaler, WICBitmapCacheOnLoad, &hqBitmap))) {
+                                        IWICBitmap* pRawBitmap = static_cast<IWICBitmap*>(hqBitmap);
+                                        pRawBitmap->AddRef();
+                                        PostMessage(g_ctx.hWnd, WM_APP_HQ_READY, (WPARAM)pRawBitmap, (LPARAM)(targetZoom * 10000.0f));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    CoUninitialize();
+                    }).detach();
+            }
+        }
+        else if (wParam == NAV_DEBOUNCE_TIMER_ID) {
+            KillTimer(g_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID);
+            if (g_ctx.pendingNavIndex != -1 && g_ctx.pendingNavIndex < g_ctx.imageFiles.size()) {
+                LoadImageFromFile(g_ctx.imageFiles[g_ctx.pendingNavIndex].c_str(), g_ctx.startAtEnd);
+                g_ctx.pendingNavIndex = -1;
             }
         }
         else if (wParam == AUTO_REFRESH_TIMER_ID) {

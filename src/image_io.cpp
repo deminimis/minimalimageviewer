@@ -146,6 +146,8 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         g_ctx.wicConverterOriginal = nullptr;
         g_ctx.undoStack.clear();
         g_ctx.d2dBitmap = nullptr;
+        g_ctx.d2dBitmapHq = nullptr;
+        g_ctx.isHqPending = false;
         g_ctx.animationD2DBitmaps.clear();
         g_ctx.isAnimated = false;
         g_ctx.animationFrameConverters.clear();
@@ -529,6 +531,8 @@ void FinalizeImageLoad(bool success, int foundIndex) {
     {
         CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.d2dBitmap = nullptr;
+        g_ctx.d2dBitmapHq = nullptr;
+        g_ctx.isHqPending = false;
         g_ctx.animationD2DBitmaps.clear();
         g_ctx.wicConverter = nullptr;
         g_ctx.wicConverterOriginal = nullptr;

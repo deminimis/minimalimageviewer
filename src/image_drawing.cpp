@@ -409,21 +409,33 @@ void Render() {
             hasImage = (g_ctx.wicConverter != nullptr);
         }
 
+        bool isHq = false;
+        if (!g_ctx.isAnimated && g_ctx.d2dBitmapHq && abs(g_ctx.hqZoomFactor - g_ctx.zoomFactor) < 0.01f) {
+            bitmapToDraw = g_ctx.d2dBitmapHq;
+            isHq = true;
+        }
+
         if (bitmapToDraw && !IsIconic(g_ctx.hWnd)) {
             D2D1_SIZE_F bmpSize = bitmapToDraw->GetSize();
             D2D1_SIZE_F rtSize = g_ctx.renderTarget->GetSize();
             D2D1_POINT_2F bmpCenter = D2D1::Point2F(bmpSize.width / 2.f, bmpSize.height / 2.f);
             D2D1_POINT_2F windowCenter = D2D1::Point2F(rtSize.width / 2.f, rtSize.height / 2.f);
 
-            float scaleX = g_ctx.isFlippedHorizontal ? -g_ctx.zoomFactor : g_ctx.zoomFactor;
-            float scaleY = g_ctx.zoomFactor;
+            float scaleX, scaleY;
+            if (isHq) {
+                scaleX = g_ctx.isFlippedHorizontal ? -1.0f : 1.0f;
+                scaleY = 1.0f;
+            }
+            else {
+                scaleX = g_ctx.isFlippedHorizontal ? -g_ctx.zoomFactor : g_ctx.zoomFactor;
+                scaleY = g_ctx.zoomFactor;
+            }
 
             g_ctx.renderTarget->SetTransform(
-                D2D1::Matrix3x2F::Rotation(static_cast<float>(g_ctx.rotationAngle), bmpCenter)*
-                D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter)*
+                D2D1::Matrix3x2F::Rotation(static_cast<float>(g_ctx.rotationAngle), bmpCenter) *
+                D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter) *
                 D2D1::Matrix3x2F::Translation(windowCenter.x - bmpCenter.x + g_ctx.offsetX, windowCenter.y - bmpCenter.y + g_ctx.offsetY)
             );
-
             float opacity = 1.0f;
             if (g_ctx.isFading) {
                 ULONGLONG elapsed = GetTickCount64() - g_ctx.fadeStartTime;
@@ -440,7 +452,7 @@ void Render() {
                 bitmapToDraw,
                 nullptr,
                 opacity,
-                g_ctx.zoomFactor < 1.0f ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                (isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
             );
 
             if ((g_ctx.isSelectingCropRect || g_ctx.isCropPending) && g_ctx.fadeBrush) {
@@ -587,6 +599,15 @@ void Render() {
     }
 }
 
+void TriggerHqRender() {
+    g_ctx.d2dBitmapHq = nullptr;
+    if (!g_ctx.isAnimated && g_ctx.wicConverter) {
+        KillTimer(g_ctx.hWnd, HQ_RENDER_TIMER_ID);
+        g_ctx.isHqPending = true;
+        SetTimer(g_ctx.hWnd, HQ_RENDER_TIMER_ID, 200, nullptr);
+    }
+}
+
 void FitImageToWindow() {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
@@ -610,6 +631,7 @@ void FitImageToWindow() {
     g_ctx.offsetX = 0.0f;
     g_ctx.offsetY = 0.0f;
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    TriggerHqRender();
 }
 
 void ZoomImage(float factor, POINT pt) {
@@ -635,6 +657,7 @@ void ZoomImage(float factor, POINT pt) {
     g_ctx.zoomFactor = newZoomFactor;
 
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    TriggerHqRender();
 }
 
 void RotateImage(bool clockwise) {

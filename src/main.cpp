@@ -29,6 +29,8 @@ static void ResetImageState() {
         CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.wicConverter = g_ctx.wicConverterOriginal;
         g_ctx.d2dBitmap = nullptr;
+        g_ctx.d2dBitmapHq = nullptr;
+        g_ctx.isHqPending = false;
         g_ctx.animationD2DBitmaps.clear();
     }
 }
@@ -46,6 +48,7 @@ void SetActualSize() {
     g_ctx.zoomFactor = 1.0f;
     ResetImageState();
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    TriggerHqRender();
 }
 
 // Try dark mode menus
