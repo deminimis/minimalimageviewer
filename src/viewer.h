@@ -136,6 +136,7 @@ struct AppContext {
     ComPtr<ID2D1Bitmap> d2dBitmap = nullptr;
     ComPtr<IWICFormatConverter> wicConverter = nullptr;
     ComPtr<IWICFormatConverter> wicConverterOriginal = nullptr;
+    std::vector<ComPtr<IWICFormatConverter>> undoStack;
     ComPtr<IDWriteTextFormat> textFormat = nullptr;
     ComPtr<ID2D1SolidColorBrush> textBrush = nullptr;
     ComPtr<ID2D1BitmapBrush> checkerboardBrush = nullptr;
@@ -247,6 +248,7 @@ struct AppContext {
     bool isAutoRefresh = false;
     FILETIME lastWriteTime = { 0 };
     bool preserveView = false;
+    float renderScale = 1.0f;
 };
 
 void CenterImage(bool resetZoom);
@@ -270,6 +272,7 @@ void SaveImageAs();
 void ResizeImageAction();
 ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource);
 void ApplyEffectsToView();
+void CommitCrop();
 void UpdateViewToCurrentFrame();
 void DeleteCurrentImage();
 void HandleDropFiles(HDROP hDrop);

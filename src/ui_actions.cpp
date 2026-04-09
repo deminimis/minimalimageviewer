@@ -35,6 +35,7 @@ void DeleteCurrentImage() {
                 CriticalSectionLock lock(g_ctx.wicMutex);
                 g_ctx.wicConverter = nullptr;
                 g_ctx.wicConverterOriginal = nullptr;
+                g_ctx.undoStack.clear();
                 g_ctx.d2dBitmap = nullptr;
                 g_ctx.loadingFilePath = L"";
             }

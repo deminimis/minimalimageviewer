@@ -144,6 +144,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.wicConverter = nullptr;
         g_ctx.wicConverterOriginal = nullptr;
+        g_ctx.undoStack.clear();
         g_ctx.d2dBitmap = nullptr;
         g_ctx.animationD2DBitmaps.clear();
         g_ctx.isAnimated = false;
@@ -502,6 +503,7 @@ void OnImageReady(bool success, int seqId) {
         CriticalSectionLock lock(g_ctx.wicMutex);
         g_ctx.wicConverter = nullptr;
         g_ctx.wicConverterOriginal = nullptr;
+        g_ctx.undoStack.clear();
         SetWindowTextW(g_ctx.hWnd, L"Load Failed");
     }
 
@@ -530,6 +532,7 @@ void FinalizeImageLoad(bool success, int foundIndex) {
         g_ctx.animationD2DBitmaps.clear();
         g_ctx.wicConverter = nullptr;
         g_ctx.wicConverterOriginal = nullptr;
+        g_ctx.undoStack.clear();
         g_ctx.stagedFrames.clear();
     }
 

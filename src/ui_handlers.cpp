@@ -82,20 +82,34 @@ static void OnKeyDown(WPARAM wParam) {
         }
         break;
     case 'O':      if (ctrlPressed) OpenFileAction(); break;
+    case 'Z':
+        if (ctrlPressed && !g_ctx.undoStack.empty()) {
+            CriticalSectionLock lock(g_ctx.wicMutex);
+            g_ctx.wicConverterOriginal = g_ctx.undoStack.back();
+            g_ctx.undoStack.pop_back();
+            g_ctx.isCropActive = false;
+            g_ctx.cropRectLocal = { 0 };
+            ApplyEffectsToView();
+            FitImageToWindow();
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        }
+        break;
     case 'S':      if (ctrlPressed && (GetKeyState(VK_SHIFT) & 0x8000)) SaveImageAs(); else if (ctrlPressed) SaveImage(); break;
     case 'C':
         if (ctrlPressed) {
             HandleCopy();
         }
         else {
+            bool wasCropActive = g_ctx.isCropActive;
             g_ctx.isCropMode = !g_ctx.isCropMode;
             g_ctx.isCropActive = false;
             g_ctx.isCropPending = false;
             g_ctx.isSelectingCropRect = false;
 
-            // refresh view to show full image if we just toggled crop mode
-            ApplyEffectsToView();
-            FitImageToWindow();
+            if (wasCropActive) {
+                ApplyEffectsToView();
+                FitImageToWindow();
+            }
 
             InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
             SetCursor(LoadCursor(nullptr, g_ctx.isCropMode ? IDC_CROSS : IDC_ARROW));
@@ -110,7 +124,8 @@ static void OnKeyDown(WPARAM wParam) {
             g_ctx.isCropPending = false;
             g_ctx.isCropMode = false;
 
-            // apply crop to the actual view
+            CommitCrop();
+
             ApplyEffectsToView();
             FitImageToWindow();
 
@@ -263,19 +278,21 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
         }
         InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
         break;
-    case IDM_CROP:
+    case IDM_CROP: {
+        bool wasCropActive = g_ctx.isCropActive;
         g_ctx.isCropMode = true;
         g_ctx.isCropActive = false;
         g_ctx.isCropPending = false;
         g_ctx.isSelectingCropRect = false;
 
-        // reset full view when starting new crop
-        ApplyEffectsToView();
-        FitImageToWindow();
-
+        if (wasCropActive) {
+            ApplyEffectsToView();
+            FitImageToWindow();
+        }
         InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
         SetCursor(LoadCursor(nullptr, IDC_CROSS));
         break;
+    }
     case IDM_RESIZE:        ResizeImageAction(); break;
     case IDM_BRIGHTNESS_CONTRAST: OpenBrightnessContrastDialog(); break;
     case IDM_EYEDROPPER:
@@ -454,6 +471,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         break;
     case WM_RBUTTONUP: {
         if (g_ctx.isCropMode || g_ctx.isSelectingCropRect || g_ctx.isCropPending || g_ctx.isSelectingOcrRect) {
+            bool wasCropActive = g_ctx.isCropActive;
             g_ctx.isCropMode = false;
             g_ctx.isSelectingCropRect = false;
             g_ctx.isCropPending = false;
@@ -461,10 +479,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             g_ctx.isDraggingOcrRect = false;
             g_ctx.ocrRectWindow = { 0 };
 
-            // revert cropped view if canceled
-            ApplyEffectsToView();
-            FitImageToWindow();
-
+            if (wasCropActive) {
+                g_ctx.isCropActive = false;
+                ApplyEffectsToView();
+                FitImageToWindow();
+            }
+            else {
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             if (GetCapture() == hWnd) {
                 ReleaseCapture();

@@ -123,6 +123,47 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
     return ComPtr<IWICBitmapSource>(newBitmap);
 }
 
+void CommitCrop() {
+    CriticalSectionLock lock(g_ctx.wicMutex);
+    if (!g_ctx.isCropActive || !g_ctx.wicConverterOriginal) {
+        g_ctx.isCropActive = false;
+        return;
+    }
+
+    ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.wicConverterOriginal));
+
+    ComPtr<IWICBitmapClipper> clipper;
+    if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+        WICRect rc;
+        rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
+        rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
+        rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
+        rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
+
+        if (rc.Width > 0 && rc.Height > 0) {
+            if (SUCCEEDED(clipper->Initialize(source, &rc))) {
+                ComPtr<IWICFormatConverter> converter;
+                if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+                    if (SUCCEEDED(converter->Initialize(clipper, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+
+                        g_ctx.undoStack.push_back(g_ctx.wicConverterOriginal);
+                        g_ctx.wicConverterOriginal = converter;
+
+                        if (g_ctx.isAnimated) {
+                            g_ctx.isAnimated = false;
+                            g_ctx.animationFrameConverters.clear();
+                            g_ctx.animationFrameDelays.clear();
+                            KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    g_ctx.isCropActive = false;
+    g_ctx.cropRectLocal = { 0 };
+}
+
 void ApplyEffectsToView() {
     ComPtr<IWICBitmapSource> source;
     {
@@ -151,14 +192,14 @@ void ApplyEffectsToView() {
             }
         }
     }
-
+    g_ctx.renderScale = 1.0f;
     source = ApplyImageEffects(source);
-
     if (g_ctx.renderTarget) {
         UINT maxDim = g_ctx.renderTarget->GetMaximumBitmapSize();
         UINT w = 0, h = 0;
         if (SUCCEEDED(source->GetSize(&w, &h)) && (w > maxDim || h > maxDim)) {
             float ratio = std::min(static_cast<float>(maxDim) / w, static_cast<float>(maxDim) / h);
+            g_ctx.renderScale = ratio;
             UINT newW = static_cast<UINT>(w * ratio);
             UINT newH = static_cast<UINT>(h * ratio);
 

@@ -443,7 +443,7 @@ void Render() {
                 g_ctx.zoomFactor < 1.0f ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
             );
 
-            if ((g_ctx.isSelectingCropRect || g_ctx.isCropActive || g_ctx.isCropPending) && g_ctx.fadeBrush) {
+            if ((g_ctx.isSelectingCropRect || g_ctx.isCropPending) && g_ctx.fadeBrush) {
                 D2D1_RECT_F localRect;
                 if (g_ctx.isSelectingCropRect) {
                     float x1, y1, x2, y2;
@@ -523,8 +523,9 @@ void Render() {
                 g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
             }
             g_ctx.renderTarget->DrawRectangle(rect, g_ctx.cropRectBrush, 1.0f);
+        
         }
-        else if ((g_ctx.isCropActive || g_ctx.isCropPending) && g_ctx.cropRectBrush) {
+        else if (g_ctx.isCropPending && g_ctx.cropRectBrush) {
             POINT p1, p2, p3, p4;
             ConvertImageToWindowPoint(g_ctx.cropRectLocal.left, g_ctx.cropRectLocal.top, p1);
             ConvertImageToWindowPoint(g_ctx.cropRectLocal.right, g_ctx.cropRectLocal.top, p2);
@@ -681,6 +682,11 @@ void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY) {
 
     localX = unrotatedX + imgWidth / 2.0f;
     localY = unrotatedY + imgHeight / 2.0f;
+
+    if (g_ctx.renderScale > 0.0f && g_ctx.renderScale != 1.0f) {
+        localX /= g_ctx.renderScale;
+        localY /= g_ctx.renderScale;
+    }
 }
 
 void ConvertImageToWindowPoint(float localX, float localY, POINT& pt) {
@@ -688,6 +694,11 @@ void ConvertImageToWindowPoint(float localX, float localY, POINT& pt) {
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
         pt = { 0, 0 };
         return;
+    }
+
+    if (g_ctx.renderScale > 0.0f && g_ctx.renderScale != 1.0f) {
+        localX *= g_ctx.renderScale;
+        localY *= g_ctx.renderScale;
     }
 
     float unrotatedX = localX - imgWidth / 2.0f;

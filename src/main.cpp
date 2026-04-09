@@ -208,6 +208,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     CleanupLoadingThread();
     g_ctx.wicConverter = nullptr;
     g_ctx.wicConverterOriginal = nullptr;
+    g_ctx.undoStack.clear();
     g_ctx.d2dBitmap = nullptr;
     g_ctx.animationFrameConverters.clear();
     g_ctx.animationD2DBitmaps.clear();
