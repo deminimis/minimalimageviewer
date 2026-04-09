@@ -30,6 +30,11 @@
 #define IDM_BRIGHTNESS_CONTRAST     1038
 
 #define IDM_PREFERENCES             1039
+#define IDM_KEYBINDINGS             1043
+
+#define IDD_KEYBINDINGS_DIALOG      204
+#define IDC_COMBO_ACTION            2024
+#define IDC_HOTKEY_CTRL             2025
 #define IDM_GRAYSCALE               1040
 #define IDM_OCR                     1041
 #define IDM_OCR_AREA                1042

@@ -168,3 +168,73 @@ void OpenBrightnessContrastDialog() {
     DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_BRIGHTNESS_DIALOG), g_ctx.hWnd, BrightnessContrastDialogProc, 0);
 }
 
+std::wstring GetHotkeyString(WORD hk) {
+    if (!hk) return L"";
+    std::wstring str;
+    BYTE mods = HIBYTE(hk);
+    BYTE vk = LOBYTE(hk);
+    if (mods & HOTKEYF_CONTROL) str += L"Ctrl+";
+    if (mods & HOTKEYF_SHIFT) str += L"Shift+";
+    if (mods & HOTKEYF_ALT) str += L"Alt+";
+
+    UINT scanCode = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+    wchar_t keyName[64] = { 0 };
+    switch (vk) {
+    case VK_LEFT: wcscpy_s(keyName, L"Left Arrow"); break;
+    case VK_RIGHT: wcscpy_s(keyName, L"Right Arrow"); break;
+    case VK_UP: wcscpy_s(keyName, L"Up Arrow"); break;
+    case VK_DOWN: wcscpy_s(keyName, L"Down Arrow"); break;
+    case VK_ESCAPE: wcscpy_s(keyName, L"Esc"); break;
+    case VK_ADD: wcscpy_s(keyName, L"+"); break;
+    case VK_SUBTRACT: wcscpy_s(keyName, L"-"); break;
+    case VK_MULTIPLY: wcscpy_s(keyName, L"*"); break;
+    default: GetKeyNameTextW(scanCode << 16, keyName, 64); break;
+    }
+    str += keyName;
+    return str;
+}
+
+static const wchar_t* ActionNames[] = {
+    L"Next Image", L"Previous Image", L"Zoom In", L"Zoom Out", L"Fit to Window", L"Actual Size",
+    L"Fullscreen", L"Rotate Clockwise", L"Rotate Counter-Clockwise", L"Flip", L"Crop", L"Exit"
+};
+
+static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+    case WM_INITDIALOG: {
+        HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_ACTION);
+        for (int i = 0; i < Act_Count; ++i) {
+            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)ActionNames[i]);
+        }
+        SendMessageW(hCombo, CB_SETCURSEL, 0, 0);
+        SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, g_ctx.hotkeys[0], 0);
+        return (INT_PTR)TRUE;
+    }
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDC_COMBO_ACTION && HIWORD(wParam) == CBN_SELCHANGE) {
+            int idx = SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0);
+            if (idx != CB_ERR) {
+                SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, g_ctx.hotkeys[idx], 0);
+            }
+            return (INT_PTR)TRUE;
+        }
+        switch (LOWORD(wParam)) {
+        case IDOK: {
+            int idx = SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0);
+            if (idx != CB_ERR) {
+                g_ctx.hotkeys[idx] = SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0);
+            }
+            return (INT_PTR)TRUE;
+        }
+        case IDCANCEL:
+            EndDialog(hDlg, IDCANCEL);
+            return (INT_PTR)TRUE;
+        }
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
+void OpenKeybindingsDialog() {
+    DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_KEYBINDINGS_DIALOG), g_ctx.hWnd, KeybindingsDialogProc, 0);
+}

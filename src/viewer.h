@@ -98,6 +98,11 @@ enum class DefaultZoomMode {
     Actual = 1
 };
 
+enum ActionID {
+    Act_Next = 0, Act_Prev, Act_ZoomIn, Act_ZoomOut, Act_Fit, Act_Actual,
+    Act_Fullscreen, Act_RotateCW, Act_RotateCCW, Act_Flip, Act_Crop, Act_Exit, Act_Count
+};
+
 class ImageProperties {
 public:
     std::wstring filePath;
@@ -256,6 +261,7 @@ struct AppContext {
     FILETIME lastWriteTime = { 0 };
     bool preserveView = false;
     float renderScale = 1.0f;
+    WORD hotkeys[Act_Count];
 };
 
 void CenterImage(bool resetZoom);
@@ -289,6 +295,8 @@ void HandleCopy();
 void OpenFileLocationAction();
 void ShowImageProperties();
 void OpenPreferencesDialog();
+void OpenKeybindingsDialog();
+std::wstring GetHotkeyString(WORD hk);
 void OpenBrightnessContrastDialog();
 void PerformOcr();
 void PerformOcrArea(D2D1_RECT_F ocrRectLocal);

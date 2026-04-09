@@ -20,6 +20,19 @@ void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& 
     rect.right = getInt(L"Window", L"right", CW_USEDEFAULT);
     rect.bottom = getInt(L"Window", L"bottom", CW_USEDEFAULT);
     if (rect.left == CW_USEDEFAULT || rect.top == CW_USEDEFAULT || rect.right == CW_USEDEFAULT || rect.bottom == CW_USEDEFAULT) SetRectEmpty(&rect);
+
+    g_ctx.hotkeys[Act_Next] = getInt(L"Keys", L"Next", VK_RIGHT);
+    g_ctx.hotkeys[Act_Prev] = getInt(L"Keys", L"Prev", VK_LEFT);
+    g_ctx.hotkeys[Act_ZoomIn] = getInt(L"Keys", L"ZoomIn", MAKEWORD(VK_ADD, HOTKEYF_CONTROL));
+    g_ctx.hotkeys[Act_ZoomOut] = getInt(L"Keys", L"ZoomOut", MAKEWORD(VK_SUBTRACT, HOTKEYF_CONTROL));
+    g_ctx.hotkeys[Act_Fit] = getInt(L"Keys", L"Fit", MAKEWORD('0', HOTKEYF_CONTROL));
+    g_ctx.hotkeys[Act_Actual] = getInt(L"Keys", L"Actual", MAKEWORD(VK_MULTIPLY, HOTKEYF_CONTROL));
+    g_ctx.hotkeys[Act_Fullscreen] = getInt(L"Keys", L"Fullscreen", VK_F11);
+    g_ctx.hotkeys[Act_RotateCW] = getInt(L"Keys", L"RotateCW", VK_UP);
+    g_ctx.hotkeys[Act_RotateCCW] = getInt(L"Keys", L"RotateCCW", VK_DOWN);
+    g_ctx.hotkeys[Act_Flip] = getInt(L"Keys", L"Flip", 'F');
+    g_ctx.hotkeys[Act_Crop] = getInt(L"Keys", L"Crop", 'C');
+    g_ctx.hotkeys[Act_Exit] = getInt(L"Keys", L"Exit", VK_ESCAPE);
 }
 
 void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop) {
@@ -33,8 +46,20 @@ void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, 
     writeInt(L"Settings", L"BackgroundColor", static_cast<int>(g_ctx.bgColor));
     writeInt(L"Settings", L"DefaultZoomMode", static_cast<int>(g_ctx.defaultZoomMode));
 
+    writeInt(L"Keys", L"Next", g_ctx.hotkeys[Act_Next]);
+    writeInt(L"Keys", L"Prev", g_ctx.hotkeys[Act_Prev]);
+    writeInt(L"Keys", L"ZoomIn", g_ctx.hotkeys[Act_ZoomIn]);
+    writeInt(L"Keys", L"ZoomOut", g_ctx.hotkeys[Act_ZoomOut]);
+    writeInt(L"Keys", L"Fit", g_ctx.hotkeys[Act_Fit]);
+    writeInt(L"Keys", L"Actual", g_ctx.hotkeys[Act_Actual]);
+    writeInt(L"Keys", L"Fullscreen", g_ctx.hotkeys[Act_Fullscreen]);
+    writeInt(L"Keys", L"RotateCW", g_ctx.hotkeys[Act_RotateCW]);
+    writeInt(L"Keys", L"RotateCCW", g_ctx.hotkeys[Act_RotateCCW]);
+    writeInt(L"Keys", L"Flip", g_ctx.hotkeys[Act_Flip]);
+    writeInt(L"Keys", L"Crop", g_ctx.hotkeys[Act_Crop]);
+    writeInt(L"Keys", L"Exit", g_ctx.hotkeys[Act_Exit]);
+
     if (!IsRectEmpty(&rect) && !IsIconic(g_ctx.hWnd) && !IsZoomed(g_ctx.hWnd)) {
-        writeInt(L"Window", L"left", rect.left);
         writeInt(L"Window", L"top", rect.top);
         writeInt(L"Window", L"right", rect.right);
         writeInt(L"Window", L"bottom", rect.bottom);
