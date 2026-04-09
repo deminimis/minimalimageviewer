@@ -150,7 +150,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     wcex.hInstance = hInstance;
     wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
-    wcex.hbrBackground = NULL;
+    wcex.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wcex.lpszClassName = L"MinimalImageViewer";
     RegisterClassExW(&wcex);
 
@@ -160,7 +160,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         exStyle,
         wcex.lpszClassName,
         L"Minimal Image Viewer",
-        WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+        WS_OVERLAPPEDWINDOW,
         startupRect.left, startupRect.top,
         (startupRect.left == CW_USEDEFAULT) ? 800 : (startupRect.right - startupRect.left),
         (startupRect.top == CW_USEDEFAULT) ? 600 : (startupRect.bottom - startupRect.top),
@@ -179,11 +179,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     DragAcceptFiles(g_ctx.hWnd, TRUE);
     UpdateTitleBarTheme(g_ctx.hWnd, g_ctx.bgColor);
 
+    g_ctx.isInitialized = true; 
+
     if (g_ctx.startFullScreen) {
         ToggleFullScreen();
     }
 
-    g_ctx.isInitialized = true;
+    Render();
 
     ShowWindow(g_ctx.hWnd, nCmdShow);
     UpdateWindow(g_ctx.hWnd);

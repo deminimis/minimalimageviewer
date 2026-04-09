@@ -305,7 +305,7 @@ void Render() {
         g_ctx.renderTarget->Clear(color);
     }
 
-    if (g_ctx.isLoading) {
+    if (g_ctx.isLoading && (GetTickCount64() - g_ctx.loadStartTime >= 700)) {
         RECT rc;
         GetClientRect(g_ctx.hWnd, &rc);
         D2D1_RECT_F layoutRect = D2D1::RectF(
@@ -469,7 +469,7 @@ void Render() {
                 }
             }
         }
-        else if (!hasImage && g_ctx.textFormat && g_ctx.textBrush) {
+        else if (!hasImage && !g_ctx.isLoading && g_ctx.textFormat && g_ctx.textBrush) {
             RECT rc;
             GetClientRect(g_ctx.hWnd, &rc);
             D2D1_RECT_F layoutRect = D2D1::RectF(

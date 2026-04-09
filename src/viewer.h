@@ -61,6 +61,7 @@ constexpr UINT WM_APP_DIR_READY = (WM_APP + 8);
 constexpr UINT ANIMATION_TIMER_ID = 1;
 constexpr UINT OCR_MESSAGE_TIMER_ID = 2;
 constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
+constexpr UINT LOADING_TIMER_ID = 4;
 
 class CriticalSectionLock {
 public:
@@ -164,6 +165,7 @@ struct AppContext {
     std::atomic<bool> isLoading{ false };
     std::atomic<int> loadSequenceId{ 0 };
     CRITICAL_SECTION wicMutex{};
+    ULONGLONG loadStartTime = 0;
 
     std::wstring loadingFilePath;
     GUID originalContainerFormat = {};

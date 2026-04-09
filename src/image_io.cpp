@@ -20,67 +20,14 @@ static HRESULT CreateDecoderFromStream_FullFileRead(
 
     if (seqId != -1 && !IsSequenceValid(seqId)) return E_ABORT;
 
-    HANDLE hFile = CreateFileW(filePath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE) {
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    LARGE_INTEGER fileSize;
-    if (!GetFileSizeEx(hFile, &fileSize)) {
-        CloseHandle(hFile);
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-    if (fileSize.QuadPart == 0) {
-        CloseHandle(hFile);
-        return E_FAIL;
-    }
-
-    if (seqId != -1 && !IsSequenceValid(seqId)) {
-        CloseHandle(hFile);
-        return E_ABORT;
-    }
-
-    DWORD dwFileSize = static_cast<DWORD>(fileSize.QuadPart);
-
-    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, dwFileSize);
-    if (!hMem) {
-        CloseHandle(hFile);
-        return E_OUTOFMEMORY;
-    }
-
-    LPVOID pMem = GlobalLock(hMem);
-    if (!pMem) {
-        CloseHandle(hFile);
-        GlobalFree(hMem);
-        return E_FAIL;
-    }
-
-    DWORD bytesRead = 0;
-    if (!ReadFile(hFile, pMem, dwFileSize, &bytesRead, NULL) || bytesRead != dwFileSize) {
-        GlobalUnlock(hMem);
-        GlobalFree(hMem);
-        CloseHandle(hFile);
-        return HRESULT_FROM_WIN32(GetLastError());
-    }
-
-    GlobalUnlock(hMem);
-    CloseHandle(hFile);
-
-    if (seqId != -1 && !IsSequenceValid(seqId)) {
-        GlobalFree(hMem);
-        return E_ABORT;
-    }
-
-    ComPtr<IStream> stream;
-    HRESULT hr = CreateStreamOnHGlobal(hMem, TRUE, &stream);
-    if (FAILED(hr)) {
-        GlobalFree(hMem);
-        return hr;
-    }
-
-    hr = pFactory->CreateDecoderFromStream(stream, NULL, WICDecodeMetadataCacheOnLoad, ppDecoder);
-
-    return hr;
+    // Use WIC's native memory-mapped file decoding.
+    return pFactory->CreateDecoderFromFilename(
+        filePath,
+        NULL,
+        GENERIC_READ,
+        WICDecodeMetadataCacheOnLoad,
+        ppDecoder
+    );
 }
 
 HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder) {
@@ -119,7 +66,7 @@ std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int s
     wchar_t searchPath[MAX_PATH] = { 0 };
     PathCombineW(searchPath, directoryPath.c_str(), L"*.*");
 
-    HANDLE hFind = FindFirstFileW(searchPath, &fd);
+    HANDLE hFind = FindFirstFileExW(searchPath, FindExInfoBasic, &fd, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
     if (hFind != INVALID_HANDLE_VALUE) {
         do {
             if (!IsSequenceValid(seqId)) {
@@ -131,7 +78,7 @@ std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int s
                 return {};
             }
 
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {ed
+            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
                 if (IsImageFile(fd.cFileName)) {
                     wchar_t fullPath[MAX_PATH] = { 0 };
                     PathCombineW(fullPath, directoryPath.c_str(), fd.cFileName);
@@ -140,6 +87,8 @@ std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int s
                     info.path = fullPath;
                     info.writeTime = fd.ftLastWriteTime;
                     info.fileSize.LowPart = fd.nFileSizeLow;
+                    info.fileSize.HighPart = fd.nFileSizeHigh;
+                    foundFiles.push_back(info);
                 }
             }
         } while (FindNextFileW(hFind, &fd));
@@ -187,6 +136,8 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
     int mySeqId = ++g_ctx.loadSequenceId;
 
     g_ctx.isLoading = true;
+    g_ctx.loadStartTime = GetTickCount64();
+    SetTimer(g_ctx.hWnd, LOADING_TIMER_ID, 700, nullptr);
     g_ctx.loadingFilePath = filePath;
     g_ctx.startAtEnd = startAtEnd;
     {

@@ -409,6 +409,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
         }
+        else if (wParam == LOADING_TIMER_ID) {
+            KillTimer(g_ctx.hWnd, LOADING_TIMER_ID);
+            if (g_ctx.isLoading) {
+                InvalidateRect(hWnd, nullptr, FALSE);
+            }
+        }
         else if (wParam == AUTO_REFRESH_TIMER_ID) {
             if (g_ctx.isAutoRefresh && !g_ctx.isLoading && !g_ctx.imageFiles.empty() && g_ctx.currentImageIndex >= 0) {
                 const std::wstring& currentFile = g_ctx.imageFiles[g_ctx.currentImageIndex];
@@ -427,6 +433,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             }
         }
         break;
+    case WM_ERASEBKGND:
+        return 1; 
     case WM_PAINT:
         OnPaint(hWnd);
         break;

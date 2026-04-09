@@ -154,6 +154,23 @@ void ApplyEffectsToView() {
 
     source = ApplyImageEffects(source);
 
+    if (g_ctx.renderTarget) {
+        UINT maxDim = g_ctx.renderTarget->GetMaximumBitmapSize();
+        UINT w = 0, h = 0;
+        if (SUCCEEDED(source->GetSize(&w, &h)) && (w > maxDim || h > maxDim)) {
+            float ratio = std::min(static_cast<float>(maxDim) / w, static_cast<float>(maxDim) / h);
+            UINT newW = static_cast<UINT>(w * ratio);
+            UINT newH = static_cast<UINT>(h * ratio);
+
+            ComPtr<IWICBitmapScaler> scaler;
+            if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapScaler(&scaler))) {
+                if (SUCCEEDED(scaler->Initialize(source, newW, newH, WICBitmapInterpolationModeFant))) {
+                    source = scaler;
+                }
+            }
+        }
+    }
+
     ComPtr<IWICFormatConverter> converter;
     if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
         if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
