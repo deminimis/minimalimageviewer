@@ -359,6 +359,29 @@ void SaveImage() {
         return;
     }
 
+    // AVIF/HEIC save prompt
+    const wchar_t* ext = PathFindExtensionW(originalPath.c_str());
+    if (ext && (_wcsicmp(ext, L".heic") == 0 || _wcsicmp(ext, L".heif") == 0 || _wcsicmp(ext, L".avif") == 0)) {
+        if (MessageBoxW(g_ctx.hWnd, L"HEIC and AVIF files cannot be natively overwritten. Would you like to save your edits as a PNG instead?", L"Save Edits", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+
+            wchar_t newPath[MAX_PATH];
+            wcscpy_s(newPath, MAX_PATH, originalPath.c_str());
+            PathRenameExtensionW(newPath, L".png");
+
+            ComPtr<IWICBitmapSource> source = GetSaveSource(GUID_ContainerFormatPng);
+            if (source) source = ApplyImageEffects(source);
+
+            if (source && SUCCEEDED(EncodeAndSaveImage(source, newPath, GUID_ContainerFormatPng))) {
+                LoadImageFromFile(newPath); // Load new png
+            }
+            else {
+                MessageBoxW(g_ctx.hWnd, L"Failed to save as PNG.", L"Save Error", MB_ICONERROR);
+            }
+        }
+        return;
+    }
+
+
     GUID containerFormat{};
     {
         CriticalSectionLock lock(g_ctx.wicMutex);

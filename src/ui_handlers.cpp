@@ -35,7 +35,11 @@ static void OnKeyDown(WPARAM wParam) {
             g_ctx.currentImageIndex = (g_ctx.currentImageIndex + 1) % static_cast<int>(size);
             g_ctx.pendingNavIndex = g_ctx.currentImageIndex;
             g_ctx.startAtEnd = false;
-            SetWindowTextW(g_ctx.hWnd, (g_ctx.imageFiles[g_ctx.currentImageIndex] + L"  [Loading...]").c_str());
+
+            std::wstring title = PathFindFileNameW(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str());
+            title += L"  [Loading...]";
+            SetWindowTextW(g_ctx.hWnd, title.c_str());
+
             SetTimer(g_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID, 150, nullptr);
         }
         break;
@@ -49,7 +53,11 @@ static void OnKeyDown(WPARAM wParam) {
             g_ctx.currentImageIndex = (g_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
             g_ctx.pendingNavIndex = g_ctx.currentImageIndex;
             g_ctx.startAtEnd = true;
-            SetWindowTextW(g_ctx.hWnd, (g_ctx.imageFiles[g_ctx.currentImageIndex] + L"  [Loading...]").c_str());
+
+            std::wstring title = PathFindFileNameW(g_ctx.imageFiles[g_ctx.currentImageIndex].c_str());
+            title += L"  [Loading...]";
+            SetWindowTextW(g_ctx.hWnd, title.c_str());
+
             SetTimer(g_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID, 150, nullptr);
         }
         break;
