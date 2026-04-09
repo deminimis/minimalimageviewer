@@ -6,8 +6,17 @@
 extern AppContext g_ctx;
 
 static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    static HBRUSH hDarkBrush = nullptr;
     switch (message) {
     case WM_INITDIALOG: {
+        UpdateTitleBarTheme(hDlg, g_ctx.bgColor);
+        if (g_ctx.bgColor == BackgroundColor::Black || g_ctx.bgColor == BackgroundColor::Grey) {
+            if (!hDarkBrush) hDarkBrush = CreateSolidBrush(RGB(32, 32, 32));
+        }
+        else {
+            if (hDarkBrush) { DeleteObject(hDarkBrush); hDarkBrush = nullptr; }
+        }
+
         int bgRadio = IDC_RADIO_BG_GREY + static_cast<int>(g_ctx.bgColor);
         CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, bgRadio);
 
@@ -56,6 +65,20 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
             EndDialog(hDlg, IDCANCEL);
             return (INT_PTR)TRUE;
         }
+        break;
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN: {
+        if (g_ctx.bgColor == BackgroundColor::Black || g_ctx.bgColor == BackgroundColor::Grey) {
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, RGB(255, 255, 255));
+            SetBkColor(hdc, RGB(32, 32, 32));
+            return (INT_PTR)hDarkBrush;
+        }
+        break;
+    }
+    case WM_DESTROY:
+        if (hDarkBrush) { DeleteObject(hDarkBrush); hDarkBrush = nullptr; }
         break;
     }
     return (INT_PTR)FALSE;
@@ -223,6 +246,8 @@ static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wP
             int idx = SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0);
             if (idx != CB_ERR) {
                 g_ctx.hotkeys[idx] = SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0);
+                SetDlgItemTextW(hDlg, IDOK, L"Applied!");
+                SetTimer(hDlg, 1, 1500, nullptr);
             }
             return (INT_PTR)TRUE;
         }
@@ -230,10 +255,16 @@ static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wP
             EndDialog(hDlg, IDCANCEL);
             return (INT_PTR)TRUE;
         }
-        break;
+                 break;
+        case WM_TIMER:
+            if (wParam == 1) {
+                KillTimer(hDlg, 1);
+                SetDlgItemTextW(hDlg, IDOK, L"Apply");
+            }
+            return (INT_PTR)TRUE;
+        }
+        return (INT_PTR)FALSE;
     }
-    return (INT_PTR)FALSE;
-}
 
 void OpenKeybindingsDialog() {
     DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_KEYBINDINGS_DIALOG), g_ctx.hWnd, KeybindingsDialogProc, 0);

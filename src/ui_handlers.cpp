@@ -325,8 +325,21 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     static POINT dragStart = {};
-
     switch (message) {
+    case WM_KILLFOCUS:
+        if (g_ctx.isEyedropperActive) {
+            g_ctx.isEyedropperActive = false;
+            ReleaseCapture();
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        break;
+    case WM_SYSKEYDOWN:
+        if (g_ctx.isEyedropperActive) {
+            g_ctx.isEyedropperActive = false;
+            ReleaseCapture();
+            InvalidateRect(hWnd, nullptr, FALSE);
+        }
+        return DefWindowProc(hWnd, message, wParam, lParam);
     case WM_APP_IMAGE_READY:
         OnImageReady(wParam != 0, (int)lParam);
         break;
