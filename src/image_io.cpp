@@ -115,13 +115,19 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
             if (hFile != INVALID_HANDLE_VALUE) {
                 LARGE_INTEGER size;
-                GetFileSizeEx(hFile, &size);
-                std::vector<BYTE> data(size.LowPart);
-                DWORD bytesRead;
-                if (ReadFile(hFile, data.data(), size.LowPart, &bytesRead, NULL)) {
-                    CriticalSectionLock lock(m_ctx.wicMutex);
-                    m_ctx.stagedSvgData = std::move(data);
-                    PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                // Cap the max SVG size to 256 MB to prevent memory exhaustion.
+                if (GetFileSizeEx(hFile, &size) && size.HighPart == 0 && size.LowPart > 0 && size.LowPart <= 256 * 1024 * 1024) {
+                    std::vector<BYTE> data(size.LowPart);
+                    DWORD bytesRead;
+                    // Verify ReadFile 
+                    if (ReadFile(hFile, data.data(), size.LowPart, &bytesRead, NULL) && bytesRead == size.LowPart) {
+                        CriticalSectionLock lock(m_ctx.wicMutex);
+                        m_ctx.stagedSvgData = std::move(data);
+                        PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                    }
+                    else {
+                        PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                    }
                 }
                 else {
                     PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
