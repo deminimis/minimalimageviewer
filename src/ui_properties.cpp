@@ -82,13 +82,12 @@ ImageProperties GetCurrentOsdProperties() {
         }
         ComPtr<IWICBitmapFrameDecode> frame;
         if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
-            pProps.bitDepth = GetBitDepth(frame);
+            pProps.bitDepth = GetBitDepth(frame.Get());
             double dpiX, dpiY;
             if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) pProps.dpi = std::to_wstring(static_cast<int>(dpiX + 0.5)) + L" x " + std::to_wstring(static_cast<int>(dpiY + 0.5)) + L" DPI";
-
             ComPtr<IWICMetadataQueryReader> meta;
             if (SUCCEEDED(frame->GetMetadataQueryReader(&meta))) {
-                auto getMeta = [&](const wchar_t* q) { return GetMetadataString(meta, q); };
+                auto getMeta = [&](const wchar_t* q) { return GetMetadataString(meta.Get(), q); };
                 pProps.dateTaken = getMeta(L"/app1/ifd/exif/{ushort=36867}");
                 pProps.cameraMake = getMeta(L"/app1/ifd/{ushort=271}");
                 pProps.cameraModel = getMeta(L"/app1/ifd/{ushort=272}");

@@ -8,10 +8,10 @@
 extern AppContext g_ctx;
 
 using namespace winrt;
-using namespace Windows::Foundation;
-using namespace Windows::Graphics::Imaging;
-using namespace Windows::Media::Ocr;
-using namespace Windows::Storage;
+using namespace winrt::Windows::Foundation;
+using namespace winrt::Windows::Graphics::Imaging;
+using namespace winrt::Windows::Media::Ocr;
+using namespace winrt::Windows::Storage;
 
 static void CopyToClipboardAndNotify(HWND hWnd, const std::wstring& text, UINT successMsg) {
     if (OpenClipboard(nullptr)) {

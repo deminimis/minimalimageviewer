@@ -34,7 +34,8 @@
 #include <dxgi1_2.h>
 #include <thread>
 #include <atomic>
-#include "ComPtr.h"
+#include <wrl/client.h>
+using Microsoft::WRL::ComPtr;
 #include "resource.h"
 
 #include <winrt/Windows.Foundation.h>

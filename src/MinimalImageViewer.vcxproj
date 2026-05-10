@@ -33,7 +33,6 @@
 		<ClCompile Include="ui_tools.cpp" />
 	</ItemGroup>
   <ItemGroup>
-    <ClInclude Include="ComPtr.h" />
     <ClInclude Include="exif_utils.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="viewer.h" />

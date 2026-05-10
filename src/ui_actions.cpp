@@ -113,7 +113,7 @@ void HandleCopy() {
                     if (flipped) {
                         options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
                     }
-                    if (SUCCEEDED(rotator->Initialize(source, options))) {
+                    if (SUCCEEDED(rotator->Initialize(source.Get(), options))) {
                         source = rotator;
                     }
                 }
@@ -122,7 +122,7 @@ void HandleCopy() {
             // Convert to 32bpp BGRA for DIB
             ComPtr<IWICFormatConverter> converter;
             if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
-                if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                     UINT width = 0, height = 0;
                     if (SUCCEEDED(converter->GetSize(&width, &height))) {
                         UINT stride = width * 4;
@@ -190,7 +190,7 @@ void HandlePaste() {
                     hr = g_ctx.wicFactory->CreateFormatConverter(&converter);
 
                     if (SUCCEEDED(hr)) {
-                        hr = converter->Initialize(wicBitmap, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+                        hr = converter->Initialize(wicBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
                         if (SUCCEEDED(hr)) {
                             // reset state for new pasted image
                             g_ctx.wicConverter = converter;

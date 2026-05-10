@@ -12,10 +12,10 @@ static HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::ws
     HRESULT hr = g_ctx.wicFactory->CreateStream(&stream);
     if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(filePath.c_str(), GENERIC_WRITE);
     if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
-    if (SUCCEEDED(hr)) hr = encoder->Initialize(stream, WICBitmapEncoderNoCache);
+    if (SUCCEEDED(hr)) hr = encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache);
     if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, &props);
-    if (SUCCEEDED(hr)) hr = frame->Initialize(props);
-    if (SUCCEEDED(hr)) hr = frame->WriteSource(source, nullptr);
+    if (SUCCEEDED(hr)) hr = frame->Initialize(props.Get());
+    if (SUCCEEDED(hr)) hr = frame->WriteSource(source.Get(), nullptr);
     if (SUCCEEDED(hr)) hr = frame->Commit();
     if (SUCCEEDED(hr)) hr = encoder->Commit();
     return hr;
@@ -33,7 +33,7 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
 
     ComPtr<IWICFormatConverter> converter;
     if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
-        if (SUCCEEDED(converter->Initialize(inSource, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+        if (SUCCEEDED(converter->Initialize(inSource.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
             inSource = converter;
         }
         else {
@@ -133,7 +133,7 @@ void CommitCrop() {
         return;
     }
 
-    ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.wicConverterOriginal));
+    ComPtr<IWICBitmapSource> source = g_ctx.wicConverterOriginal;
 
     ComPtr<IWICBitmapClipper> clipper;
     if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
@@ -142,12 +142,11 @@ void CommitCrop() {
         rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
         rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
         rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
-
         if (rc.Width > 0 && rc.Height > 0) {
-            if (SUCCEEDED(clipper->Initialize(source, &rc))) {
+            if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
                 ComPtr<IWICFormatConverter> converter;
                 if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
-                    if (SUCCEEDED(converter->Initialize(clipper, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                    if (SUCCEEDED(converter->Initialize(clipper.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
 
                         g_ctx.undoStack.push_back(g_ctx.wicConverterOriginal);
                         g_ctx.wicConverterOriginal = converter;
@@ -189,7 +188,7 @@ void ApplyEffectsToView() {
             rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
 
             if (rc.Width > 0 && rc.Height > 0) {
-                if (SUCCEEDED(clipper->Initialize(source, &rc))) {
+                if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
                     source = clipper;
                 }
             }
@@ -207,7 +206,7 @@ void ApplyEffectsToView() {
 
             ComPtr<IWICBitmapScaler> scaler;
             if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapScaler(&scaler))) {
-                if (SUCCEEDED(scaler->Initialize(source, newW, newH, WICBitmapInterpolationModeFant))) {
+                if (SUCCEEDED(scaler->Initialize(source.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
                     source = scaler;
                 }
             }
@@ -216,7 +215,7 @@ void ApplyEffectsToView() {
 
     ComPtr<IWICFormatConverter> converter;
     if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
-        if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+        if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
             CriticalSectionLock lock(g_ctx.wicMutex);
             g_ctx.wicConverter = converter;
             g_ctx.d2dBitmap = nullptr;
@@ -250,7 +249,7 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
             rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
 
             if (rc.Width > 0 && rc.Height > 0) {
-                if (SUCCEEDED(clipper->Initialize(source, &rc))) {
+                if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
                     source = clipper;
                 }
             }
@@ -271,7 +270,7 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
                 options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
             }
 
-            if (SUCCEEDED(rotator->Initialize(source, options))) {
+            if (SUCCEEDED(rotator->Initialize(source.Get(), options))) {
                 source = rotator;
             }
         }
@@ -280,7 +279,7 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
     if (g_ctx.isGrayscale) {
         ComPtr<IWICFormatConverter> grayConverter;
         if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
-            if (SUCCEEDED(grayConverter->Initialize(source, GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+            if (SUCCEEDED(grayConverter->Initialize(source.Get(), GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                 source = grayConverter;
             }
         }
@@ -292,7 +291,7 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
     if (targetFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
         ComPtr<IWICFormatConverter> converter;
         if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
-            if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
+            if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
                 source = converter;
             }
         }
@@ -451,7 +450,7 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
             rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
             rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
             if (rc.Width > 0 && rc.Height > 0) {
-                if (SUCCEEDED(clipper->Initialize(source, &rc))) {
+                if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
                     source = clipper;
                 }
             }
@@ -471,7 +470,7 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
             if (g_ctx.isFlippedHorizontal) {
                 options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
             }
-            if (SUCCEEDED(rotator->Initialize(source, options))) {
+            if (SUCCEEDED(rotator->Initialize(source.Get(), options))) {
                 source = rotator;
             }
         }
@@ -480,7 +479,7 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
     if (g_ctx.isGrayscale) {
         ComPtr<IWICFormatConverter> grayConverter;
         if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
-            if (SUCCEEDED(grayConverter->Initialize(source, GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+            if (SUCCEEDED(grayConverter->Initialize(source.Get(), GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                 source = grayConverter;
             }
         }
@@ -494,7 +493,7 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
 
     ComPtr<IWICBitmapScaler> scaler;
     if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapScaler(&scaler))) {
-        if (SUCCEEDED(scaler->Initialize(source, newWidth, newHeight, WICBitmapInterpolationModeFant))) {
+        if (SUCCEEDED(scaler->Initialize(source.Get(), newWidth, newHeight, WICBitmapInterpolationModeFant))) {
             source = scaler;
         }
         else {
@@ -512,7 +511,7 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
         if (containerFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
             ComPtr<IWICFormatConverter> converter;
             if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
-                if (SUCCEEDED(converter->Initialize(source, GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
+                if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
                     source = converter;
                 }
             }

@@ -45,7 +45,7 @@ static HRESULT CreateDecoderFromStream_FullFileRead(
 }
 
 HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder) {
-    return CreateDecoderFromStream_FullFileRead(g_ctx.wicFactory, filePath, ppDecoder, -1);
+    return CreateDecoderFromStream_FullFileRead(g_ctx.wicFactory.Get(), filePath, ppDecoder, -1);
 }
 
 
@@ -179,7 +179,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         }
 
         ComPtr<IWICBitmapDecoder> decoder;
-        hr = CreateDecoderFromStream_FullFileRead(localFactory, filePath.c_str(), &decoder, mySeqId);
+        hr = CreateDecoderFromStream_FullFileRead(localFactory.Get(), filePath.c_str(), &decoder, mySeqId);
 
         if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
 
@@ -280,7 +280,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
 
             ComPtr<IWICFormatConverter> converter;
             if (SUCCEEDED(localFactory->CreateFormatConverter(&converter))) {
-                if (SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                if (SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
 
                     UINT frameStride = frameWidth * 4;
                     UINT frameSize = frameStride * frameHeight;
@@ -496,7 +496,7 @@ void OnImageReady(bool success, int seqId) {
                 if (SUCCEEDED(hr)) {
                     ComPtr<IWICFormatConverter> converter;
                     g_ctx.wicFactory->CreateFormatConverter(&converter);
-                    converter->Initialize(memoryBitmap, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+                    converter->Initialize(memoryBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
                     g_ctx.animationFrameConverters.push_back(converter);
                 }
             }
@@ -671,13 +671,13 @@ void StartPreloading() {
                 if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
                     ComPtr<IWICFormatConverter> converter;
                     if (SUCCEEDED(factory->CreateFormatConverter(&converter))) {
-                        if (SUCCEEDED(converter->Initialize(frame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                        if (SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                             // Force immediate decode into RAM
                             ComPtr<IWICBitmap> memBmp;
-                            if (SUCCEEDED(factory->CreateBitmapFromSource(converter, WICBitmapCacheOnLoad, &memBmp))) {
+                            if (SUCCEEDED(factory->CreateBitmapFromSource(converter.Get(), WICBitmapCacheOnLoad, &memBmp))) {
                                 ComPtr<IWICFormatConverter> finalConverter;
                                 if (SUCCEEDED(factory->CreateFormatConverter(&finalConverter))) {
-                                    if (SUCCEEDED(finalConverter->Initialize(memBmp, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                                    if (SUCCEEDED(finalConverter->Initialize(memBmp.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                                         UINT orientation = 1;
                                         ComPtr<IWICMetadataQueryReader> metadataReader;
                                         if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {

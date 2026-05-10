@@ -121,7 +121,7 @@ void CreateDeviceResources() {
             D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
             if (SUCCEEDED(g_ctx.renderTarget->CreateBitmap(size, pixels.data(), w * 4, &props, &checkerboardBitmap))) {
                 D2D1_BITMAP_BRUSH_PROPERTIES brushProps = D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
-                g_ctx.renderTarget->CreateBitmapBrush(checkerboardBitmap, brushProps, &g_ctx.checkerboardBrush);
+                g_ctx.renderTarget->CreateBitmapBrush(checkerboardBitmap.Get(), brushProps, &g_ctx.checkerboardBrush);
             }
         }
     }
@@ -174,12 +174,11 @@ static void DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     if (FAILED(g_ctx.writeFactory->CreateTextLayout(
         osdText.c_str(),
         static_cast<UINT32>(osdText.length()),
-        g_ctx.textFormat,
+        g_ctx.textFormat.Get(),
         rtSize.width - 2 * padding,
         rtSize.height,
         &textLayout
     ))) return;
-
     DWRITE_TEXT_METRICS metrics;
     textLayout->GetMetrics(&metrics);
 
@@ -187,17 +186,15 @@ static void DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     float bgHeight = metrics.height + padding * 2;
     float bgX = padding;
     float bgY = rtSize.height - bgHeight - padding;
-
     D2D1_RECT_F bgRect = D2D1::RectF(bgX, bgY, bgX + bgWidth, bgY + bgHeight);
 
     ComPtr<ID2D1SolidColorBrush> bgBrush;
     renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.6f), &bgBrush);
-    renderTarget->FillRectangle(bgRect, bgBrush);
-
+    renderTarget->FillRectangle(bgRect, bgBrush.Get());
     D2D1_RECT_F textRect = D2D1::RectF(bgX + padding, bgY + padding, bgX + bgWidth - padding, bgY + bgHeight - padding);
 
     g_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
-    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout, g_ctx.textBrush);
+    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), g_ctx.textBrush.Get());
 }
 
 static void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
@@ -220,7 +217,7 @@ static void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
     if (FAILED(g_ctx.writeFactory->CreateTextLayout(
         text.c_str(),
         static_cast<UINT32>(text.length()),
-        g_ctx.textFormat,
+        g_ctx.textFormat.Get(),
         rtSize.width,
         rtSize.height,
         &textLayout
@@ -250,13 +247,12 @@ static void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
     ComPtr<ID2D1SolidColorBrush> bgBrush;
     renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &bgBrush);
     if (bgBrush) {
-        renderTarget->FillRectangle(bgRect, bgBrush);
+        renderTarget->FillRectangle(bgRect, bgBrush.Get());
     }
 
     D2D1_RECT_F textRect = D2D1::RectF(bgX + padding, bgY + padding, bgX + bgWidth - padding, bgY + bgHeight - padding);
-
     g_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
-    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout, g_ctx.textBrush);
+    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), g_ctx.textBrush.Get());
 }
 
 static void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
@@ -279,7 +275,7 @@ static void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
     if (FAILED(g_ctx.writeFactory->CreateTextLayout(
         g_ctx.ocrMessage.c_str(),
         static_cast<UINT32>(g_ctx.ocrMessage.length()),
-        g_ctx.textFormat,
+        g_ctx.textFormat.Get(),
         rtSize.width - 4 * padding,
         rtSize.height,
         &textLayout
@@ -302,10 +298,9 @@ static void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
     g_ctx.ocrMessageBgBrush->SetOpacity(opacity * 0.7f);
     g_ctx.ocrMessageBrush->SetOpacity(opacity);
 
-    renderTarget->FillRoundedRectangle(roundedBgRect, g_ctx.ocrMessageBgBrush);
-
+    renderTarget->FillRoundedRectangle(roundedBgRect, g_ctx.ocrMessageBgBrush.Get());
     D2D1_RECT_F textRect = D2D1::RectF(bgX, bgY + padding, bgX + bgWidth, bgY + bgHeight - padding);
-    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout, g_ctx.ocrMessageBrush);
+    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), g_ctx.ocrMessageBrush.Get());
 
     g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
     g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
@@ -319,7 +314,7 @@ void Render() {
     if (g_ctx.bgColor == BackgroundColor::Transparent && g_ctx.checkerboardBrush) {
         D2D1_SIZE_F rtSize = g_ctx.renderTarget->GetSize();
         g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-        g_ctx.renderTarget->FillRectangle(D2D1::RectF(0, 0, rtSize.width, rtSize.height), g_ctx.checkerboardBrush);
+        g_ctx.renderTarget->FillRectangle(D2D1::RectF(0, 0, rtSize.width, rtSize.height), g_ctx.checkerboardBrush.Get());
     }
     else {
         D2D1_COLOR_F color;
@@ -357,9 +352,9 @@ void Render() {
         g_ctx.renderTarget->DrawTextW(
             L"Loading...",
             10,
-            g_ctx.textFormat,
+            g_ctx.textFormat.Get(),
             layoutRect,
-            g_ctx.textBrush
+            g_ctx.textBrush.Get()
         );
         g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
         g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
@@ -380,9 +375,9 @@ void Render() {
             if (g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
                 if (!g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame]) {
 
-                    ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame]));
+                    ComPtr<IWICBitmapSource> source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
                     ComPtr<ID2D1Bitmap> d2dFrameBitmap;
-                    if (SUCCEEDED(g_ctx.renderTarget->CreateBitmapFromWicBitmap(source, nullptr, &d2dFrameBitmap))) {
+                    if (SUCCEEDED(g_ctx.renderTarget->CreateBitmapFromWicBitmap(source.Get(), nullptr, &d2dFrameBitmap))) {
                         g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame] = d2dFrameBitmap;
                     }
                 }
@@ -393,9 +388,9 @@ void Render() {
         else if (!g_ctx.isSvg) {
             CriticalSectionLock lock(g_ctx.wicMutex);
             if (!g_ctx.d2dBitmap && g_ctx.wicConverter) {
-                ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.wicConverter));
+                ComPtr<IWICBitmapSource> source = g_ctx.wicConverter;
                 g_ctx.renderTarget->CreateBitmapFromWicBitmap(
-                    source,
+                    source.Get(),
                     nullptr,
                     &g_ctx.d2dBitmap
                 );
@@ -494,7 +489,7 @@ void Render() {
                     D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
                     ((isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
                 g_ctx.renderTarget->DrawBitmap(
-                    bitmapToDraw, nullptr, opacity,
+                    bitmapToDraw.Get(), nullptr, opacity,
                     interpModeBmp
                 );
             }
@@ -517,10 +512,10 @@ void Render() {
                 localRect.right = std::min(bmpSize.width, localRect.right);
                 localRect.bottom = std::min(bmpSize.height, localRect.bottom);
                 if (localRect.left < localRect.right && localRect.top < localRect.bottom) {
-                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, 0.0f, bmpSize.width, localRect.top), g_ctx.fadeBrush);
-                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.bottom, bmpSize.width, bmpSize.height), g_ctx.fadeBrush);
-                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.top, localRect.left, localRect.bottom), g_ctx.fadeBrush);
-                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(localRect.right, localRect.top, bmpSize.width, localRect.bottom), g_ctx.fadeBrush);
+                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, 0.0f, bmpSize.width, localRect.top), g_ctx.fadeBrush.Get());
+                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.bottom, bmpSize.width, bmpSize.height), g_ctx.fadeBrush.Get());
+                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.top, localRect.left, localRect.bottom), g_ctx.fadeBrush.Get());
+                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(localRect.right, localRect.top, bmpSize.width, localRect.bottom), g_ctx.fadeBrush.Get());
                 }
             }
         }
@@ -548,9 +543,9 @@ void Render() {
             g_ctx.renderTarget->DrawTextW(
                 L"Right-click for options or drag an image here",
                 46,
-                g_ctx.textFormat,
+                g_ctx.textFormat.Get(),
                 layoutRect,
-                g_ctx.textBrush
+                g_ctx.textBrush.Get()
             );
             g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);

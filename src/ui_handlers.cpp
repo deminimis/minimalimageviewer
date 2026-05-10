@@ -459,10 +459,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                             UINT newH = static_cast<UINT>(std::max(1.0f, h * targetZoom));
                             ComPtr<IWICBitmapScaler> scaler;
                             if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
-                                if (SUCCEEDED(scaler->Initialize(source, newW, newH, WICBitmapInterpolationModeFant))) {
+                                if (SUCCEEDED(scaler->Initialize(source.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
                                     ComPtr<IWICBitmap> hqBitmap;
-                                    if (SUCCEEDED(localFactory->CreateBitmapFromSource(scaler, WICBitmapCacheOnLoad, &hqBitmap))) {
-                                        IWICBitmap* pRawBitmap = static_cast<IWICBitmap*>(hqBitmap);
+                                    if (SUCCEEDED(localFactory->CreateBitmapFromSource(scaler.Get(), WICBitmapCacheOnLoad, &hqBitmap))) {
+                                        IWICBitmap* pRawBitmap = hqBitmap.Get();
                                         pRawBitmap->AddRef();
                                         PostMessage(g_ctx.hWnd, WM_APP_HQ_READY, (WPARAM)pRawBitmap, (LPARAM)(targetZoom * 10000.0f));
                                     }
@@ -720,8 +720,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     g_ctx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
                     D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
                     ComPtr<ID2D1Bitmap1> targetBmp;
-                    g_ctx.renderTarget->CreateBitmapFromDxgiSurface((IDXGISurface*)backBuffer, &bmpProps, &targetBmp);
-                    g_ctx.renderTarget->SetTarget((ID2D1Bitmap1*)targetBmp);
+                    g_ctx.renderTarget->CreateBitmapFromDxgiSurface(backBuffer.Get(), &bmpProps, &targetBmp);
+                    g_ctx.renderTarget->SetTarget(targetBmp.Get());
                 }
                 if (g_ctx.isAnimated && !g_ctx.animationFrameDelays.empty()) {
                     KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
