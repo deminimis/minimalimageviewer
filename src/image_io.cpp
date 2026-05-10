@@ -262,7 +262,8 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
                     }
                 }
             }
-            if (delay < 10) delay = 100;
+            if (delay < 20) delay = 100;
+
             allFramesDelays.push_back(delay);
 
             UINT canvasStride = canvasWidth * 4;

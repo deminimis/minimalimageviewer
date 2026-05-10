@@ -417,10 +417,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (wParam == ANIMATION_TIMER_ID) {
             CriticalSectionLock lock(g_ctx.wicMutex);
             if (g_ctx.isAnimated && !g_ctx.animationFrameDelays.empty()) {
+
+                UINT currentDelay = g_ctx.animationFrameDelays[g_ctx.currentAnimationFrame];
                 g_ctx.currentAnimationFrame = (g_ctx.currentAnimationFrame + 1) % g_ctx.animationFrameDelays.size();
+                UINT nextDelay = g_ctx.animationFrameDelays[g_ctx.currentAnimationFrame];
+
                 InvalidateRect(hWnd, nullptr, FALSE);
-                KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
-                SetTimer(g_ctx.hWnd, ANIMATION_TIMER_ID, g_ctx.animationFrameDelays[g_ctx.currentAnimationFrame], nullptr);
+
+                if (currentDelay != nextDelay) {
+                    KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
+                    SetTimer(g_ctx.hWnd, ANIMATION_TIMER_ID, nextDelay, nullptr);
+                }
             }
         }
         else if (wParam == OCR_MESSAGE_TIMER_ID) {
