@@ -38,7 +38,9 @@ void CreateDeviceResources() {
         D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
 
         ComPtr<IDXGIDevice> dxgiDevice;
-        d3dDevice.As(&dxgiDevice);
+        if (d3dDevice) {
+            d3dDevice->QueryInterface(IID_PPV_ARGS(&dxgiDevice));
+        }
 
         ComPtr<ID2D1Device> d2dDevice;
         g_ctx.d2dFactory->CreateDevice(dxgiDevice.Get(), &d2dDevice);
@@ -68,7 +70,7 @@ void CreateDeviceResources() {
 
         g_ctx.renderTarget->CreateEffect(CLSID_D2D1ColorMatrix, &g_ctx.colorMatrixEffect);
 
-        HRESULT hr = S_OK;
+        hr = S_OK;
         if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &g_ctx.textBrush); }
         if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f), &g_ctx.cropRectBrush); }
         if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &g_ctx.fadeBrush); }
@@ -121,7 +123,7 @@ void DiscardDeviceResources() {
     g_ctx.animationD2DBitmaps.clear();
 }
 
-static void DrawOsdOverlay(ID2D1HwndRenderTarget* renderTarget) {
+static void DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     ImageProperties props = GetCurrentOsdProperties();
     if (props.filePath.empty()) return;
 
@@ -174,7 +176,7 @@ static void DrawOsdOverlay(ID2D1HwndRenderTarget* renderTarget) {
     renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout, g_ctx.textBrush);
 }
 
-static void DrawEyedropperOverlay(ID2D1HwndRenderTarget* renderTarget) {
+static void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
     if (g_ctx.colorStringRgb.empty() && !g_ctx.didCopyColor) return;
 
     std::wstring text;
@@ -233,7 +235,7 @@ static void DrawEyedropperOverlay(ID2D1HwndRenderTarget* renderTarget) {
     renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout, g_ctx.textBrush);
 }
 
-static void DrawOcrMessageOverlay(ID2D1HwndRenderTarget* renderTarget) {
+static void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
     if (g_ctx.ocrMessage.empty() || !g_ctx.ocrMessageBrush || !g_ctx.ocrMessageBgBrush || !g_ctx.textFormat) return;
 
     ULONGLONG elapsedTime = GetTickCount64() - g_ctx.ocrMessageStartTime;
@@ -467,24 +469,30 @@ void Render() {
                 D2D1_MATRIX_5X4_F matrix = D2D1::Matrix5x4F(
                     rR * c, gR * c, bR * c, 0.0f,
                     rG * c, gG * c, bG * c, 0.0f,
-                    rB * c, gB * c, bB ,* c, 0.0f,
-                    0.0f, 0.0f, 0.0f, opacity 
+                    rB * c, gB * c, bB * c, 0.0f,
+                    0.0f, 0.0f, 0.0f, opacity,
                     offset, offset, offset, 0.0f
                 );
 
                 g_ctx.colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
 
+                D2D1_INTERPOLATION_MODE interpModeD2D = (!g_ctx.smoothScaling) ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
+                    ((isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_INTERPOLATION_MODE_LINEAR : D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+
                 g_ctx.renderTarget->DrawImage(
                     g_ctx.colorMatrixEffect.Get(),
                     nullptr,
                     nullptr,
-                    (isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_INTERPOLATION_MODE_LINEAR : D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                    interpModeD2D
                 );
             }
             else {
+                D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!g_ctx.smoothScaling) ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
+                    ((isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+
                 g_ctx.renderTarget->DrawBitmap(
                     bitmapToDraw, nullptr, opacity,
-                    (isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                    interpModeBmp
                 );
             }
 
@@ -637,6 +645,8 @@ void Render() {
 
 void TriggerHqRender() {
     g_ctx.d2dBitmapHq = nullptr;
+    if (!g_ctx.smoothScaling) return; // Skip HQ rendering if smooth scaling disabled. 
+
     if (!g_ctx.isAnimated && g_ctx.wicConverter) {
         KillTimer(g_ctx.hWnd, HQ_RENDER_TIMER_ID);
         g_ctx.isHqPending = true;

@@ -718,8 +718,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                     g_ctx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
                     D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
                     ComPtr<ID2D1Bitmap1> targetBmp;
-                    g_ctx.renderTarget->CreateBitmapFromDxgiSurface(backBuffer.Get(), &bmpProps, &targetBmp);
-                    g_ctx.renderTarget->SetTarget(targetBmp.Get());
+                    g_ctx.renderTarget->CreateBitmapFromDxgiSurface((IDXGISurface*)backBuffer, &bmpProps, &targetBmp);
+                    g_ctx.renderTarget->SetTarget((ID2D1Bitmap1*)targetBmp);
                 }
                 if (g_ctx.isAnimated && !g_ctx.animationFrameDelays.empty()) {
                     KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);

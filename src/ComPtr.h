@@ -50,6 +50,19 @@ public:
     operator bool() const {
         return ptr != nullptr;
     }
+
+    T* Get() const {
+        return ptr;
+    }
+
+    T** GetAddressOf() {
+        return &ptr;
+    }
+
+    template <typename U>
+    HRESULT As(ComPtr<U>* p) const {
+        return ptr ? ptr->QueryInterface(__uuidof(U), (void**)p->operator&()) : E_NOINTERFACE;
+    }
 private:
     T* ptr;
 };

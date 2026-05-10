@@ -24,7 +24,7 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
         CheckDlgButton(hDlg, IDC_CHECK_START_FULLSCREEN, g_ctx.startFullScreen ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, g_ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_AUTO_REFRESH, g_ctx.isAutoRefresh ? BST_CHECKED : BST_UNCHECKED);
-
+        CheckDlgButton(hDlg, IDC_CHECK_SMOOTH_SCALING, g_ctx.smoothScaling ? BST_CHECKED : BST_UNCHECKED);
         CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL,
             g_ctx.defaultZoomMode == DefaultZoomMode::Fit ? IDC_RADIO_ZOOM_FIT : IDC_RADIO_ZOOM_ACTUAL);
         return (INT_PTR)TRUE;
@@ -49,6 +49,12 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
                 else {
                     KillTimer(g_ctx.hWnd, AUTO_REFRESH_TIMER_ID);
                 }
+            }
+
+            bool newSmoothScaling = (IsDlgButtonChecked(hDlg, IDC_CHECK_SMOOTH_SCALING) == BST_CHECKED);
+            if (newSmoothScaling != g_ctx.smoothScaling) {
+                g_ctx.smoothScaling = newSmoothScaling;
+                TriggerHqRender(); 
             }
 
             if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) g_ctx.defaultZoomMode = DefaultZoomMode::Fit;
@@ -146,21 +152,21 @@ static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WP
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
-        switch (LOWORD(wParam)) {
-        case IDOK: {
-            g_ctx.savedBrightness = g_ctx.brightness;
-            g_ctx.savedContrast = g_ctx.savedContrast;
-            g_ctx.savedSaturation = g_ctx.savedSaturation;
-            EndDialog(hDlg, IDOK);
+        if (LOWORD(wParam) == IDC_COMBO_ACTION && HIWORD(wParam) == CBN_SELCHANGE) {
+            int idx = static_cast<int>(SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0));
+            if (idx != CB_ERR) {
+                SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, g_ctx.hotkeys[idx], 0);
+            }
             return (INT_PTR)TRUE;
         }
-        case IDCANCEL: {
-            g_ctx.brightness = g_ctx.savedBrightness;
-            g_ctx.contrast = g_ctx.savedContrast;
-            g_ctx.saturation = g_ctx.savedSaturation;
-            ApplyEffectsToView();
-            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
-            EndDialog(hDlg, IDCANCEL);
+        switch (LOWORD(wParam)) {
+        case IDOK: {
+            int idx = static_cast<int>(SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0));
+            if (idx != CB_ERR) {
+                g_ctx.hotkeys[idx] = static_cast<WORD>(SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0));
+                SetDlgItemTextW(hDlg, IDOK, L"Applied!");
+                SetTimer(hDlg, 1, 1500, nullptr);
+            }
             return (INT_PTR)TRUE;
         }
         case IDC_BUTTON_RESET_BC: {

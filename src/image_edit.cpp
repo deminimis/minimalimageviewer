@@ -97,6 +97,9 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
         BYTE* pRow = pPixels + (y * stride);
         for (UINT x = 0; x < width; ++x) {
 
+            // Bounds check 
+            if ((y * stride) + (x * 4) + 3 >= bufferSize) break;
+
             BYTE* pPixel = pRow + (x * 4);
 
             BYTE b = bcLut[pPixel[0]];

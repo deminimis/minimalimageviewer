@@ -208,6 +208,10 @@ struct AppContext {
     ComPtr<IWICFormatConverter> preloadedPrevConverter;
     GUID preloadedNextFormat = {};
     GUID preloadedPrevFormat = {};
+    std::wstring preloadedNextPath;
+    std::wstring preloadedPrevPath;
+    UINT preloadedNextOrientation = 1;
+    UINT preloadedPrevOrientation = 1;
     std::thread preloadingNextThread;
     std::thread preloadingPrevThread;
     std::atomic<bool> cancelPreloading{ false };
@@ -267,10 +271,11 @@ struct AppContext {
     float savedSaturation = 1.0f;
 
     bool isAutoRefresh = false;
+    bool smoothScaling = true;
     FILETIME lastWriteTime = { 0 };
     bool preserveView = false;
     float renderScale = 1.0f;
-    WORD hotkeys[Act_Count];
+    WORD hotkeys[Act_Count]{};
 };
 
 void CenterImage(bool resetZoom);
