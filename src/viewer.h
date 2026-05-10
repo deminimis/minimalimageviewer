@@ -220,8 +220,6 @@ struct AppContext {
     std::vector<BYTE> stagedSvgData;
     UINT preloadedNextOrientation = 1;
     UINT preloadedPrevOrientation = 1;
-    std::thread preloadingNextThread;
-    std::thread preloadingPrevThread;
     std::atomic<bool> cancelPreloading{ false };
     CRITICAL_SECTION preloadMutex{};
 

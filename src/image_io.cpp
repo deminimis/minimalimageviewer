@@ -639,9 +639,6 @@ void ViewerApp::CleanupLoadingThread() {
 
 void ViewerApp::CleanupPreloadingThreads() {
     m_ctx.cancelPreloading = true;
-    if (m_ctx.preloadingNextThread.joinable()) m_ctx.preloadingNextThread.join();
-    if (m_ctx.preloadingPrevThread.joinable()) m_ctx.preloadingPrevThread.join();
-
     CriticalSectionLock lock(m_ctx.preloadMutex);
     m_ctx.preloadedNextConverter = nullptr;
     m_ctx.preloadedPrevConverter = nullptr;
@@ -711,11 +708,12 @@ void ViewerApp::StartPreloading() {
         CoUninitialize();
         };
 
-    m_ctx.preloadingNextThread = std::thread([this, preloadTask, nextPath]() {
+    m_ctx.RunBackgroundTask([this, preloadTask, nextPath]() {
         preloadTask(nextPath, std::addressof(m_ctx.preloadedNextConverter), &m_ctx.preloadedNextFormat, &m_ctx.preloadedNextOrientation, &m_ctx.preloadedNextPath);
         });
+
     if (nextIdx != prevIdx) {
-        m_ctx.preloadingPrevThread = std::thread([this, preloadTask, prevPath]() {
+        m_ctx.RunBackgroundTask([this, preloadTask, prevPath]() {
             preloadTask(prevPath, std::addressof(m_ctx.preloadedPrevConverter), &m_ctx.preloadedPrevFormat, &m_ctx.preloadedPrevOrientation, &m_ctx.preloadedPrevPath);
             });
     }
