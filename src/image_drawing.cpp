@@ -87,7 +87,8 @@ void ViewerApp::CreateDeviceResources() {
             hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &m_ctx.ocrMessageBgBrush);
         }
         if (SUCCEEDED(hr)) {
-            hr = m_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f, L"en-us", &m_ctx.textFormat);
+            float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
+            hr = m_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f * dpiScale, L"en-us", &m_ctx.textFormat);
         }
         if (SUCCEEDED(hr)) {
             m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -152,8 +153,9 @@ void ViewerApp::DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     if (props.filePath.empty()) return;
 
     D2D1_SIZE_F rtSize = renderTarget->GetSize();
-    float padding = 10.0f;
-    float lineHeight = 18.0f;
+    float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
+    float padding = 10.0f * dpiScale;
+    float lineHeight = 18.0f * dpiScale;
     float textHeight = lineHeight * 8 + padding * 2;
 
     std::wstring osdText;
@@ -209,7 +211,9 @@ void ViewerApp::DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
     }
 
     D2D1_SIZE_F rtSize = renderTarget->GetSize();
-    float padding = 10.0f;
+    float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
+    float padding = 10.0f * dpiScale;
+    float offset = 20.0f * dpiScale;
 
     renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 
@@ -228,16 +232,15 @@ void ViewerApp::DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
 
     float bgWidth = metrics.widthIncludingTrailingWhitespace + padding * 2;
     float bgHeight = metrics.height + padding * 2;
-
     D2D1_POINT_2F mousePos = { (float)m_ctx.currentMousePos.x, (float)m_ctx.currentMousePos.y };
-    float bgX = mousePos.x + 20.0f;
-    float bgY = mousePos.y + 20.0f;
+    float bgX = mousePos.x + offset;
+    float bgY = mousePos.y + offset;
 
     if (bgX + bgWidth > rtSize.width) {
-        bgX = mousePos.x - 20.0f - bgWidth;
+        bgX = mousePos.x - offset - bgWidth;
     }
     if (bgY + bgHeight > rtSize.height) {
-        bgY = mousePos.y - 20.0f - bgHeight;
+        bgY = mousePos.y - offset - bgHeight;
     }
     bgX = std::max(padding, bgX);
     bgY = std::max(padding, bgY);
@@ -266,8 +269,9 @@ void ViewerApp::DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
     }
     if (opacity == 0.0f) return;
 
+    float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
     D2D1_SIZE_F rtSize = renderTarget->GetSize();
-    float padding = 15.0f;
+    float padding = 15.0f * dpiScale;
 
     renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 
@@ -293,7 +297,7 @@ void ViewerApp::DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
     float bgY = (rtSize.height - bgHeight) / 2.0f;
 
     D2D1_RECT_F bgRect = D2D1::RectF(bgX, bgY, bgX + bgWidth, bgY + bgHeight);
-    D2D1_ROUNDED_RECT roundedBgRect = D2D1::RoundedRect(bgRect, 5.0f, 5.0f);
+    D2D1_ROUNDED_RECT roundedBgRect = D2D1::RoundedRect(bgRect, 5.0f * dpiScale, 5.0f * dpiScale);
 
     m_ctx.ocrMessageBgBrush->SetOpacity(opacity * 0.7f);
     m_ctx.ocrMessageBrush->SetOpacity(opacity);
@@ -579,19 +583,23 @@ void ViewerApp::Render() {
             ConvertImageToWindowPoint(m_ctx.cropRectLocal.right, m_ctx.cropRectLocal.bottom, p3);
             ConvertImageToWindowPoint(m_ctx.cropRectLocal.left, m_ctx.cropRectLocal.bottom, p4);
 
+            float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
+            float lineThick = 2.0f * dpiScale;
+
             m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
             m_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
-            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p1.x, (float)p1.y), D2D1::Point2F((float)p2.x, (float)p2.y), m_ctx.cropRectBrush.Get(), 2.0f);
-            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p2.x, (float)p2.y), D2D1::Point2F((float)p3.x, (float)p3.y), m_ctx.cropRectBrush.Get(), 2.0f);
-            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p3.x, (float)p3.y), D2D1::Point2F((float)p4.x, (float)p4.y), m_ctx.cropRectBrush.Get(), 2.0f);
-            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p4.x, (float)p4.y), D2D1::Point2F((float)p1.x, (float)p1.y), m_ctx.cropRectBrush.Get(), 2.0f);
+            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p1.x, (float)p1.y), D2D1::Point2F((float)p2.x, (float)p2.y), m_ctx.cropRectBrush.Get(), lineThick);
+            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p2.x, (float)p2.y), D2D1::Point2F((float)p3.x, (float)p3.y), m_ctx.cropRectBrush.Get(), lineThick);
+            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p3.x, (float)p3.y), D2D1::Point2F((float)p4.x, (float)p4.y), m_ctx.cropRectBrush.Get(), lineThick);
+            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p4.x, (float)p4.y), D2D1::Point2F((float)p1.x, (float)p1.y), m_ctx.cropRectBrush.Get(), lineThick);
         }
 
         if (m_ctx.isCropPending && m_ctx.textFormat && m_ctx.textBrush) {
+            float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
             D2D1_SIZE_F rtSize = m_ctx.renderTarget->GetSize();
             D2D1_RECT_F layoutRect = D2D1::RectF(
                 0.0f,
-                10.0f,
+                10.0f * dpiScale,
                 rtSize.width,
                 rtSize.height
             );

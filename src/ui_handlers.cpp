@@ -517,6 +517,18 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             }
         }
         break;
+    case WM_DPICHANGED: {
+        RECT* prcNewWindow = reinterpret_cast<RECT*>(lParam);
+        SetWindowPos(hWnd, nullptr,
+            prcNewWindow->left, prcNewWindow->top,
+            prcNewWindow->right - prcNewWindow->left,
+            prcNewWindow->bottom - prcNewWindow->top,
+            SWP_NOZORDER | SWP_NOACTIVATE);
+
+        DiscardDeviceResources(); // recreate text/brush at new dpi. 
+        InvalidateRect(hWnd, nullptr, FALSE);
+        return 0;
+    }
     case WM_ERASEBKGND:
         return 1; 
     case WM_PAINT:

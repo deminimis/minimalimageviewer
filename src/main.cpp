@@ -39,8 +39,10 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     RECT startupRect;
     ReadSettings(m_ctx.settingsPath, startupRect, m_ctx.startFullScreen, m_ctx.enforceSingleInstance, m_ctx.alwaysOnTop);
+
+    float sysDpiScale = GetDpiForSystem() / 96.0f;
     if (IsRectEmpty(&startupRect)) {
-        startupRect = { CW_USEDEFAULT, CW_USEDEFAULT, 800, 600 };
+        startupRect = { CW_USEDEFAULT, CW_USEDEFAULT, static_cast<LONG>(800 * sysDpiScale), static_cast<LONG>(600 * sysDpiScale) };
     }
 
     if (m_ctx.enforceSingleInstance) {
@@ -101,15 +103,14 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     RegisterClassExW(&wcex);
 
     DWORD exStyle = (m_ctx.alwaysOnTop) ? WS_EX_TOPMOST : 0;
-
     m_ctx.hWnd = CreateWindowExW(
         exStyle,
         wcex.lpszClassName,
         L"Minimal Image Viewer",
         WS_OVERLAPPEDWINDOW,
         startupRect.left, startupRect.top,
-        (startupRect.left == CW_USEDEFAULT) ? 800 : (startupRect.right - startupRect.left),
-        (startupRect.top == CW_USEDEFAULT) ? 600 : (startupRect.bottom - startupRect.top),
+        (startupRect.left == CW_USEDEFAULT) ? static_cast<int>(800 * sysDpiScale) : (startupRect.right - startupRect.left),
+        (startupRect.top == CW_USEDEFAULT) ? static_cast<int>(600 * sysDpiScale) : (startupRect.bottom - startupRect.top),
         nullptr, nullptr, hInstance, this
     );
 
@@ -182,6 +183,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     ViewerApp app;
     return app.Run(hInstance, nCmdShow, lpCmdLine);
 }
