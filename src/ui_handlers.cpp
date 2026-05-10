@@ -246,11 +246,6 @@ static void OnContextMenu(HWND hWnd, POINT pt) {
     case IDM_FLIP:          FlipImage(); break;
     case IDM_GRAYSCALE:
         g_ctx.isGrayscale = !g_ctx.isGrayscale;
-        {
-            CriticalSectionLock lock(g_ctx.wicMutex);
-            g_ctx.d2dBitmap = nullptr;
-            g_ctx.animationD2DBitmaps.clear();
-        }
         InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
         break;
     case IDM_CROP: {

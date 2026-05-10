@@ -381,20 +381,6 @@ void Render() {
                 if (!g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame]) {
 
                     ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame]));
-                    if (g_ctx.isGrayscale) {
-                        ComPtr<IWICFormatConverter> grayConverter;
-                        if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
-                            if (SUCCEEDED(grayConverter->Initialize(source, GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                                ComPtr<IWICFormatConverter> finalConverter;
-                                if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&finalConverter))) {
-                                    if (SUCCEEDED(finalConverter->Initialize(grayConverter, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                                        source = finalConverter;
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     ComPtr<ID2D1Bitmap> d2dFrameBitmap;
                     if (SUCCEEDED(g_ctx.renderTarget->CreateBitmapFromWicBitmap(source, nullptr, &d2dFrameBitmap))) {
                         g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame] = d2dFrameBitmap;
@@ -408,20 +394,6 @@ void Render() {
             CriticalSectionLock lock(g_ctx.wicMutex);
             if (!g_ctx.d2dBitmap && g_ctx.wicConverter) {
                 ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.wicConverter));
-                if (g_ctx.isGrayscale) {
-                    ComPtr<IWICFormatConverter> grayConverter;
-                    if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
-                        if (SUCCEEDED(grayConverter->Initialize(source, GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                            ComPtr<IWICFormatConverter> finalConverter;
-                            if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&finalConverter))) {
-                                if (SUCCEEDED(finalConverter->Initialize(grayConverter, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                                    source = finalConverter;
-                                }
-                            }
-                        }
-                    }
-                }
-
                 g_ctx.renderTarget->CreateBitmapFromWicBitmap(
                     source,
                     nullptr,
@@ -492,7 +464,7 @@ void Render() {
                 g_ctx.colorMatrixEffect->SetInput(0, bitmapToDraw.Get());
                 float b = g_ctx.brightness;
                 float c = g_ctx.contrast;
-                float s = g_ctx.saturation;
+                float s = g_ctx.isGrayscale ? 0.0f : g_ctx.saturation;
                 // Natively calculated on GPU
                 float invS = 1.0f - s;
                 float rR = invS * 0.299f + s; float rG = invS * 0.587f;     float rB = invS * 0.114f;
