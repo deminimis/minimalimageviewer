@@ -560,31 +560,43 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         }
 
         // Start background folder scan ONLY AFTER image is ready to display
-        std::wstring currentFilePath = m_ctx.loadingFilePath;
-        int currentSeqId = seqId;
-        m_ctx.RunBackgroundTask([this, currentFilePath, currentSeqId]() {
-            wchar_t folder[MAX_PATH] = { 0 };
-            wcscpy_s(folder, MAX_PATH, currentFilePath.c_str());
-            PathRemoveFileSpecW(folder);
+        bool needsScan = false;
+        {
+            CriticalSectionLock lock(m_ctx.wicMutex);
+            needsScan = m_ctx.imageFiles.empty();
+        }
 
-            std::vector<std::wstring> newFiles = ScanDirectory(folder, currentSeqId);
+        if (needsScan) {
+            std::wstring currentFilePath = m_ctx.loadingFilePath;
+            int currentSeqId = seqId;
+            m_ctx.RunBackgroundTask([this, currentFilePath, currentSeqId]() {
+                wchar_t folder[MAX_PATH] = { 0 };
+                wcscpy_s(folder, MAX_PATH, currentFilePath.c_str());
+                PathRemoveFileSpecW(folder);
 
-            if (!IsSequenceValid(currentSeqId)) return;
+                std::vector<std::wstring> newFiles = ScanDirectory(folder, currentSeqId);
 
-            int foundIndex = -1;
-            auto it = std::find_if(newFiles.begin(), newFiles.end(),
-                [&](const std::wstring& s) { return _wcsicmp(s.c_str(), currentFilePath.c_str()) == 0; }
-            );
-            foundIndex = (it != newFiles.end()) ? static_cast<int>(std::distance(newFiles.begin(), it)) : -1;
+                if (!IsSequenceValid(currentSeqId)) return;
 
-            {
-                CriticalSectionLock lock(m_ctx.wicMutex);
-                m_ctx.stagedImageFiles = std::move(newFiles);
-                m_ctx.stagedFoundIndex = foundIndex;
-            }
+                int foundIndex = -1;
+                auto it = std::find_if(newFiles.begin(), newFiles.end(),
+                    [&](const std::wstring& s) { return _wcsicmp(s.c_str(), currentFilePath.c_str()) == 0; }
+                );
+                foundIndex = (it != newFiles.end()) ? static_cast<int>(std::distance(newFiles.begin(), it)) : -1;
 
-            PostMessage(m_ctx.hWnd, WM_APP_DIR_READY, 0, (LPARAM)currentSeqId);
-            });
+                {
+                    CriticalSectionLock lock(m_ctx.wicMutex);
+                    m_ctx.stagedImageFiles = std::move(newFiles);
+                    m_ctx.stagedFoundIndex = foundIndex;
+                }
+
+                PostMessage(m_ctx.hWnd, WM_APP_DIR_READY, 0, (LPARAM)currentSeqId);
+                });
+        }
+        else {
+            // Directory is already cached, jump straight to preloading next/prev
+            StartPreloading();
+        }
     }
     else {
         m_ctx.isLoading = false;

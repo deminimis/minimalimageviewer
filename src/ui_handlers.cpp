@@ -151,7 +151,13 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
                 }
             }
             break;
-        case VK_F5: if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str()); break;
+        case VK_F5:
+            if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
+                std::wstring currentFile = m_ctx.imageFiles[m_ctx.currentImageIndex];
+                m_ctx.imageFiles.clear(); // Clear cache to force directory rescan
+                LoadImageFromFile(currentFile);
+            }
+            break;
         }
     }
 }
@@ -330,6 +336,7 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
         else m_ctx.currentSortCriteria = SortCriteria::ByFileSize;
 
         if (!m_ctx.currentDirectory.empty()) {
+            m_ctx.imageFiles.clear(); // force directory rescan
             LoadImageFromFile(currentFile);
         }
         break;
@@ -532,6 +539,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
                         if (hFile != INVALID_HANDLE_VALUE) {
                             CloseHandle(hFile);
                             m_ctx.preserveView = true;
+                            m_ctx.imageFiles.clear(); // force directory rescan
                             LoadImageFromFile(currentFile);
                         }
                     }
