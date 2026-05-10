@@ -5,7 +5,7 @@
 #include <winrt/Windows.Storage.h>
 #include <winrt/Windows.Storage.Streams.h>
 
-extern AppContext g_ctx;
+
 
 using namespace winrt;
 using namespace winrt::Windows::Foundation;
@@ -94,28 +94,28 @@ static void PerformOcrTask(std::wstring filePath, HWND hWnd, bool useArea, D2D1_
     winrt::uninit_apartment();
 }
 
-void PerformOcr() {
-    if (g_ctx.loadingFilePath.empty()) {
-        MessageBoxW(g_ctx.hWnd, L"No image file loaded. OCR cannot be performed on pasted images.", L"OCR Error", MB_OK | MB_ICONWARNING);
+void ViewerApp::PerformOcr() {
+    if (m_ctx.loadingFilePath.empty()) {
+        MessageBoxW(m_ctx.hWnd, L"No image file loaded. OCR cannot be performed on pasted images.", L"OCR Error", MB_OK | MB_ICONWARNING);
         return;
     }
     SetCursor(LoadCursor(nullptr, IDC_WAIT));
-    std::wstring path = g_ctx.loadingFilePath;
-    HWND hwnd = g_ctx.hWnd;
-    g_ctx.RunBackgroundTask([path, hwnd]() {
+    std::wstring path = m_ctx.loadingFilePath;
+    HWND hwnd = m_ctx.hWnd;
+    m_ctx.RunBackgroundTask([path, hwnd]() {
         PerformOcrTask(path, hwnd, false, D2D1_RECT_F{});
         });
 }
 
-void PerformOcrArea(D2D1_RECT_F ocrRectLocal) {
-    if (g_ctx.loadingFilePath.empty()) {
-        MessageBoxW(g_ctx.hWnd, L"No image file loaded. OCR cannot be performed on pasted images.", L"OCR Error", MB_OK | MB_ICONWARNING);
+void ViewerApp::PerformOcrArea(D2D1_RECT_F ocrRectLocal) {
+    if (m_ctx.loadingFilePath.empty()) {
+        MessageBoxW(m_ctx.hWnd, L"No image file loaded. OCR cannot be performed on pasted images.", L"OCR Error", MB_OK | MB_ICONWARNING);
         return;
     }
     SetCursor(LoadCursor(nullptr, IDC_WAIT));
-    std::wstring path = g_ctx.loadingFilePath;
-    HWND hwnd = g_ctx.hWnd;
-    g_ctx.RunBackgroundTask([path, hwnd, ocrRectLocal]() {
+    std::wstring path = m_ctx.loadingFilePath;
+    HWND hwnd = m_ctx.hWnd;
+    m_ctx.RunBackgroundTask([path, hwnd, ocrRectLocal]() {
         PerformOcrTask(path, hwnd, true, ocrRectLocal);
         });
 }

@@ -3,69 +3,82 @@
 #include <commctrl.h>
 #include <stdio.h>
 
-extern AppContext g_ctx;
 
-static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
-    static HBRUSH hDarkBrush = nullptr;
+
+INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    ViewerApp* pApp = nullptr;
+    if (message == WM_INITDIALOG) {
+        pApp = reinterpret_cast<ViewerApp*>(lParam);
+        SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pApp);
+    }
+    else {
+        pApp = reinterpret_cast<ViewerApp*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
+    }
+
+    if (!pApp) return (INT_PTR)FALSE;
+
+    auto& ctx = pApp->GetContext();
+
     switch (message) {
     case WM_INITDIALOG: {
-        UpdateTitleBarTheme(hDlg, g_ctx.bgColor);
-        if (g_ctx.bgColor == BackgroundColor::Black || g_ctx.bgColor == BackgroundColor::Grey) {
-            if (!hDarkBrush) hDarkBrush = CreateSolidBrush(RGB(32, 32, 32));
+        pApp->UpdateTitleBarTheme(hDlg, ctx.bgColor);
+        if (ctx.bgColor == BackgroundColor::Black || ctx.bgColor == BackgroundColor::Grey) {
+            if (!ctx.darkBrush) ctx.darkBrush = CreateSolidBrush(RGB(32, 32, 32));
         }
         else {
-            if (hDarkBrush) { DeleteObject(hDarkBrush); hDarkBrush = nullptr; }
+            if (ctx.darkBrush) {
+                DeleteObject(ctx.darkBrush);
+                ctx.darkBrush = nullptr;
+            }
         }
 
-        int bgRadio = IDC_RADIO_BG_GREY + static_cast<int>(g_ctx.bgColor);
+        int bgRadio = IDC_RADIO_BG_GREY + static_cast<int>(ctx.bgColor);
         CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, bgRadio);
 
-        CheckDlgButton(hDlg, IDC_CHECK_ALWAYS_ON_TOP, g_ctx.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_START_FULLSCREEN, g_ctx.startFullScreen ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, g_ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_AUTO_REFRESH, g_ctx.isAutoRefresh ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_SMOOTH_SCALING, g_ctx.smoothScaling ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_FADE_ANIMATION, g_ctx.enableFadeAnimation ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_ALWAYS_ON_TOP, ctx.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_START_FULLSCREEN, ctx.startFullScreen ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_AUTO_REFRESH, ctx.isAutoRefresh ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_SMOOTH_SCALING, ctx.smoothScaling ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_FADE_ANIMATION, ctx.enableFadeAnimation ? BST_CHECKED : BST_UNCHECKED);
         CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL,
-            g_ctx.defaultZoomMode == DefaultZoomMode::Fit ? IDC_RADIO_ZOOM_FIT : IDC_RADIO_ZOOM_ACTUAL);
+            ctx.defaultZoomMode == DefaultZoomMode::Fit ? IDC_RADIO_ZOOM_FIT : IDC_RADIO_ZOOM_ACTUAL);
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case IDOK: {
             for (int id = IDC_RADIO_BG_GREY; id <= IDC_RADIO_BG_TRANSPARENT; ++id) {
-                if (IsDlgButtonChecked(hDlg, id)) g_ctx.bgColor = static_cast<BackgroundColor>(id - IDC_RADIO_BG_GREY);
+                if (IsDlgButtonChecked(hDlg, id)) ctx.bgColor = static_cast<BackgroundColor>(id - IDC_RADIO_BG_GREY);
             }
 
-            g_ctx.alwaysOnTop = (IsDlgButtonChecked(hDlg, IDC_CHECK_ALWAYS_ON_TOP) == BST_CHECKED);
-            g_ctx.startFullScreen = (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
-            g_ctx.enforceSingleInstance = (IsDlgButtonChecked(hDlg, IDC_CHECK_SINGLE_INSTANCE) == BST_CHECKED);
+            ctx.alwaysOnTop = (IsDlgButtonChecked(hDlg, IDC_CHECK_ALWAYS_ON_TOP) == BST_CHECKED);
+            ctx.startFullScreen = (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
+            ctx.enforceSingleInstance = (IsDlgButtonChecked(hDlg, IDC_CHECK_SINGLE_INSTANCE) == BST_CHECKED);
 
             bool newAutoRefresh = (IsDlgButtonChecked(hDlg, IDC_CHECK_AUTO_REFRESH) == BST_CHECKED);
-            if (newAutoRefresh != g_ctx.isAutoRefresh) {
-                g_ctx.isAutoRefresh = newAutoRefresh;
-                if (g_ctx.isAutoRefresh) {
-                    SetTimer(g_ctx.hWnd, AUTO_REFRESH_TIMER_ID, 1000, nullptr);
+            if (newAutoRefresh != ctx.isAutoRefresh) {
+                ctx.isAutoRefresh = newAutoRefresh;
+                if (ctx.isAutoRefresh) {
+                    SetTimer(ctx.hWnd, AUTO_REFRESH_TIMER_ID, 1000, nullptr);
                 }
                 else {
-                    KillTimer(g_ctx.hWnd, AUTO_REFRESH_TIMER_ID);
+                    KillTimer(ctx.hWnd, AUTO_REFRESH_TIMER_ID);
                 }
             }
 
             bool newSmoothScaling = (IsDlgButtonChecked(hDlg, IDC_CHECK_SMOOTH_SCALING) == BST_CHECKED);
-            if (newSmoothScaling != g_ctx.smoothScaling) {
-                g_ctx.smoothScaling = newSmoothScaling;
-                TriggerHqRender();
+            if (newSmoothScaling != ctx.smoothScaling) {
+                ctx.smoothScaling = newSmoothScaling;
+                pApp->TriggerHqRender();
             }
 
-            g_ctx.enableFadeAnimation = (IsDlgButtonChecked(hDlg, IDC_CHECK_FADE_ANIMATION) == BST_CHECKED);
-
-            if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) g_ctx.defaultZoomMode = DefaultZoomMode::Fit;
-            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) g_ctx.defaultZoomMode = DefaultZoomMode::Actual;
-
-            SetWindowPos(g_ctx.hWnd, (g_ctx.alwaysOnTop) ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
-            UpdateTitleBarTheme(g_ctx.hWnd, g_ctx.bgColor);
-            InvalidateRect(g_ctx.hWnd, NULL, FALSE);
+            ctx.enableFadeAnimation = (IsDlgButtonChecked(hDlg, IDC_CHECK_FADE_ANIMATION) == BST_CHECKED);
+            if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) ctx.defaultZoomMode = DefaultZoomMode::Fit;
+            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) ctx.defaultZoomMode = DefaultZoomMode::Actual;
+            SetWindowPos(ctx.hWnd, (ctx.alwaysOnTop) ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            pApp->UpdateTitleBarTheme(ctx.hWnd, ctx.bgColor);
+            InvalidateRect(ctx.hWnd, NULL, FALSE);
 
             EndDialog(hDlg, IDOK);
             return (INT_PTR)TRUE;
@@ -78,61 +91,70 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLORBTN: {
-        if (g_ctx.bgColor == BackgroundColor::Black || g_ctx.bgColor == BackgroundColor::Grey) {
+        if (ctx.bgColor == BackgroundColor::Black || ctx.bgColor == BackgroundColor::Grey) {
             HDC hdc = (HDC)wParam;
             SetTextColor(hdc, RGB(255, 255, 255));
             SetBkColor(hdc, RGB(32, 32, 32));
-            return (INT_PTR)hDarkBrush;
+            return (INT_PTR)ctx.darkBrush;
         }
         break;
     }
     case WM_DESTROY:
-        if (hDarkBrush) { DeleteObject(hDarkBrush); hDarkBrush = nullptr; }
         break;
     }
     return (INT_PTR)FALSE;
 }
 
-void OpenPreferencesDialog() {
-    DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_PREFERENCES_DIALOG), g_ctx.hWnd, PreferencesDialogProc, 0);
+void ViewerApp::OpenPreferencesDialog() {
+    DialogBoxParam(m_ctx.hInst, MAKEINTRESOURCE(IDD_PREFERENCES_DIALOG), m_ctx.hWnd, PreferencesDialogProc, (LPARAM)this);
 }
 
-static void UpdateEffectLabels(HWND hDlg) {
+static void UpdateEffectLabels(HWND hDlg, ViewerApp* pApp) {
+    auto& ctx = pApp->GetContext();
     wchar_t buf[64];
-
-    swprintf_s(buf, L"Brightness: %d%%", static_cast<int>(g_ctx.brightness * 100));
+    swprintf_s(buf, L"Brightness: %d%%", static_cast<int>(ctx.brightness * 100));
     SetDlgItemTextW(hDlg, IDC_LABEL_BRIGHTNESS, buf);
-
-    swprintf_s(buf, L"Contrast: %d%%", static_cast<int>(g_ctx.contrast * 100));
+    swprintf_s(buf, L"Contrast: %d%%", static_cast<int>(ctx.contrast * 100));
     SetDlgItemTextW(hDlg, IDC_LABEL_CONTRAST, buf);
-
-    swprintf_s(buf, L"Saturation: %d%%", static_cast<int>(g_ctx.saturation * 100));
+    swprintf_s(buf, L"Saturation: %d%%", static_cast<int>(ctx.saturation * 100));
     SetDlgItemTextW(hDlg, IDC_LABEL_SATURATION, buf);
 }
 
-static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+INT_PTR CALLBACK ViewerApp::BrightnessContrastDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    ViewerApp* pApp = nullptr;
+    if (message == WM_INITDIALOG) {
+        pApp = reinterpret_cast<ViewerApp*>(lParam);
+        SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pApp);
+    }
+    else {
+        pApp = reinterpret_cast<ViewerApp*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
+    }
+
+    if (!pApp) return (INT_PTR)FALSE;
+
+    auto& ctx = pApp->GetContext();
+
     switch (message) {
     case WM_INITDIALOG: {
         UINT imgWidth, imgHeight;
-        if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
+        if (!pApp->GetCurrentImageSize(&imgWidth, &imgHeight)) {
             EndDialog(hDlg, IDCANCEL);
             return (INT_PTR)TRUE;
         }
 
-        g_ctx.savedBrightness = g_ctx.brightness;
-        g_ctx.savedContrast = g_ctx.contrast;
-        g_ctx.savedSaturation = g_ctx.saturation;
-
+        ctx.savedBrightness = ctx.brightness;
+        ctx.savedContrast = ctx.contrast;
+        ctx.savedSaturation = ctx.saturation;
         auto setupSlider = [&](int id, int minV, int maxV, float val) {
             HWND hSlider = GetDlgItem(hDlg, id);
             SendMessageW(hSlider, TBM_SETRANGE, TRUE, MAKELPARAM(minV, maxV));
             SendMessageW(hSlider, TBM_SETPOS, TRUE, static_cast<int>(val * 100));
             };
-        setupSlider(IDC_SLIDER_BRIGHTNESS, -100, 100, g_ctx.brightness);
-        setupSlider(IDC_SLIDER_CONTRAST, 0, 300, g_ctx.contrast);
-        setupSlider(IDC_SLIDER_SATURATION, 0, 300, g_ctx.saturation);
+        setupSlider(IDC_SLIDER_BRIGHTNESS, -100, 100, ctx.brightness);
+        setupSlider(IDC_SLIDER_CONTRAST, 0, 300, ctx.contrast);
+        setupSlider(IDC_SLIDER_SATURATION, 0, 300, ctx.saturation);
 
-        UpdateEffectLabels(hDlg);
+        UpdateEffectLabels(hDlg, pApp);
         return (INT_PTR)TRUE;
     }
     case WM_HSCROLL: {
@@ -140,43 +162,42 @@ static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WP
         int pos = (int)SendMessageW(hSlider, TBM_GETPOS, 0, 0);
 
         if (hSlider == GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS)) {
-            g_ctx.brightness = pos / 100.0f;
+            ctx.brightness = pos / 100.0f;
         }
         else if (hSlider == GetDlgItem(hDlg, IDC_SLIDER_CONTRAST)) {
-            g_ctx.contrast = pos / 100.0f;
+            ctx.contrast = pos / 100.0f;
         }
         else if (hSlider == GetDlgItem(hDlg, IDC_SLIDER_SATURATION)) {
-            g_ctx.saturation = pos / 100.0f;
+            ctx.saturation = pos / 100.0f;
         }
 
-        ApplyEffectsToView();
-        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
-        UpdateEffectLabels(hDlg);
+        pApp->ApplyEffectsToView();
+        InvalidateRect(ctx.hWnd, nullptr, FALSE);
+        UpdateEffectLabels(hDlg, pApp);
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case IDC_BUTTON_RESET_BC:
-            g_ctx.brightness = 0.0f;
-            g_ctx.contrast = 1.0f;
-            g_ctx.saturation = 1.0f;
+            ctx.brightness = 0.0f;
+            ctx.contrast = 1.0f;
+            ctx.saturation = 1.0f;
             SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS), TBM_SETPOS, TRUE, 0);
             SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_CONTRAST), TBM_SETPOS, TRUE, 100);
             SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_SATURATION), TBM_SETPOS, TRUE, 100);
-            ApplyEffectsToView();
-            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
-            UpdateEffectLabels(hDlg);
+            pApp->ApplyEffectsToView();
+            InvalidateRect(ctx.hWnd, nullptr, FALSE);
+            UpdateEffectLabels(hDlg, pApp);
             return (INT_PTR)TRUE;
         case IDOK:
             EndDialog(hDlg, IDOK);
             return (INT_PTR)TRUE;
         case IDCANCEL:
-            // revert to saved values if cancelled
-            g_ctx.brightness = g_ctx.savedBrightness;
-            g_ctx.contrast = g_ctx.savedContrast;
-            g_ctx.saturation = g_ctx.savedSaturation;
-            ApplyEffectsToView();
-            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+            ctx.brightness = ctx.savedBrightness;
+            ctx.contrast = ctx.savedContrast;
+            ctx.saturation = ctx.savedSaturation;
+            pApp->ApplyEffectsToView();
+            InvalidateRect(ctx.hWnd, nullptr, FALSE);
             EndDialog(hDlg, IDCANCEL);
             return (INT_PTR)TRUE;
         }
@@ -185,17 +206,16 @@ static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WP
     return (INT_PTR)FALSE;
 }
 
-
-void OpenBrightnessContrastDialog() {
+void ViewerApp::OpenBrightnessContrastDialog() {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
-        MessageBoxW(g_ctx.hWnd, L"No image loaded to adjust.", L"Image Effects", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"No image loaded to adjust.", L"Image Effects", MB_ICONERROR);
         return;
     }
-    DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_BRIGHTNESS_DIALOG), g_ctx.hWnd, BrightnessContrastDialogProc, 0);
+    DialogBoxParam(m_ctx.hInst, MAKEINTRESOURCE(IDD_BRIGHTNESS_DIALOG), m_ctx.hWnd, BrightnessContrastDialogProc, (LPARAM)this);
 }
 
-std::wstring GetHotkeyString(WORD hk) {
+std::wstring ViewerApp::GetHotkeyString(WORD hk) {
     if (!hk) return L"";
     std::wstring str;
     BYTE mods = HIBYTE(hk);
@@ -226,7 +246,20 @@ static const wchar_t* ActionNames[] = {
     L"Fullscreen", L"Rotate Clockwise", L"Rotate Counter-Clockwise", L"Flip", L"Crop", L"Exit"
 };
 
-static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    ViewerApp* pApp = nullptr;
+    if (message == WM_INITDIALOG) {
+        pApp = reinterpret_cast<ViewerApp*>(lParam);
+        SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pApp);
+    }
+    else {
+        pApp = reinterpret_cast<ViewerApp*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
+    }
+
+    if (!pApp) return (INT_PTR)FALSE;
+
+    auto& ctx = pApp->GetContext();
+
     switch (message) {
     case WM_INITDIALOG: {
         HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_ACTION);
@@ -234,14 +267,14 @@ static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wP
             SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)ActionNames[i]);
         }
         SendMessageW(hCombo, CB_SETCURSEL, 0, 0);
-        SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, g_ctx.hotkeys[0], 0);
+        SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, ctx.hotkeys[0], 0);
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
         if (LOWORD(wParam) == IDC_COMBO_ACTION && HIWORD(wParam) == CBN_SELCHANGE) {
             int idx = static_cast<int>(SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0));
             if (idx != CB_ERR) {
-                SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, g_ctx.hotkeys[idx], 0);
+                SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, ctx.hotkeys[idx], 0);
             }
             return (INT_PTR)TRUE;
         }
@@ -249,7 +282,7 @@ static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wP
         case IDOK: {
             int idx = static_cast<int>(SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0));
             if (idx != CB_ERR) {
-                g_ctx.hotkeys[idx] = static_cast<WORD>(SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0));
+                ctx.hotkeys[idx] = static_cast<WORD>(SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0));
                 SetDlgItemTextW(hDlg, IDOK, L"Applied!");
                 SetTimer(hDlg, 1, 1500, nullptr);
             }
@@ -270,6 +303,6 @@ static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wP
     return (INT_PTR)FALSE;
 }
 
-void OpenKeybindingsDialog() {
-    DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_KEYBINDINGS_DIALOG), g_ctx.hWnd, KeybindingsDialogProc, 0);
+void ViewerApp::OpenKeybindingsDialog() {
+    DialogBoxParam(m_ctx.hInst, MAKEINTRESOURCE(IDD_KEYBINDINGS_DIALOG), m_ctx.hWnd, KeybindingsDialogProc, (LPARAM)this);
 }

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <shlwapi.h> 
 
-extern AppContext g_ctx;
+
 
 static bool IsImageFile(const wchar_t* filePath) {
     const wchar_t* ext = PathFindExtensionW(filePath);
@@ -19,11 +19,11 @@ static bool IsImageFile(const wchar_t* filePath) {
     return false;
 }
 
-static bool IsSequenceValid(int seqId) {
-    return g_ctx.loadSequenceId == seqId;
+bool ViewerApp::IsSequenceValid(int seqId) {
+    return m_ctx.loadSequenceId == seqId;
 }
 
-static HRESULT CreateDecoderFromStream_FullFileRead(
+HRESULT ViewerApp::CreateDecoderFromStream_FullFileRead(
     IWICImagingFactory* pFactory,
     const wchar_t* filePath,
     IWICBitmapDecoder** ppDecoder,
@@ -44,64 +44,68 @@ static HRESULT CreateDecoderFromStream_FullFileRead(
     );
 }
 
-HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder) {
-    return CreateDecoderFromStream_FullFileRead(g_ctx.wicFactory.Get(), filePath, ppDecoder, -1);
+HRESULT ViewerApp::CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder) {
+    return CreateDecoderFromStream_FullFileRead(m_ctx.wicFactory.Get(), filePath, ppDecoder, -1);
 }
 
 
-void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
+void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
     CleanupPreloadingThreads();
-    g_ctx.cancelPreloading = false;
-    int mySeqId = ++g_ctx.loadSequenceId;
+    m_ctx.cancelPreloading = false;
+    int mySeqId = ++m_ctx.loadSequenceId;
 
-    g_ctx.isLoading = true;
-    g_ctx.loadStartTime = GetTickCount64();
-    SetTimer(g_ctx.hWnd, LOADING_TIMER_ID, 700, nullptr);
-    g_ctx.loadingFilePath = filePath;
-    g_ctx.startAtEnd = startAtEnd;
+    m_ctx.isLoading = true;
+    m_ctx.loadStartTime = GetTickCount64();
+    SetTimer(m_ctx.hWnd, LOADING_TIMER_ID, 700, nullptr);
+    m_ctx.loadingFilePath = filePath;
+    m_ctx.startAtEnd = startAtEnd;
     {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        g_ctx.wicConverter = nullptr;
-        g_ctx.wicConverterOriginal = nullptr;
-        g_ctx.undoStack.clear();
-        g_ctx.d2dBitmap = nullptr;
-        g_ctx.d2dBitmapHq = nullptr;
-        g_ctx.isHqPending = false;
-        g_ctx.animationD2DBitmaps.clear();
-        g_ctx.isAnimated = false;
-        g_ctx.animationFrameConverters.clear();
-        g_ctx.animationFrameDelays.clear();
-        g_ctx.currentAnimationFrame = 0;
-        g_ctx.originalContainerFormat = GUID_NULL;
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        m_ctx.wicConverter = nullptr;
+        m_ctx.wicConverterOriginal = nullptr;
+        m_ctx.undoStack.clear();
+        m_ctx.d2dBitmap = nullptr;
+        m_ctx.d2dBitmapHq = nullptr;
+        m_ctx.isHqPending = false;
+        m_ctx.animationD2DBitmaps.clear();
+        m_ctx.isAnimated = false;
+        m_ctx.animationFrameConverters.clear();
+        m_ctx.animationFrameDelays.clear();
+        m_ctx.currentAnimationFrame = 0;
+        m_ctx.originalContainerFormat = GUID_NULL;
 
-        g_ctx.stagedFrames.clear();
-        g_ctx.stagedDelays.clear();
-        g_ctx.stagedWidth = 0;
-        g_ctx.stagedHeight = 0;
-        g_ctx.stagedOrientation = 1;
+        // Reset view transforms for new image
+        m_ctx.rotationAngle = 0;
+        m_ctx.isFlippedHorizontal = false;
 
-        g_ctx.isSvg = false;
-        g_ctx.svgDocument = nullptr;
-        g_ctx.svgData.clear();
-        g_ctx.stagedSvgData.clear();
+        m_ctx.stagedFrames.clear();
+        m_ctx.stagedDelays.clear();
+        m_ctx.stagedWidth = 0;
+        m_ctx.stagedHeight = 0;
+        m_ctx.stagedOrientation = 1;
+
+        m_ctx.isSvg = false;
+        m_ctx.svgDocument = nullptr;
+        m_ctx.svgData.clear();
+        m_ctx.stagedSvgData.clear();
     }
-    g_ctx.currentFilePathOverride.clear();
+    m_ctx.currentFilePathOverride.clear();
 
     // Check if directory changed
     wchar_t folder[MAX_PATH] = { 0 };
     wcscpy_s(folder, MAX_PATH, filePath.c_str());
     PathRemoveFileSpecW(folder);
-    if (g_ctx.currentDirectory != folder) {
-        g_ctx.imageFiles.clear();
-        g_ctx.currentImageIndex = -1;
-        g_ctx.currentDirectory = folder;
+    if (m_ctx.currentDirectory != folder) {
+        m_ctx.imageFiles.clear();
+        m_ctx.currentImageIndex = -1;
+        m_ctx.currentDirectory = folder;
     }
 
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
-    g_ctx.RunBackgroundTask([filePath, mySeqId]() {
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+    m_ctx.RunBackgroundTask([this, filePath, mySeqId]() {
         if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
             if (IsSequenceValid(mySeqId)) {
-                PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             }
             return;
         }
@@ -115,17 +119,17 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
                 std::vector<BYTE> data(size.LowPart);
                 DWORD bytesRead;
                 if (ReadFile(hFile, data.data(), size.LowPart, &bytesRead, NULL)) {
-                    CriticalSectionLock lock(g_ctx.wicMutex);
-                    g_ctx.stagedSvgData = std::move(data);
-                    PostMessage(g_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                    CriticalSectionLock lock(m_ctx.wicMutex);
+                    m_ctx.stagedSvgData = std::move(data);
+                    PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
                 }
                 else {
-                    PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                    PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
                 }
                 CloseHandle(hFile);
             }
             else {
-                PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             }
             CoUninitialize();
             return;
@@ -136,16 +140,16 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         UINT exifOrientation = 1;
 
         {
-            CriticalSectionLock lock(g_ctx.preloadMutex);
-            if (filePath == g_ctx.preloadedNextPath && g_ctx.preloadedNextConverter) {
-                preloadedConverter = g_ctx.preloadedNextConverter;
-                containerFormat = g_ctx.preloadedNextFormat;
-                exifOrientation = g_ctx.preloadedNextOrientation;
+            CriticalSectionLock lock(m_ctx.preloadMutex);
+            if (filePath == m_ctx.preloadedNextPath && m_ctx.preloadedNextConverter) {
+                preloadedConverter = m_ctx.preloadedNextConverter;
+                containerFormat = m_ctx.preloadedNextFormat;
+                exifOrientation = m_ctx.preloadedNextOrientation;
             }
-            else if (filePath == g_ctx.preloadedPrevPath && g_ctx.preloadedPrevConverter) {
-                preloadedConverter = g_ctx.preloadedPrevConverter;
-                containerFormat = g_ctx.preloadedPrevFormat;
-                exifOrientation = g_ctx.preloadedPrevOrientation;
+            else if (filePath == m_ctx.preloadedPrevPath && m_ctx.preloadedPrevConverter) {
+                preloadedConverter = m_ctx.preloadedPrevConverter;
+                containerFormat = m_ctx.preloadedPrevFormat;
+                exifOrientation = m_ctx.preloadedPrevOrientation;
             }
         }
 
@@ -154,15 +158,15 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
             if (SUCCEEDED(preloadedConverter->GetSize(&width, &height))) {
                 std::vector<BYTE> pixels(width * height * 4);
                 if (SUCCEEDED(preloadedConverter->CopyPixels(nullptr, width * 4, static_cast<UINT>(pixels.size()), pixels.data()))) {
-                    CriticalSectionLock lock(g_ctx.wicMutex);
-                    g_ctx.stagedFrames.push_back(std::move(pixels));
-                    g_ctx.stagedDelays.push_back(100);
-                    g_ctx.stagedWidth = width;
-                    g_ctx.stagedHeight = height;
-                    g_ctx.originalContainerFormat = containerFormat;
-                    g_ctx.stagedOrientation = exifOrientation;
+                    CriticalSectionLock lock(m_ctx.wicMutex);
+                    m_ctx.stagedFrames.push_back(std::move(pixels));
+                    m_ctx.stagedDelays.push_back(100);
+                    m_ctx.stagedWidth = width;
+                    m_ctx.stagedHeight = height;
+                    m_ctx.originalContainerFormat = containerFormat;
+                    m_ctx.stagedOrientation = exifOrientation;
 
-                    PostMessage(g_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                    PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
                     CoUninitialize();
                     return;
                 }
@@ -173,7 +177,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
             CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
         if (FAILED(hr)) {
-            PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             CoUninitialize();
             return;
         }
@@ -184,7 +188,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
 
         if (FAILED(hr)) {
-            PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             CoUninitialize();
             return;
         }
@@ -343,30 +347,30 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
         }
 
         if (allFramesPixels.empty()) {
-            PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             CoUninitialize();
             return;
         }
 
         {
-            CriticalSectionLock lock(g_ctx.wicMutex);
-            g_ctx.stagedFrames = std::move(allFramesPixels);
-            g_ctx.stagedDelays = std::move(allFramesDelays);
+            CriticalSectionLock lock(m_ctx.wicMutex);
+            m_ctx.stagedFrames = std::move(allFramesPixels);
+            m_ctx.stagedDelays = std::move(allFramesDelays);
 
             // Stage using the global canvas dimensions
-            g_ctx.stagedWidth = canvasWidth;
-            g_ctx.stagedHeight = canvasHeight;
-            g_ctx.originalContainerFormat = containerFormat;
-            g_ctx.stagedOrientation = exifOrientation;
+            m_ctx.stagedWidth = canvasWidth;
+            m_ctx.stagedHeight = canvasHeight;
+            m_ctx.originalContainerFormat = containerFormat;
+            m_ctx.stagedOrientation = exifOrientation;
         }
 
-        PostMessage(g_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+        PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
         CoUninitialize();
     });
 }
 
 // directory scanner that checks sequence validity
-std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int seqId) {
+std::vector<std::wstring> ViewerApp::ScanDirectory(const std::wstring& directoryPath, int seqId) {
     struct FileInfo {
         std::wstring path;
         FILETIME writeTime = {};
@@ -386,7 +390,7 @@ std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int s
                 FindClose(hFind);
                 return {};
             }
-            if (g_ctx.cancelPreloading) {
+            if (m_ctx.cancelPreloading) {
                 FindClose(hFind);
                 return {};
             }
@@ -412,7 +416,7 @@ std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int s
 
     std::sort(foundFiles.begin(), foundFiles.end(), [&](const FileInfo& a, const FileInfo& b) {
         int compareResult = 0;
-        switch (g_ctx.currentSortCriteria) {
+        switch (m_ctx.currentSortCriteria) {
         case SortCriteria::ByDateModified:
             compareResult = CompareFileTime(&a.writeTime, &b.writeTime);
             break;
@@ -427,7 +431,7 @@ std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int s
             break;
         }
 
-        if (g_ctx.isSortAscending) {
+        if (m_ctx.isSortAscending) {
             return compareResult < 0;
         }
         else {
@@ -443,50 +447,50 @@ std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int s
     return result;
 }
 
-void OnImageReady(bool success, int seqId) {
-    if (g_ctx.loadSequenceId != seqId) return;
+void ViewerApp::OnImageReady(bool success, int seqId) {
+    if (m_ctx.loadSequenceId != seqId) return;
     if (success) {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        if (g_ctx.stagedFrames.empty() && g_ctx.stagedSvgData.empty()) {
-            g_ctx.isLoading = false;
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        if (m_ctx.stagedFrames.empty() && m_ctx.stagedSvgData.empty()) {
+            m_ctx.isLoading = false;
             return;
         }
 
-        if (!g_ctx.stagedSvgData.empty()) {
-            g_ctx.svgData = std::move(g_ctx.stagedSvgData);
-            g_ctx.isSvg = true;
-            g_ctx.isAnimated = false;
-            g_ctx.currentOrientation = 1;
-            g_ctx.originalContainerFormat = GUID_NULL;
+        if (!m_ctx.stagedSvgData.empty()) {
+            m_ctx.svgData = std::move(m_ctx.stagedSvgData);
+            m_ctx.isSvg = true;
+            m_ctx.isAnimated = false;
+            m_ctx.currentOrientation = 1;
+            m_ctx.originalContainerFormat = GUID_NULL;
 
-            // This initializes g_ctx.svgDocument securely using the UI Thread's RT
+            // This initializes m_ctx.svgDocument securely using the UI Thread's RT
             CreateDeviceResources();
         }
         else {
-            bool animated = g_ctx.stagedFrames.size() > 1;
+            bool animated = m_ctx.stagedFrames.size() > 1;
             // Disable automatic animation for TIFFs 
-            if (g_ctx.originalContainerFormat == GUID_ContainerFormatTiff) {
+            if (m_ctx.originalContainerFormat == GUID_ContainerFormatTiff) {
                 animated = false;
             }
 
-            g_ctx.isAnimated = animated;
-            g_ctx.animationFrameConverters.clear();
-            g_ctx.animationFrameDelays.clear();
+            m_ctx.isAnimated = animated;
+            m_ctx.animationFrameConverters.clear();
+            m_ctx.animationFrameDelays.clear();
 
             // Determine start frame
-            g_ctx.currentAnimationFrame = 0;
-            if (g_ctx.startAtEnd && !animated && !g_ctx.stagedFrames.empty()) {
-                g_ctx.currentAnimationFrame = static_cast<UINT>(g_ctx.stagedFrames.size() - 1);
+            m_ctx.currentAnimationFrame = 0;
+            if (m_ctx.startAtEnd && !animated && !m_ctx.stagedFrames.empty()) {
+                m_ctx.currentAnimationFrame = static_cast<UINT>(m_ctx.stagedFrames.size() - 1);
             }
 
-            UINT stride = g_ctx.stagedWidth * 4;
+            UINT stride = m_ctx.stagedWidth * 4;
 
             // Reconstruct WIC 
-            for (const auto& pixels : g_ctx.stagedFrames) {
+            for (const auto& pixels : m_ctx.stagedFrames) {
                 ComPtr<IWICBitmap> memoryBitmap;
-                HRESULT hr = g_ctx.wicFactory->CreateBitmapFromMemory(
-                    g_ctx.stagedWidth,
-                    g_ctx.stagedHeight,
+                HRESULT hr = m_ctx.wicFactory->CreateBitmapFromMemory(
+                    m_ctx.stagedWidth,
+                    m_ctx.stagedHeight,
                     GUID_WICPixelFormat32bppPBGRA,
                     stride,
                     static_cast<UINT>(pixels.size()),
@@ -495,64 +499,64 @@ void OnImageReady(bool success, int seqId) {
                 );
                 if (SUCCEEDED(hr)) {
                     ComPtr<IWICFormatConverter> converter;
-                    g_ctx.wicFactory->CreateFormatConverter(&converter);
+                    m_ctx.wicFactory->CreateFormatConverter(&converter);
                     converter->Initialize(memoryBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
-                    g_ctx.animationFrameConverters.push_back(converter);
+                    m_ctx.animationFrameConverters.push_back(converter);
                 }
             }
 
-            if (!g_ctx.animationFrameConverters.empty()) {
+            if (!m_ctx.animationFrameConverters.empty()) {
                 // Set the primary converter based on calculated start frame
-                if (g_ctx.currentAnimationFrame >= g_ctx.animationFrameConverters.size()) {
-                    g_ctx.currentAnimationFrame = 0;
+                if (m_ctx.currentAnimationFrame >= m_ctx.animationFrameConverters.size()) {
+                    m_ctx.currentAnimationFrame = 0;
                 }
-                g_ctx.wicConverter = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
-                g_ctx.wicConverterOriginal = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+                m_ctx.wicConverter = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
+                m_ctx.wicConverterOriginal = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
                 if (animated) {
-                    g_ctx.animationFrameDelays = g_ctx.stagedDelays;
+                    m_ctx.animationFrameDelays = m_ctx.stagedDelays;
                     // Start animation timer
-                    SetTimer(g_ctx.hWnd, ANIMATION_TIMER_ID, g_ctx.animationFrameDelays[0], nullptr);
+                    SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, m_ctx.animationFrameDelays[0], nullptr);
                 }
             }
         }
 
         // Reset flag
-        g_ctx.startAtEnd = false;
-        g_ctx.stagedFrames.clear();
-        g_ctx.stagedDelays.clear();
-        g_ctx.stagedSvgData.clear();
-        g_ctx.isLoading = false;
-        if (!g_ctx.isSvg) g_ctx.currentOrientation = g_ctx.stagedOrientation;
+        m_ctx.startAtEnd = false;
+        m_ctx.stagedFrames.clear();
+        m_ctx.stagedDelays.clear();
+        m_ctx.stagedSvgData.clear();
+        m_ctx.isLoading = false;
+        if (!m_ctx.isSvg) m_ctx.currentOrientation = m_ctx.stagedOrientation;
 
-        if (g_ctx.enableFadeAnimation) {
-            g_ctx.isFading = true;
-            g_ctx.fadeStartTime = GetTickCount64();
+        if (m_ctx.enableFadeAnimation) {
+            m_ctx.isFading = true;
+            m_ctx.fadeStartTime = GetTickCount64();
         }
         else {
-            g_ctx.isFading = false;
+            m_ctx.isFading = false;
         }
 
-        if (g_ctx.preserveView) {
-            g_ctx.preserveView = false;
+        if (m_ctx.preserveView) {
+            m_ctx.preserveView = false;
         }
-        else if (g_ctx.defaultZoomMode == DefaultZoomMode::Actual) {
+        else if (m_ctx.defaultZoomMode == DefaultZoomMode::Actual) {
             SetActualSize();
         }
         else {
-            CenterImage(true);
+            FitImageToWindow();
         }
 
-        SetWindowTextW(g_ctx.hWnd, g_ctx.loadingFilePath.c_str());
+        SetWindowTextW(m_ctx.hWnd, m_ctx.loadingFilePath.c_str());
 
         WIN32_FILE_ATTRIBUTE_DATA fad = {};
-        if (GetFileAttributesExW(g_ctx.loadingFilePath.c_str(), GetFileExInfoStandard, &fad)) {
-            g_ctx.lastWriteTime = fad.ftLastWriteTime;
+        if (GetFileAttributesExW(m_ctx.loadingFilePath.c_str(), GetFileExInfoStandard, &fad)) {
+            m_ctx.lastWriteTime = fad.ftLastWriteTime;
         }
 
         // Start background folder scan ONLY AFTER image is ready to display
-        std::wstring currentFilePath = g_ctx.loadingFilePath;
+        std::wstring currentFilePath = m_ctx.loadingFilePath;
         int currentSeqId = seqId;
-        g_ctx.RunBackgroundTask([currentFilePath, currentSeqId]() {
+        m_ctx.RunBackgroundTask([this, currentFilePath, currentSeqId]() {
             wchar_t folder[MAX_PATH] = { 0 };
             wcscpy_s(folder, MAX_PATH, currentFilePath.c_str());
             PathRemoveFileSpecW(folder);
@@ -568,96 +572,96 @@ void OnImageReady(bool success, int seqId) {
             foundIndex = (it != newFiles.end()) ? static_cast<int>(std::distance(newFiles.begin(), it)) : -1;
 
             {
-                CriticalSectionLock lock(g_ctx.wicMutex);
-                g_ctx.stagedImageFiles = std::move(newFiles);
-                g_ctx.stagedFoundIndex = foundIndex;
+                CriticalSectionLock lock(m_ctx.wicMutex);
+                m_ctx.stagedImageFiles = std::move(newFiles);
+                m_ctx.stagedFoundIndex = foundIndex;
             }
 
-            PostMessage(g_ctx.hWnd, WM_APP_DIR_READY, 0, (LPARAM)currentSeqId);
+            PostMessage(m_ctx.hWnd, WM_APP_DIR_READY, 0, (LPARAM)currentSeqId);
             });
     }
     else {
-        g_ctx.isLoading = false;
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        g_ctx.wicConverter = nullptr;
-        g_ctx.wicConverterOriginal = nullptr;
-        g_ctx.undoStack.clear();
-        SetWindowTextW(g_ctx.hWnd, L"Load Failed");
+        m_ctx.isLoading = false;
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        m_ctx.wicConverter = nullptr;
+        m_ctx.wicConverterOriginal = nullptr;
+        m_ctx.undoStack.clear();
+        SetWindowTextW(m_ctx.hWnd, L"Load Failed");
     }
 
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
 }
 
-void OnDirReady(int seqId) {
-    if (g_ctx.loadSequenceId != seqId) return;
+void ViewerApp::OnDirReady(int seqId) {
+    if (m_ctx.loadSequenceId != seqId) return;
     {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        g_ctx.imageFiles = std::move(g_ctx.stagedImageFiles);
-        g_ctx.currentImageIndex = g_ctx.stagedFoundIndex;
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        m_ctx.imageFiles = std::move(m_ctx.stagedImageFiles);
+        m_ctx.currentImageIndex = m_ctx.stagedFoundIndex;
     }
     StartPreloading();
 }
 
 // Fallback  handler
-void FinalizeImageLoad(bool success, int foundIndex) {
-    g_ctx.isLoading = false;
-    KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
+void ViewerApp::FinalizeImageLoad(bool success, int foundIndex) {
+    m_ctx.isLoading = false;
+    KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
 
     {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        g_ctx.d2dBitmap = nullptr;
-        g_ctx.d2dBitmapHq = nullptr;
-        g_ctx.isHqPending = false;
-        g_ctx.animationD2DBitmaps.clear();
-        g_ctx.wicConverter = nullptr;
-        g_ctx.wicConverterOriginal = nullptr;
-        g_ctx.undoStack.clear();
-        g_ctx.stagedFrames.clear();
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        m_ctx.d2dBitmap = nullptr;
+        m_ctx.d2dBitmapHq = nullptr;
+        m_ctx.isHqPending = false;
+        m_ctx.animationD2DBitmaps.clear();
+        m_ctx.wicConverter = nullptr;
+        m_ctx.wicConverterOriginal = nullptr;
+        m_ctx.undoStack.clear();
+        m_ctx.stagedFrames.clear();
     }
 
     if (success) {
-        g_ctx.currentImageIndex = foundIndex;
-        SetWindowTextW(g_ctx.hWnd, g_ctx.loadingFilePath.c_str());
+        m_ctx.currentImageIndex = foundIndex;
+        SetWindowTextW(m_ctx.hWnd, m_ctx.loadingFilePath.c_str());
         CenterImage(true);
     }
     else {
-        g_ctx.currentImageIndex = -1;
-        SetWindowTextW(g_ctx.hWnd, L"Minimal Image Viewer");
+        m_ctx.currentImageIndex = -1;
+        SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer");
         CenterImage(true);
     }
 }
 
-void CleanupLoadingThread() {
-    g_ctx.cancelPreloading = true;
+void ViewerApp::CleanupLoadingThread() {
+    m_ctx.cancelPreloading = true;
     CleanupPreloadingThreads();
-    KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
+    KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
 }
 
-void CleanupPreloadingThreads() {
-    g_ctx.cancelPreloading = true;
-    if (g_ctx.preloadingNextThread.joinable()) g_ctx.preloadingNextThread.join();
-    if (g_ctx.preloadingPrevThread.joinable()) g_ctx.preloadingPrevThread.join();
+void ViewerApp::CleanupPreloadingThreads() {
+    m_ctx.cancelPreloading = true;
+    if (m_ctx.preloadingNextThread.joinable()) m_ctx.preloadingNextThread.join();
+    if (m_ctx.preloadingPrevThread.joinable()) m_ctx.preloadingPrevThread.join();
 
-    CriticalSectionLock lock(g_ctx.preloadMutex);
-    g_ctx.preloadedNextConverter = nullptr;
-    g_ctx.preloadedPrevConverter = nullptr;
-    g_ctx.preloadedNextPath.clear();
-    g_ctx.preloadedPrevPath.clear();
+    CriticalSectionLock lock(m_ctx.preloadMutex);
+    m_ctx.preloadedNextConverter = nullptr;
+    m_ctx.preloadedPrevConverter = nullptr;
+    m_ctx.preloadedNextPath.clear();
+    m_ctx.preloadedPrevPath.clear();
 }
 
-void StartPreloading() {
+void ViewerApp::StartPreloading() {
     CleanupPreloadingThreads();
-    g_ctx.cancelPreloading = false;
+    m_ctx.cancelPreloading = false;
 
-    if (g_ctx.imageFiles.size() < 2 || g_ctx.currentImageIndex < 0) return;
+    if (m_ctx.imageFiles.size() < 2 || m_ctx.currentImageIndex < 0) return;
 
-    int nextIdx = (g_ctx.currentImageIndex + 1) % static_cast<int>(g_ctx.imageFiles.size());
-    int prevIdx = (g_ctx.currentImageIndex - 1 + static_cast<int>(g_ctx.imageFiles.size())) % static_cast<int>(g_ctx.imageFiles.size());
+    int nextIdx = (m_ctx.currentImageIndex + 1) % static_cast<int>(m_ctx.imageFiles.size());
+    int prevIdx = (m_ctx.currentImageIndex - 1 + static_cast<int>(m_ctx.imageFiles.size())) % static_cast<int>(m_ctx.imageFiles.size());
 
-    std::wstring nextPath = g_ctx.imageFiles[nextIdx];
-    std::wstring prevPath = g_ctx.imageFiles[prevIdx];
+    std::wstring nextPath = m_ctx.imageFiles[nextIdx];
+    std::wstring prevPath = m_ctx.imageFiles[prevIdx];
 
-    auto preloadTask = [](std::wstring path, ComPtr<IWICFormatConverter>* pConverter, GUID* pFormat, UINT* pOrientation, std::wstring* pPath) {
+    auto preloadTask = [this](std::wstring path, ComPtr<IWICFormatConverter>* pConverter, GUID* pFormat, UINT* pOrientation, std::wstring* pPath) {
         // Skip GIFs and TIFFs to preserve animation frame extraction during a normal load
         const wchar_t* ext = PathFindExtensionW(path.c_str());
         if (ext && (_wcsicmp(ext, L".gif") == 0 || _wcsicmp(ext, L".tiff") == 0 || _wcsicmp(ext, L".tif") == 0)) return;
@@ -689,8 +693,8 @@ void StartPreloading() {
                                             PropVariantClear(&propValue);
                                         }
 
-                                        CriticalSectionLock lock(g_ctx.preloadMutex);
-                                        if (!g_ctx.cancelPreloading) {
+                                        CriticalSectionLock lock(m_ctx.preloadMutex);
+                                        if (!m_ctx.cancelPreloading) {
                                             *pConverter = finalConverter;
                                             if (pFormat) decoder->GetContainerFormat(pFormat);
                                             if (pOrientation) *pOrientation = orientation;
@@ -707,12 +711,12 @@ void StartPreloading() {
         CoUninitialize();
         };
 
-    g_ctx.preloadingNextThread = std::thread([preloadTask, nextPath]() {
-        preloadTask(nextPath, std::addressof(g_ctx.preloadedNextConverter), &g_ctx.preloadedNextFormat, &g_ctx.preloadedNextOrientation, &g_ctx.preloadedNextPath);
+    m_ctx.preloadingNextThread = std::thread([this, preloadTask, nextPath]() {
+        preloadTask(nextPath, std::addressof(m_ctx.preloadedNextConverter), &m_ctx.preloadedNextFormat, &m_ctx.preloadedNextOrientation, &m_ctx.preloadedNextPath);
         });
     if (nextIdx != prevIdx) {
-        g_ctx.preloadingPrevThread = std::thread([preloadTask, prevPath]() {
-            preloadTask(prevPath, std::addressof(g_ctx.preloadedPrevConverter), &g_ctx.preloadedPrevFormat, &g_ctx.preloadedPrevOrientation, &g_ctx.preloadedPrevPath);
+        m_ctx.preloadingPrevThread = std::thread([this, preloadTask, prevPath]() {
+            preloadTask(prevPath, std::addressof(m_ctx.preloadedPrevConverter), &m_ctx.preloadedPrevFormat, &m_ctx.preloadedPrevOrientation, &m_ctx.preloadedPrevPath);
             });
     }
 }

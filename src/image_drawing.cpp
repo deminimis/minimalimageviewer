@@ -1,29 +1,29 @@
 #include "viewer.h"
 #include <d2d1helper.h>
 
-extern AppContext g_ctx;
 
-bool GetCurrentImageSize(UINT* width, UINT* height) {
-    CriticalSectionLock lock(g_ctx.wicMutex);
-    if (g_ctx.isSvg && g_ctx.svgDocument) {
-        D2D1_SIZE_F size = g_ctx.svgDocument->GetViewportSize();
+
+bool ViewerApp::GetCurrentImageSize(UINT* width, UINT* height) {
+    CriticalSectionLock lock(m_ctx.wicMutex);
+    if (m_ctx.isSvg && m_ctx.svgDocument) {
+        D2D1_SIZE_F size = m_ctx.svgDocument->GetViewportSize();
         *width = static_cast<UINT>(size.width);
         *height = static_cast<UINT>(size.height);
         return true;
     }
-    else if (g_ctx.isAnimated && !g_ctx.animationFrameConverters.empty()) {
-        return SUCCEEDED(g_ctx.animationFrameConverters[0]->GetSize(width, height));
+    else if (m_ctx.isAnimated && !m_ctx.animationFrameConverters.empty()) {
+        return SUCCEEDED(m_ctx.animationFrameConverters[0]->GetSize(width, height));
     }
-    else if (g_ctx.wicConverter) {
-        return SUCCEEDED(g_ctx.wicConverter->GetSize(width, height));
+    else if (m_ctx.wicConverter) {
+        return SUCCEEDED(m_ctx.wicConverter->GetSize(width, height));
     }
     return false;
 }
 
-void CreateDeviceResources() {
-    if (!g_ctx.renderTarget) {
+void ViewerApp::CreateDeviceResources() {
+    if (!m_ctx.renderTarget) {
         RECT rc;
-        GetClientRect(g_ctx.hWnd, &rc);
+        GetClientRect(m_ctx.hWnd, &rc);
         UINT width = std::max(1L, rc.right - rc.left);
         UINT height = std::max(1L, rc.bottom - rc.top);
         D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3 };
@@ -46,8 +46,8 @@ void CreateDeviceResources() {
         }
 
         ComPtr<ID2D1Device> d2dDevice;
-        g_ctx.d2dFactory->CreateDevice(dxgiDevice.Get(), &d2dDevice);
-        d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &g_ctx.renderTarget);
+        m_ctx.d2dFactory->CreateDevice(dxgiDevice.Get(), &d2dDevice);
+        d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &m_ctx.renderTarget);
 
         ComPtr<IDXGIAdapter> dxgiAdapter;
         dxgiDevice->GetAdapter(&dxgiAdapter);
@@ -61,52 +61,52 @@ void CreateDeviceResources() {
         swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         swapDesc.BufferCount = 2;
         swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
-        dxgiFactory->CreateSwapChainForHwnd(d3dDevice.Get(), g_ctx.hWnd, &swapDesc, nullptr, nullptr, &g_ctx.swapChain);
+        dxgiFactory->CreateSwapChainForHwnd(d3dDevice.Get(), m_ctx.hWnd, &swapDesc, nullptr, nullptr, &m_ctx.swapChain);
 
         ComPtr<IDXGISurface> backBuffer;
-        g_ctx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+        m_ctx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
         D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
         ComPtr<ID2D1Bitmap1> targetBmp;
-        g_ctx.renderTarget->CreateBitmapFromDxgiSurface(backBuffer.Get(), &bmpProps, &targetBmp);
-        g_ctx.renderTarget->SetTarget(targetBmp.Get());
+        m_ctx.renderTarget->CreateBitmapFromDxgiSurface(backBuffer.Get(), &bmpProps, &targetBmp);
+        m_ctx.renderTarget->SetTarget(targetBmp.Get());
 
-        g_ctx.renderTarget->CreateEffect(CLSID_D2D1ColorMatrix, &g_ctx.colorMatrixEffect);
+        m_ctx.renderTarget->CreateEffect(CLSID_D2D1ColorMatrix, &m_ctx.colorMatrixEffect);
 
         hr = S_OK;
-        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &g_ctx.textBrush); }
+        if (SUCCEEDED(hr)) { hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_ctx.textBrush); }
         if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f), &g_ctx.cropRectBrush);
+            hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f), &m_ctx.cropRectBrush);
         }
         if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &g_ctx.fadeBrush);
+            hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &m_ctx.fadeBrush);
         }
         if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &g_ctx.ocrMessageBrush);
+            hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_ctx.ocrMessageBrush);
         }
         if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &g_ctx.ocrMessageBgBrush);
+            hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &m_ctx.ocrMessageBgBrush);
         }
         if (SUCCEEDED(hr)) {
-            hr = g_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f, L"en-us", &g_ctx.textFormat);
+            hr = m_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f, L"en-us", &m_ctx.textFormat);
         }
         if (SUCCEEDED(hr)) {
-            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
     }
 
-    if (g_ctx.renderTarget && g_ctx.isSvg && !g_ctx.svgDocument && !g_ctx.svgData.empty()) {
+    if (m_ctx.renderTarget && m_ctx.isSvg && !m_ctx.svgDocument && !m_ctx.svgData.empty()) {
         ComPtr<ID2D1DeviceContext5> dc5;
-        if (SUCCEEDED(g_ctx.renderTarget->QueryInterface(IID_PPV_ARGS(&dc5)))) {
-            ComPtr<IStream> stream = SHCreateMemStream(g_ctx.svgData.data(), static_cast<UINT>(g_ctx.svgData.size()));
+        if (SUCCEEDED(m_ctx.renderTarget->QueryInterface(IID_PPV_ARGS(&dc5)))) {
+            ComPtr<IStream> stream = SHCreateMemStream(m_ctx.svgData.data(), static_cast<UINT>(m_ctx.svgData.size()));
             if (stream) {
-                dc5->CreateSvgDocument(stream.Get(), D2D1::SizeF(1000.0f, 1000.0f), &g_ctx.svgDocument);
+                dc5->CreateSvgDocument(stream.Get(), D2D1::SizeF(1000.0f, 1000.0f), &m_ctx.svgDocument);
             }
         }
     }
 
-    if (g_ctx.bgColor == BackgroundColor::Transparent) {
-        if (!g_ctx.checkerboardBrush && g_ctx.renderTarget) {
+    if (m_ctx.bgColor == BackgroundColor::Transparent) {
+        if (!m_ctx.checkerboardBrush && m_ctx.renderTarget) {
             const int dim = 8;
             const int w = dim * 2; const int h = dim * 2;
             std::vector<UINT32> pixels(w * h);
@@ -119,35 +119,35 @@ void CreateDeviceResources() {
             ComPtr<ID2D1Bitmap> checkerboardBitmap;
             D2D1_SIZE_U size = D2D1::SizeU(w, h);
             D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-            if (SUCCEEDED(g_ctx.renderTarget->CreateBitmap(size, pixels.data(), w * 4, &props, &checkerboardBitmap))) {
+            if (SUCCEEDED(m_ctx.renderTarget->CreateBitmap(size, pixels.data(), w * 4, &props, &checkerboardBitmap))) {
                 D2D1_BITMAP_BRUSH_PROPERTIES brushProps = D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
-                g_ctx.renderTarget->CreateBitmapBrush(checkerboardBitmap.Get(), brushProps, &g_ctx.checkerboardBrush);
+                m_ctx.renderTarget->CreateBitmapBrush(checkerboardBitmap.Get(), brushProps, &m_ctx.checkerboardBrush);
             }
         }
     }
     else {
-        if (g_ctx.checkerboardBrush) { g_ctx.checkerboardBrush = nullptr; }
+        if (m_ctx.checkerboardBrush) { m_ctx.checkerboardBrush = nullptr; }
     }
 }
 
-void DiscardDeviceResources() {
-    CriticalSectionLock lock(g_ctx.wicMutex);
-    g_ctx.renderTarget = nullptr;
-    g_ctx.swapChain = nullptr;
-    g_ctx.colorMatrixEffect = nullptr;
-    g_ctx.d2dBitmap = nullptr;
-    g_ctx.textBrush = nullptr;
-    g_ctx.textFormat = nullptr;
-    g_ctx.checkerboardBrush = nullptr;
-    g_ctx.cropRectBrush = nullptr;
-    g_ctx.fadeBrush = nullptr;
-    g_ctx.ocrMessageBrush = nullptr;
-    g_ctx.ocrMessageBgBrush = nullptr;
-    g_ctx.animationD2DBitmaps.clear();
-    g_ctx.svgDocument = nullptr;
+void ViewerApp::DiscardDeviceResources() {
+    CriticalSectionLock lock(m_ctx.wicMutex);
+    m_ctx.renderTarget = nullptr;
+    m_ctx.swapChain = nullptr;
+    m_ctx.colorMatrixEffect = nullptr;
+    m_ctx.d2dBitmap = nullptr;
+    m_ctx.textBrush = nullptr;
+    m_ctx.textFormat = nullptr;
+    m_ctx.checkerboardBrush = nullptr;
+    m_ctx.cropRectBrush = nullptr;
+    m_ctx.fadeBrush = nullptr;
+    m_ctx.ocrMessageBrush = nullptr;
+    m_ctx.ocrMessageBgBrush = nullptr;
+    m_ctx.animationD2DBitmaps.clear();
+    m_ctx.svgDocument = nullptr;
 }
 
-static void DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
+void ViewerApp::DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     ImageProperties props = GetCurrentOsdProperties();
     if (props.filePath.empty()) return;
 
@@ -171,10 +171,10 @@ static void DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 
     ComPtr<IDWriteTextLayout> textLayout;
-    if (FAILED(g_ctx.writeFactory->CreateTextLayout(
+    if (FAILED(m_ctx.writeFactory->CreateTextLayout(
         osdText.c_str(),
         static_cast<UINT32>(osdText.length()),
-        g_ctx.textFormat.Get(),
+        m_ctx.textFormat.Get(),
         rtSize.width - 2 * padding,
         rtSize.height,
         &textLayout
@@ -193,19 +193,19 @@ static void DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     renderTarget->FillRectangle(bgRect, bgBrush.Get());
     D2D1_RECT_F textRect = D2D1::RectF(bgX + padding, bgY + padding, bgX + bgWidth - padding, bgY + bgHeight - padding);
 
-    g_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
-    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), g_ctx.textBrush.Get());
+    m_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
+    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), m_ctx.textBrush.Get());
 }
 
-static void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
-    if (g_ctx.colorStringRgb.empty() && !g_ctx.didCopyColor) return;
+void ViewerApp::DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
+    if (m_ctx.colorStringRgb.empty() && !m_ctx.didCopyColor) return;
 
     std::wstring text;
-    if (g_ctx.didCopyColor) {
-        text = L"Copied " + g_ctx.colorStringHex + L"!";
+    if (m_ctx.didCopyColor) {
+        text = L"Copied " + m_ctx.colorStringHex + L"!";
     }
     else {
-        text = g_ctx.colorStringRgb + L"\n" + g_ctx.colorStringHex;
+        text = m_ctx.colorStringRgb + L"\n" + m_ctx.colorStringHex;
     }
 
     D2D1_SIZE_F rtSize = renderTarget->GetSize();
@@ -214,10 +214,10 @@ static void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
     renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 
     ComPtr<IDWriteTextLayout> textLayout;
-    if (FAILED(g_ctx.writeFactory->CreateTextLayout(
+    if (FAILED(m_ctx.writeFactory->CreateTextLayout(
         text.c_str(),
         static_cast<UINT32>(text.length()),
-        g_ctx.textFormat.Get(),
+        m_ctx.textFormat.Get(),
         rtSize.width,
         rtSize.height,
         &textLayout
@@ -229,7 +229,7 @@ static void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
     float bgWidth = metrics.widthIncludingTrailingWhitespace + padding * 2;
     float bgHeight = metrics.height + padding * 2;
 
-    D2D1_POINT_2F mousePos = { (float)g_ctx.currentMousePos.x, (float)g_ctx.currentMousePos.y };
+    D2D1_POINT_2F mousePos = { (float)m_ctx.currentMousePos.x, (float)m_ctx.currentMousePos.y };
     float bgX = mousePos.x + 20.0f;
     float bgY = mousePos.y + 20.0f;
 
@@ -251,14 +251,14 @@ static void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
     }
 
     D2D1_RECT_F textRect = D2D1::RectF(bgX + padding, bgY + padding, bgX + bgWidth - padding, bgY + bgHeight - padding);
-    g_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
-    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), g_ctx.textBrush.Get());
+    m_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
+    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), m_ctx.textBrush.Get());
 }
 
-static void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
-    if (g_ctx.ocrMessage.empty() || !g_ctx.ocrMessageBrush || !g_ctx.ocrMessageBgBrush || !g_ctx.textFormat) return;
+void ViewerApp::DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
+    if (m_ctx.ocrMessage.empty() || !m_ctx.ocrMessageBrush || !m_ctx.ocrMessageBgBrush || !m_ctx.textFormat) return;
 
-    ULONGLONG elapsedTime = GetTickCount64() - g_ctx.ocrMessageStartTime;
+    ULONGLONG elapsedTime = GetTickCount64() - m_ctx.ocrMessageStartTime;
     float opacity = 1.0f;
 
     if (elapsedTime > 700) {
@@ -272,17 +272,17 @@ static void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
     renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 
     ComPtr<IDWriteTextLayout> textLayout;
-    if (FAILED(g_ctx.writeFactory->CreateTextLayout(
-        g_ctx.ocrMessage.c_str(),
-        static_cast<UINT32>(g_ctx.ocrMessage.length()),
-        g_ctx.textFormat.Get(),
+    if (FAILED(m_ctx.writeFactory->CreateTextLayout(
+        m_ctx.ocrMessage.c_str(),
+        static_cast<UINT32>(m_ctx.ocrMessage.length()),
+        m_ctx.textFormat.Get(),
         rtSize.width - 4 * padding,
         rtSize.height,
         &textLayout
     ))) return;
 
-    g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+    m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
     DWRITE_TEXT_METRICS metrics;
     textLayout->GetMetrics(&metrics);
@@ -295,42 +295,42 @@ static void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
     D2D1_RECT_F bgRect = D2D1::RectF(bgX, bgY, bgX + bgWidth, bgY + bgHeight);
     D2D1_ROUNDED_RECT roundedBgRect = D2D1::RoundedRect(bgRect, 5.0f, 5.0f);
 
-    g_ctx.ocrMessageBgBrush->SetOpacity(opacity * 0.7f);
-    g_ctx.ocrMessageBrush->SetOpacity(opacity);
+    m_ctx.ocrMessageBgBrush->SetOpacity(opacity * 0.7f);
+    m_ctx.ocrMessageBrush->SetOpacity(opacity);
 
-    renderTarget->FillRoundedRectangle(roundedBgRect, g_ctx.ocrMessageBgBrush.Get());
+    renderTarget->FillRoundedRectangle(roundedBgRect, m_ctx.ocrMessageBgBrush.Get());
     D2D1_RECT_F textRect = D2D1::RectF(bgX, bgY + padding, bgX + bgWidth, bgY + bgHeight - padding);
-    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), g_ctx.ocrMessageBrush.Get());
+    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), m_ctx.ocrMessageBrush.Get());
 
-    g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-    g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+    m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+    m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 }
 
-void Render() {
+void ViewerApp::Render() {
     CreateDeviceResources();
-    if (!g_ctx.renderTarget) return;
+    if (!m_ctx.renderTarget) return;
 
-    g_ctx.renderTarget->BeginDraw();
-    if (g_ctx.bgColor == BackgroundColor::Transparent && g_ctx.checkerboardBrush) {
-        D2D1_SIZE_F rtSize = g_ctx.renderTarget->GetSize();
-        g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-        g_ctx.renderTarget->FillRectangle(D2D1::RectF(0, 0, rtSize.width, rtSize.height), g_ctx.checkerboardBrush.Get());
+    m_ctx.renderTarget->BeginDraw();
+    if (m_ctx.bgColor == BackgroundColor::Transparent && m_ctx.checkerboardBrush) {
+        D2D1_SIZE_F rtSize = m_ctx.renderTarget->GetSize();
+        m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+        m_ctx.renderTarget->FillRectangle(D2D1::RectF(0, 0, rtSize.width, rtSize.height), m_ctx.checkerboardBrush.Get());
     }
     else {
         D2D1_COLOR_F color;
-        switch (g_ctx.bgColor) {
+        switch (m_ctx.bgColor) {
         case BackgroundColor::Black: color = D2D1::ColorF(0.0f, 0.0f, 0.0f); break;
         case BackgroundColor::White: color = D2D1::ColorF(1.0f, 1.0f, 1.0f); break;
         default:
         case BackgroundColor::Grey: color = D2D1::ColorF(0.117f, 0.117f, 0.117f);
             break;
         }
-        g_ctx.renderTarget->Clear(color);
+        m_ctx.renderTarget->Clear(color);
     }
 
-    if (g_ctx.isLoading && (GetTickCount64() - g_ctx.loadStartTime >= 700)) {
+    if (m_ctx.isLoading && (GetTickCount64() - m_ctx.loadStartTime >= 700)) {
         RECT rc;
-        GetClientRect(g_ctx.hWnd, &rc);
+        GetClientRect(m_ctx.hWnd, &rc);
         D2D1_RECT_F layoutRect = D2D1::RectF(
             static_cast<float>(rc.left),
             static_cast<float>(rc.top),
@@ -338,111 +338,111 @@ void Render() {
             static_cast<float>(rc.bottom)
         );
         D2D1_COLOR_F textColor;
-        if (g_ctx.bgColor == BackgroundColor::White || g_ctx.bgColor == BackgroundColor::Transparent) {
+        if (m_ctx.bgColor == BackgroundColor::White || m_ctx.bgColor == BackgroundColor::Transparent) {
             textColor = D2D1::ColorF(D2D1::ColorF::Black);
         }
         else {
             textColor = D2D1::ColorF(D2D1::ColorF::White);
         }
-        g_ctx.textBrush->SetColor(textColor);
+        m_ctx.textBrush->SetColor(textColor);
 
-        g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-        g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-        g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        g_ctx.renderTarget->DrawTextW(
+        m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+        m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        m_ctx.renderTarget->DrawTextW(
             L"Loading...",
             10,
-            g_ctx.textFormat.Get(),
+            m_ctx.textFormat.Get(),
             layoutRect,
-            g_ctx.textBrush.Get()
+            m_ctx.textBrush.Get()
         );
-        g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-        g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+        m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+        m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     }
     else {
         ComPtr<ID2D1Bitmap> bitmapToDraw;
         bool hasImage = false;
 
-        if (g_ctx.isAnimated) {
-            CriticalSectionLock lock(g_ctx.wicMutex);
-            if (g_ctx.animationD2DBitmaps.size() != g_ctx.animationFrameConverters.size()) {
-                g_ctx.animationD2DBitmaps.assign(g_ctx.animationFrameConverters.size(), nullptr);
-                g_ctx.d2dBitmap = nullptr;
-                g_ctx.wicConverter = nullptr;
+        if (m_ctx.isAnimated) {
+            CriticalSectionLock lock(m_ctx.wicMutex);
+            if (m_ctx.animationD2DBitmaps.size() != m_ctx.animationFrameConverters.size()) {
+                m_ctx.animationD2DBitmaps.assign(m_ctx.animationFrameConverters.size(), nullptr);
+                m_ctx.d2dBitmap = nullptr;
+                m_ctx.wicConverter = nullptr;
             }
 
             // Lazy load 
-            if (g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
-                if (!g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame]) {
+            if (m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
+                if (!m_ctx.animationD2DBitmaps[m_ctx.currentAnimationFrame]) {
 
-                    ComPtr<IWICBitmapSource> source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+                    ComPtr<IWICBitmapSource> source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
                     ComPtr<ID2D1Bitmap> d2dFrameBitmap;
-                    if (SUCCEEDED(g_ctx.renderTarget->CreateBitmapFromWicBitmap(source.Get(), nullptr, &d2dFrameBitmap))) {
-                        g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame] = d2dFrameBitmap;
+                    if (SUCCEEDED(m_ctx.renderTarget->CreateBitmapFromWicBitmap(source.Get(), nullptr, &d2dFrameBitmap))) {
+                        m_ctx.animationD2DBitmaps[m_ctx.currentAnimationFrame] = d2dFrameBitmap;
                     }
                 }
-                bitmapToDraw = g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame];
+                bitmapToDraw = m_ctx.animationD2DBitmaps[m_ctx.currentAnimationFrame];
             }
             hasImage = (bitmapToDraw != nullptr);
         }
-        else if (!g_ctx.isSvg) {
-            CriticalSectionLock lock(g_ctx.wicMutex);
-            if (!g_ctx.d2dBitmap && g_ctx.wicConverter) {
-                ComPtr<IWICBitmapSource> source = g_ctx.wicConverter;
-                g_ctx.renderTarget->CreateBitmapFromWicBitmap(
+        else if (!m_ctx.isSvg) {
+            CriticalSectionLock lock(m_ctx.wicMutex);
+            if (!m_ctx.d2dBitmap && m_ctx.wicConverter) {
+                ComPtr<IWICBitmapSource> source = m_ctx.wicConverter;
+                m_ctx.renderTarget->CreateBitmapFromWicBitmap(
                     source.Get(),
                     nullptr,
-                    &g_ctx.d2dBitmap
+                    &m_ctx.d2dBitmap
                 );
-                g_ctx.animationD2DBitmaps.clear();
+                m_ctx.animationD2DBitmaps.clear();
             }
-            bitmapToDraw = g_ctx.d2dBitmap;
-            hasImage = (g_ctx.wicConverter != nullptr);
+            bitmapToDraw = m_ctx.d2dBitmap;
+            hasImage = (m_ctx.wicConverter != nullptr);
         }
 
-        bool isSvgToDraw = (g_ctx.isSvg && g_ctx.svgDocument);
+        bool isSvgToDraw = (m_ctx.isSvg && m_ctx.svgDocument);
         if (isSvgToDraw) hasImage = true;
 
         bool isHq = false;
-        if (!g_ctx.isAnimated && !g_ctx.isSvg && g_ctx.d2dBitmapHq && abs(g_ctx.hqZoomFactor - g_ctx.zoomFactor) < 0.01f) {
-            bitmapToDraw = g_ctx.d2dBitmapHq;
+        if (!m_ctx.isAnimated && !m_ctx.isSvg && m_ctx.d2dBitmapHq && abs(m_ctx.hqZoomFactor - m_ctx.zoomFactor) < 0.01f) {
+            bitmapToDraw = m_ctx.d2dBitmapHq;
             isHq = true;
         }
 
-        if ((bitmapToDraw || isSvgToDraw) && !IsIconic(g_ctx.hWnd)) {
+        if ((bitmapToDraw || isSvgToDraw) && !IsIconic(m_ctx.hWnd)) {
             D2D1_SIZE_F bmpSize;
             if (isSvgToDraw) {
-                bmpSize = g_ctx.svgDocument->GetViewportSize();
+                bmpSize = m_ctx.svgDocument->GetViewportSize();
             }
             else {
                 bmpSize = bitmapToDraw->GetSize();
             }
 
-            D2D1_SIZE_F rtSize = g_ctx.renderTarget->GetSize();
+            D2D1_SIZE_F rtSize = m_ctx.renderTarget->GetSize();
             D2D1_POINT_2F bmpCenter = D2D1::Point2F(bmpSize.width / 2.f, bmpSize.height / 2.f);
             D2D1_POINT_2F windowCenter = D2D1::Point2F(rtSize.width / 2.f, rtSize.height / 2.f);
 
             float scaleX, scaleY;
             if (isHq) {
-                scaleX = g_ctx.isFlippedHorizontal ? -1.0f : 1.0f;
+                scaleX = m_ctx.isFlippedHorizontal ? -1.0f : 1.0f;
                 scaleY = 1.0f;
             }
             else {
-                scaleX = g_ctx.isFlippedHorizontal ? -g_ctx.zoomFactor : g_ctx.zoomFactor;
-                scaleY = g_ctx.zoomFactor;
+                scaleX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
+                scaleY = m_ctx.zoomFactor;
             }
 
-            g_ctx.renderTarget->SetTransform(
-                D2D1::Matrix3x2F::Rotation(static_cast<float>(g_ctx.rotationAngle), bmpCenter) *
+            m_ctx.renderTarget->SetTransform(
+                D2D1::Matrix3x2F::Rotation(static_cast<float>(m_ctx.rotationAngle), bmpCenter) *
                 D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter) *
-                D2D1::Matrix3x2F::Translation(windowCenter.x - bmpCenter.x + g_ctx.offsetX, windowCenter.y - bmpCenter.y + g_ctx.offsetY)
+                D2D1::Matrix3x2F::Translation(windowCenter.x - bmpCenter.x + m_ctx.offsetX, windowCenter.y - bmpCenter.y + m_ctx.offsetY)
             );
             float opacity = 1.0f;
-            if (g_ctx.isFading) {
-                ULONGLONG elapsed = GetTickCount64() - g_ctx.fadeStartTime;
+            if (m_ctx.isFading) {
+                ULONGLONG elapsed = GetTickCount64() - m_ctx.fadeStartTime;
                 const float FADE_DURATION = 120.0f;
                 if (elapsed >= FADE_DURATION) {
-                    g_ctx.isFading = false;
+                    m_ctx.isFading = false;
                 }
                 else {
                     opacity = static_cast<float>(elapsed) / FADE_DURATION;
@@ -451,15 +451,15 @@ void Render() {
 
             if (isSvgToDraw) {
                 ComPtr<ID2D1DeviceContext5> dc5;
-                if (SUCCEEDED(g_ctx.renderTarget->QueryInterface(IID_PPV_ARGS(&dc5)))) {
-                    dc5->DrawSvgDocument(g_ctx.svgDocument.Get());
+                if (SUCCEEDED(m_ctx.renderTarget->QueryInterface(IID_PPV_ARGS(&dc5)))) {
+                    dc5->DrawSvgDocument(m_ctx.svgDocument.Get());
                 }
             }
-            else if (g_ctx.colorMatrixEffect) {
-                g_ctx.colorMatrixEffect->SetInput(0, bitmapToDraw.Get());
-                float b = g_ctx.brightness;
-                float c = g_ctx.contrast;
-                float s = g_ctx.isGrayscale ? 0.0f : g_ctx.saturation;
+            else if (m_ctx.colorMatrixEffect) {
+                m_ctx.colorMatrixEffect->SetInput(0, bitmapToDraw.Get());
+                float b = m_ctx.brightness;
+                float c = m_ctx.contrast;
+                float s = m_ctx.isGrayscale ? 0.0f : m_ctx.saturation;
                 // Natively calculated on GPU
                 float invS = 1.0f - s;
                 float rR = invS * 0.299f + s; float rG = invS * 0.587f;     float rB = invS * 0.114f;
@@ -473,38 +473,38 @@ void Render() {
                     0.0f, 0.0f, 0.0f, opacity,
                     offset, offset, offset, 0.0f
                 );
-                g_ctx.colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
+                m_ctx.colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
 
-                D2D1_INTERPOLATION_MODE interpModeD2D = (!g_ctx.smoothScaling) ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
-                    ((isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_INTERPOLATION_MODE_LINEAR : D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
-                g_ctx.renderTarget->DrawImage(
-                    g_ctx.colorMatrixEffect.Get(),
+                D2D1_INTERPOLATION_MODE interpModeD2D = (!m_ctx.smoothScaling) ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
+                    ((isHq || m_ctx.zoomFactor < 1.0f) ? D2D1_INTERPOLATION_MODE_LINEAR : D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+                m_ctx.renderTarget->DrawImage(
+                    m_ctx.colorMatrixEffect.Get(),
                     nullptr,
                     nullptr,
                     interpModeD2D
                 );
             }
             else {
-                D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!g_ctx.smoothScaling) ?
+                D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!m_ctx.smoothScaling) ?
                     D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
-                    ((isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
-                g_ctx.renderTarget->DrawBitmap(
+                    ((isHq || m_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+                m_ctx.renderTarget->DrawBitmap(
                     bitmapToDraw.Get(), nullptr, opacity,
                     interpModeBmp
                 );
             }
 
-            if ((g_ctx.isSelectingCropRect || g_ctx.isCropPending) && g_ctx.fadeBrush) {
+            if ((m_ctx.isSelectingCropRect || m_ctx.isCropPending) && m_ctx.fadeBrush) {
                 D2D1_RECT_F localRect;
-                if (g_ctx.isSelectingCropRect) {
+                if (m_ctx.isSelectingCropRect) {
                     float x1, y1, x2, y2;
-                    ConvertWindowToImagePoint(g_ctx.cropStartPoint, x1, y1);
-                    POINT endPoint = { (LONG)g_ctx.cropRectWindow.right, (LONG)g_ctx.cropRectWindow.bottom };
+                    ConvertWindowToImagePoint(m_ctx.cropStartPoint, x1, y1);
+                    POINT endPoint = { (LONG)m_ctx.cropRectWindow.right, (LONG)m_ctx.cropRectWindow.bottom };
                     ConvertWindowToImagePoint(endPoint, x2, y2);
                     localRect = D2D1::RectF(std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2));
                 }
                 else {
-                    localRect = g_ctx.cropRectLocal;
+                    localRect = m_ctx.cropRectLocal;
                 }
 
                 localRect.left = std::max(0.0f, localRect.left);
@@ -512,16 +512,16 @@ void Render() {
                 localRect.right = std::min(bmpSize.width, localRect.right);
                 localRect.bottom = std::min(bmpSize.height, localRect.bottom);
                 if (localRect.left < localRect.right && localRect.top < localRect.bottom) {
-                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, 0.0f, bmpSize.width, localRect.top), g_ctx.fadeBrush.Get());
-                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.bottom, bmpSize.width, bmpSize.height), g_ctx.fadeBrush.Get());
-                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.top, localRect.left, localRect.bottom), g_ctx.fadeBrush.Get());
-                    g_ctx.renderTarget->FillRectangle(D2D1::RectF(localRect.right, localRect.top, bmpSize.width, localRect.bottom), g_ctx.fadeBrush.Get());
+                    m_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, 0.0f, bmpSize.width, localRect.top), m_ctx.fadeBrush.Get());
+                    m_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.bottom, bmpSize.width, bmpSize.height), m_ctx.fadeBrush.Get());
+                    m_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.top, localRect.left, localRect.bottom), m_ctx.fadeBrush.Get());
+                    m_ctx.renderTarget->FillRectangle(D2D1::RectF(localRect.right, localRect.top, bmpSize.width, localRect.bottom), m_ctx.fadeBrush.Get());
                 }
             }
         }
-        else if (!hasImage && !g_ctx.isLoading && g_ctx.textFormat && g_ctx.textBrush) {
+        else if (!hasImage && !m_ctx.isLoading && m_ctx.textFormat && m_ctx.textBrush) {
             RECT rc;
-            GetClientRect(g_ctx.hWnd, &rc);
+            GetClientRect(m_ctx.hWnd, &rc);
             D2D1_RECT_F layoutRect = D2D1::RectF(
                 static_cast<float>(rc.left),
                 static_cast<float>(rc.top),
@@ -529,66 +529,66 @@ void Render() {
                 static_cast<float>(rc.bottom)
             );
             D2D1_COLOR_F textColor;
-            if (g_ctx.bgColor == BackgroundColor::White || g_ctx.bgColor == BackgroundColor::Transparent) {
+            if (m_ctx.bgColor == BackgroundColor::White || m_ctx.bgColor == BackgroundColor::Transparent) {
                 textColor = D2D1::ColorF(D2D1::ColorF::Black);
             }
             else {
                 textColor = D2D1::ColorF(D2D1::ColorF::White);
             }
-            g_ctx.textBrush->SetColor(textColor);
+            m_ctx.textBrush->SetColor(textColor);
 
-            g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-            g_ctx.renderTarget->DrawTextW(
+            m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+            m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            m_ctx.renderTarget->DrawTextW(
                 L"Right-click for options or drag an image here",
                 46,
-                g_ctx.textFormat.Get(),
+                m_ctx.textFormat.Get(),
                 layoutRect,
-                g_ctx.textBrush.Get()
+                m_ctx.textBrush.Get()
             );
-            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
 
-        if (g_ctx.isOsdVisible && hasImage) {
-            DrawOsdOverlay(g_ctx.renderTarget.Get());
+        if (m_ctx.isOsdVisible && hasImage) {
+            DrawOsdOverlay(m_ctx.renderTarget.Get());
         }
 
-        if (g_ctx.isEyedropperActive) {
-            DrawEyedropperOverlay(g_ctx.renderTarget.Get());
+        if (m_ctx.isEyedropperActive) {
+            DrawEyedropperOverlay(m_ctx.renderTarget.Get());
         }
 
-        if ((g_ctx.isSelectingCropRect || g_ctx.isDraggingOcrRect) && g_ctx.cropRectBrush) {
-            g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-            D2D1_RECT_F rect = g_ctx.isSelectingCropRect ? g_ctx.cropRectWindow : g_ctx.ocrRectWindow;
+        if ((m_ctx.isSelectingCropRect || m_ctx.isDraggingOcrRect) && m_ctx.cropRectBrush) {
+            m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+            D2D1_RECT_F rect = m_ctx.isSelectingCropRect ? m_ctx.cropRectWindow : m_ctx.ocrRectWindow;
             if (rect.left > rect.right) std::swap(rect.left, rect.right);
             if (rect.top > rect.bottom) std::swap(rect.top, rect.bottom);
-            if (g_ctx.isDraggingOcrRect) {
-                g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Red, 1.0f));
+            if (m_ctx.isDraggingOcrRect) {
+                m_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Red, 1.0f));
             }
             else {
-                g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
+                m_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
             }
-            g_ctx.renderTarget->DrawRectangle(rect, g_ctx.cropRectBrush.Get(), 1.0f);
+            m_ctx.renderTarget->DrawRectangle(rect, m_ctx.cropRectBrush.Get(), 1.0f);
         }
-        else if (g_ctx.isCropPending && g_ctx.cropRectBrush) {
+        else if (m_ctx.isCropPending && m_ctx.cropRectBrush) {
             POINT p1, p2, p3, p4;
-            ConvertImageToWindowPoint(g_ctx.cropRectLocal.left, g_ctx.cropRectLocal.top, p1);
-            ConvertImageToWindowPoint(g_ctx.cropRectLocal.right, g_ctx.cropRectLocal.top, p2);
-            ConvertImageToWindowPoint(g_ctx.cropRectLocal.right, g_ctx.cropRectLocal.bottom, p3);
-            ConvertImageToWindowPoint(g_ctx.cropRectLocal.left, g_ctx.cropRectLocal.bottom, p4);
+            ConvertImageToWindowPoint(m_ctx.cropRectLocal.left, m_ctx.cropRectLocal.top, p1);
+            ConvertImageToWindowPoint(m_ctx.cropRectLocal.right, m_ctx.cropRectLocal.top, p2);
+            ConvertImageToWindowPoint(m_ctx.cropRectLocal.right, m_ctx.cropRectLocal.bottom, p3);
+            ConvertImageToWindowPoint(m_ctx.cropRectLocal.left, m_ctx.cropRectLocal.bottom, p4);
 
-            g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-            g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
-            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p1.x, (float)p1.y), D2D1::Point2F((float)p2.x, (float)p2.y), g_ctx.cropRectBrush.Get(), 2.0f);
-            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p2.x, (float)p2.y), D2D1::Point2F((float)p3.x, (float)p3.y), g_ctx.cropRectBrush.Get(), 2.0f);
-            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p3.x, (float)p3.y), D2D1::Point2F((float)p4.x, (float)p4.y), g_ctx.cropRectBrush.Get(), 2.0f);
-            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p4.x, (float)p4.y), D2D1::Point2F((float)p1.x, (float)p1.y), g_ctx.cropRectBrush.Get(), 2.0f);
+            m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+            m_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
+            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p1.x, (float)p1.y), D2D1::Point2F((float)p2.x, (float)p2.y), m_ctx.cropRectBrush.Get(), 2.0f);
+            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p2.x, (float)p2.y), D2D1::Point2F((float)p3.x, (float)p3.y), m_ctx.cropRectBrush.Get(), 2.0f);
+            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p3.x, (float)p3.y), D2D1::Point2F((float)p4.x, (float)p4.y), m_ctx.cropRectBrush.Get(), 2.0f);
+            m_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p4.x, (float)p4.y), D2D1::Point2F((float)p1.x, (float)p1.y), m_ctx.cropRectBrush.Get(), 2.0f);
         }
 
-        if (g_ctx.isCropPending && g_ctx.textFormat && g_ctx.textBrush) {
-            D2D1_SIZE_F rtSize = g_ctx.renderTarget->GetSize();
+        if (m_ctx.isCropPending && m_ctx.textFormat && m_ctx.textBrush) {
+            D2D1_SIZE_F rtSize = m_ctx.renderTarget->GetSize();
             D2D1_RECT_F layoutRect = D2D1::RectF(
                 0.0f,
                 10.0f,
@@ -596,63 +596,63 @@ void Render() {
                 rtSize.height
             );
             D2D1_COLOR_F textColor;
-            if (g_ctx.bgColor == BackgroundColor::White) {
+            if (m_ctx.bgColor == BackgroundColor::White) {
                 textColor = D2D1::ColorF(D2D1::ColorF::Black);
             }
             else {
                 textColor = D2D1::ColorF(D2D1::ColorF::White);
             }
-            g_ctx.textBrush->SetColor(textColor);
+            m_ctx.textBrush->SetColor(textColor);
 
-            g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
-            g_ctx.renderTarget->DrawTextW(
+            m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
+            m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+            m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            m_ctx.renderTarget->DrawTextW(
                 L"Press Enter to apply crop, Esc to cancel",
                 40,
-                g_ctx.textFormat.Get(),
+                m_ctx.textFormat.Get(),
                 layoutRect,
-                g_ctx.textBrush.Get()
+                m_ctx.textBrush.Get()
             );
-            g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-            g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
     }
 
-    if (g_ctx.isOcrMessageVisible) {
-        DrawOcrMessageOverlay(g_ctx.renderTarget.Get());
+    if (m_ctx.isOcrMessageVisible) {
+        DrawOcrMessageOverlay(m_ctx.renderTarget.Get());
     }
 
-    HRESULT hr = g_ctx.renderTarget->EndDraw();
-    if (g_ctx.swapChain) {
-        hr = g_ctx.swapChain->Present(1, 0);
+    HRESULT hr = m_ctx.renderTarget->EndDraw();
+    if (m_ctx.swapChain) {
+        hr = m_ctx.swapChain->Present(1, 0);
     }
     if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
         DiscardDeviceResources();
-        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
     }
-    else if (g_ctx.isFading && !g_ctx.isLoading) {
-        InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
-    }
-}
-
-void TriggerHqRender() {
-    g_ctx.d2dBitmapHq = nullptr;
-    if (!g_ctx.smoothScaling) return; // Skip HQ rendering if smooth scaling disabled. 
-
-    if (!g_ctx.isAnimated && g_ctx.wicConverter) {
-        KillTimer(g_ctx.hWnd, HQ_RENDER_TIMER_ID);
-        g_ctx.isHqPending = true;
-        SetTimer(g_ctx.hWnd, HQ_RENDER_TIMER_ID, 200, nullptr);
+    else if (m_ctx.isFading && !m_ctx.isLoading) {
+        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
     }
 }
 
-void FitImageToWindow() {
+void ViewerApp::TriggerHqRender() {
+    m_ctx.d2dBitmapHq = nullptr;
+    if (!m_ctx.smoothScaling) return; // Skip HQ rendering if smooth scaling disabled. 
+
+    if (!m_ctx.isAnimated && m_ctx.wicConverter) {
+        KillTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID);
+        m_ctx.isHqPending = true;
+        SetTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID, 200, nullptr);
+    }
+}
+
+void ViewerApp::FitImageToWindow() {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
 
     RECT clientRect;
-    GetClientRect(g_ctx.hWnd, &clientRect);
+    GetClientRect(m_ctx.hWnd, &clientRect);
     if (IsRectEmpty(&clientRect)) return;
 
     float clientWidth = static_cast<float>(clientRect.right - clientRect.left);
@@ -660,59 +660,59 @@ void FitImageToWindow() {
     float imageWidth = static_cast<float>(imgWidth);
     float imageHeight = static_cast<float>(imgHeight);
 
-    if (g_ctx.rotationAngle == 90 || g_ctx.rotationAngle == 270) {
+    if (m_ctx.rotationAngle == 90 || m_ctx.rotationAngle == 270) {
         std::swap(imageWidth, imageHeight);
     }
 
     if (imageWidth <= 0 || imageHeight <= 0) return;
 
-    g_ctx.zoomFactor = std::min(clientWidth / imageWidth, clientHeight / imageHeight);
-    g_ctx.offsetX = 0.0f;
-    g_ctx.offsetY = 0.0f;
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    m_ctx.zoomFactor = std::min(clientWidth / imageWidth, clientHeight / imageHeight);
+    m_ctx.offsetX = 0.0f;
+    m_ctx.offsetY = 0.0f;
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
     TriggerHqRender();
 }
 
-void ZoomImage(float factor, POINT pt) {
+void ViewerApp::ZoomImage(float factor, POINT pt) {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
 
     RECT clientRect;
-    GetClientRect(g_ctx.hWnd, &clientRect);
+    GetClientRect(m_ctx.hWnd, &clientRect);
     float windowCenterX = (clientRect.right - clientRect.left) / 2.0f;
     float windowCenterY = (clientRect.bottom - clientRect.top) / 2.0f;
 
-    float mouseXBeforeZoom = pt.x - (windowCenterX + g_ctx.offsetX);
-    float mouseYBeforeZoom = pt.y - (windowCenterY + g_ctx.offsetY);
+    float mouseXBeforeZoom = pt.x - (windowCenterX + m_ctx.offsetX);
+    float mouseYBeforeZoom = pt.y - (windowCenterY + m_ctx.offsetY);
 
-    float newZoomFactor = g_ctx.zoomFactor * factor;
+    float newZoomFactor = m_ctx.zoomFactor * factor;
     newZoomFactor = std::max(0.01f, std::min(100.0f, newZoomFactor));
 
-    float mouseXAfterZoom = mouseXBeforeZoom * (newZoomFactor / g_ctx.zoomFactor);
-    float mouseYAfterZoom = mouseYBeforeZoom * (newZoomFactor / g_ctx.zoomFactor);
+    float mouseXAfterZoom = mouseXBeforeZoom * (newZoomFactor / m_ctx.zoomFactor);
+    float mouseYAfterZoom = mouseYBeforeZoom * (newZoomFactor / m_ctx.zoomFactor);
 
-    g_ctx.offsetX += (mouseXBeforeZoom - mouseXAfterZoom);
-    g_ctx.offsetY += (mouseYBeforeZoom - mouseYAfterZoom);
-    g_ctx.zoomFactor = newZoomFactor;
+    m_ctx.offsetX += (mouseXBeforeZoom - mouseXAfterZoom);
+    m_ctx.offsetY += (mouseYBeforeZoom - mouseYAfterZoom);
+    m_ctx.zoomFactor = newZoomFactor;
 
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
     TriggerHqRender();
 }
 
-void RotateImage(bool clockwise) {
+void ViewerApp::RotateImage(bool clockwise) {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
-    g_ctx.rotationAngle += clockwise ? 90 : -90;
-    g_ctx.rotationAngle = (g_ctx.rotationAngle % 360 + 360) % 360;
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    m_ctx.rotationAngle += clockwise ? 90 : -90;
+    m_ctx.rotationAngle = (m_ctx.rotationAngle % 360 + 360) % 360;
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
 }
 
-void FlipImage() {
-    g_ctx.isFlippedHorizontal = !g_ctx.isFlippedHorizontal;
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+void ViewerApp::FlipImage() {
+    m_ctx.isFlippedHorizontal = !m_ctx.isFlippedHorizontal;
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
 }
 
-void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY) {
+void ViewerApp::ConvertWindowToImagePoint(POINT pt, float& localX, float& localY) {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
         localX = 0; localY = 0;
@@ -720,22 +720,22 @@ void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY) {
     }
 
     RECT cr;
-    GetClientRect(g_ctx.hWnd, &cr);
+    GetClientRect(m_ctx.hWnd, &cr);
     float windowCenterX = (cr.right - cr.left) / 2.0f;
     float windowCenterY = (cr.bottom - cr.top) / 2.0f;
 
-    float scaleX = g_ctx.isFlippedHorizontal ? -g_ctx.zoomFactor : g_ctx.zoomFactor;
-    float scaleY = g_ctx.zoomFactor;
+    float scaleX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
+    float scaleY = m_ctx.zoomFactor;
     if (scaleX == 0.0f) scaleX = 1.0f;
     if (scaleY == 0.0f) scaleY = 1.0f;
 
-    float translatedX = pt.x - (windowCenterX + g_ctx.offsetX);
-    float translatedY = pt.y - (windowCenterY + g_ctx.offsetY);
+    float translatedX = pt.x - (windowCenterX + m_ctx.offsetX);
+    float translatedY = pt.y - (windowCenterY + m_ctx.offsetY);
 
     float scaledX = translatedX / scaleX;
     float scaledY = translatedY / scaleY;
 
-    double rad = -g_ctx.rotationAngle * 3.1415926535 / 180.0;
+    double rad = -m_ctx.rotationAngle * 3.1415926535 / 180.0;
     float cosTheta = static_cast<float>(cos(rad));
     float sinTheta = static_cast<float>(sin(rad));
 
@@ -745,43 +745,43 @@ void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY) {
     localX = unrotatedX + imgWidth / 2.0f;
     localY = unrotatedY + imgHeight / 2.0f;
 
-    if (g_ctx.renderScale > 0.0f && g_ctx.renderScale != 1.0f) {
-        localX /= g_ctx.renderScale;
-        localY /= g_ctx.renderScale;
+    if (m_ctx.renderScale > 0.0f && m_ctx.renderScale != 1.0f) {
+        localX /= m_ctx.renderScale;
+        localY /= m_ctx.renderScale;
     }
 }
 
-void ConvertImageToWindowPoint(float localX, float localY, POINT& pt) {
+void ViewerApp::ConvertImageToWindowPoint(float localX, float localY, POINT& pt) {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
         pt = { 0, 0 };
         return;
     }
 
-    if (g_ctx.renderScale > 0.0f && g_ctx.renderScale != 1.0f) {
-        localX *= g_ctx.renderScale;
-        localY *= g_ctx.renderScale;
+    if (m_ctx.renderScale > 0.0f && m_ctx.renderScale != 1.0f) {
+        localX *= m_ctx.renderScale;
+        localY *= m_ctx.renderScale;
     }
 
     float unrotatedX = localX - imgWidth / 2.0f;
     float unrotatedY = localY - imgHeight / 2.0f;
 
-    double rad = g_ctx.rotationAngle * 3.1415926535 / 180.0;
+    double rad = m_ctx.rotationAngle * 3.1415926535 / 180.0;
     float cosTheta = static_cast<float>(cos(rad));
     float sinTheta = static_cast<float>(sin(rad));
     float scaledX = unrotatedX * cosTheta - unrotatedY * sinTheta;
     float scaledY = unrotatedX * sinTheta + unrotatedY * cosTheta;
 
-    float scaleFactorX = g_ctx.isFlippedHorizontal ? -g_ctx.zoomFactor : g_ctx.zoomFactor;
-    float scaleFactorY = g_ctx.zoomFactor;
+    float scaleFactorX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
+    float scaleFactorY = m_ctx.zoomFactor;
     float translatedX = scaledX * scaleFactorX;
     float translatedY = scaledY * scaleFactorY;
 
     RECT cr;
-    GetClientRect(g_ctx.hWnd, &cr);
+    GetClientRect(m_ctx.hWnd, &cr);
     float windowCenterX = (cr.right - cr.left) / 2.0f;
     float windowCenterY = (cr.bottom - cr.top) / 2.0f;
 
-    pt.x = static_cast<LONG>(translatedX + windowCenterX + g_ctx.offsetX);
-    pt.y = static_cast<LONG>(translatedY + windowCenterY + g_ctx.offsetY);
+    pt.x = static_cast<LONG>(translatedX + windowCenterX + m_ctx.offsetX);
+    pt.y = static_cast<LONG>(translatedY + windowCenterY + m_ctx.offsetY);
 }

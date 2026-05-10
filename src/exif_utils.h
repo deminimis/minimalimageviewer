@@ -3,4 +3,4 @@
 
 std::wstring GetMetadataString(IWICMetadataQueryReader* pReader, const wchar_t* query);
 std::wstring GetContainerFormatName(const GUID& guid);
-std::wstring GetBitDepth(IWICBitmapFrameDecode* pFrame);
+std::wstring GetBitDepth(IWICBitmapFrameDecode* pFrame, IWICImagingFactory* wicFactory);

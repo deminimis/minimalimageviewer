@@ -242,6 +242,7 @@ struct AppContext {
 
     ComPtr<ID2D1SolidColorBrush> cropRectBrush;
     ComPtr<ID2D1SolidColorBrush> fadeBrush;
+    HBRUSH darkBrush = nullptr;
     bool isCropMode = false;
     bool isSelectingCropRect = false;
     bool isCropPending = false;
@@ -306,56 +307,98 @@ struct AppContext {
     }
 };
 
-void CenterImage(bool resetZoom);
-void SetActualSize();
-void TriggerHqRender();
-LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
-LRESULT CALLBACK PropsWndProc(HWND, UINT, WPARAM, LPARAM);
-void ToggleFullScreen();
-void UpdateEyedropperColor(POINT pt);
-void HandleEyedropperClick();
-void OpenFileAction();
-void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd = false);
-void FinalizeImageLoad(bool success, int foundIndex);
-void OnImageReady(bool success, int seqId);
-void OnDirReady(int seqId);
-void CleanupLoadingThread();
-void CleanupPreloadingThreads();
-void StartPreloading();
-std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int seqId);
-void SaveImage();
-void SaveImageAs();
-void ResizeImageAction();
-ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource);
-void ApplyEffectsToView();
-void CommitCrop();
-void UpdateViewToCurrentFrame();
-void DeleteCurrentImage();
-void HandleDropFiles(HDROP hDrop);
-void HandlePaste();
-void HandleCopy();
-void OpenFileLocationAction();
-void ShowImageProperties();
-void OpenPreferencesDialog();
-void OpenKeybindingsDialog();
-std::wstring GetHotkeyString(WORD hk);
-void OpenBrightnessContrastDialog();
-void PerformOcr();
-void PerformOcrArea(D2D1_RECT_F ocrRectLocal);
-void Render();
-void CreateDeviceResources();
-void DiscardDeviceResources();
-void FitImageToWindow();
-void ZoomImage(float factor, POINT pt);
-void RotateImage(bool clockwise);
-void FlipImage();
-bool GetCurrentImageSize(UINT* width, UINT* height);
-ImageProperties GetCurrentOsdProperties();
-void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY);
-void ConvertImageToWindowPoint(float localX, float localY, POINT& pt);
-void UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor);
+class ViewerApp {
+public:
+    ViewerApp() = default;
+    ~ViewerApp() = default;
 
-void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop);
-void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop);
+    // App entry/message routing
+    int Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine);
+    static LRESULT CALLBACK StaticWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+    LRESULT WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder);
+    // Core methods 
+    void CenterImage(bool resetZoom);
+    void SetActualSize();
+    void TriggerHqRender();
+    void ToggleFullScreen();
+    void UpdateEyedropperColor(POINT pt);
+    void HandleEyedropperClick();
+    void OpenFileAction();
+    void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd = false);
+    void FinalizeImageLoad(bool success, int foundIndex);
+    void OnImageReady(bool success, int seqId);
+    void OnDirReady(int seqId);
+    void CleanupLoadingThread();
+    void CleanupPreloadingThreads();
+    void StartPreloading();
+    std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int seqId);
+    void SaveImage();
+    void SaveImageAs();
+    void ResizeImageAction();
+    ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource);
+    void ApplyEffectsToView();
+    void CommitCrop();
+    void UpdateViewToCurrentFrame();
+    void DeleteCurrentImage();
+    void HandleDropFiles(HDROP hDrop);
+    void HandlePaste();
+    void HandleCopy();
+    void OpenFileLocationAction();
+    void ShowImageProperties();
+    void OpenPreferencesDialog();
+    void OpenKeybindingsDialog();
+    std::wstring GetHotkeyString(WORD hk);
+    void OpenBrightnessContrastDialog();
+    void PerformOcr();
+    void PerformOcrArea(D2D1_RECT_F ocrRectLocal);
+    void Render();
+    void CreateDeviceResources();
+    void DiscardDeviceResources();
+    void FitImageToWindow();
+    void ZoomImage(float factor, POINT pt);
+    void RotateImage(bool clockwise);
+    void FlipImage();
+    bool GetCurrentImageSize(UINT* width, UINT* height);
+    ImageProperties GetCurrentOsdProperties();
+    void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY);
+    void ConvertImageToWindowPoint(float localX, float localY, POINT& pt);
+    void UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor);
+    void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop);
+    void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop);
+    HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder);
+
+    // Dialog Callbacks
+    static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+    static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+    static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+    static LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
+
+private:
+    AppContext m_ctx;
+
+public:
+    AppContext& GetContext() { return m_ctx; }
+    const AppContext& GetContext() const { return m_ctx; }
+
+private:
+    // UI Handlers
+    void OnPaint(HWND hWnd);
+    bool CheckHotkey(WORD hk, WPARAM wParam);
+    void OnKeyDown(WPARAM wParam);
+    void OnContextMenu(HWND hWnd, POINT pt);
+
+    // Drawing Helpers
+    void DrawOsdOverlay(ID2D1DeviceContext* renderTarget);
+    void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget);
+    void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget);
+
+    // Edit Helpers
+    HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::wstring& filePath, const GUID& containerFormat);
+    ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat);
+    void SaveImageWithResize(const std::wstring& filePath, const GUID& containerFormat, UINT newWidth, UINT newHeight);
+
+    // IO Helpers
+    bool IsSequenceValid(int seqId);
+    HRESULT CreateDecoderFromStream_FullFileRead(IWICImagingFactory* pFactory, const wchar_t* filePath, IWICBitmapDecoder** ppDecoder, int seqId);
+};

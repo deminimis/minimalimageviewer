@@ -1,17 +1,17 @@
 #include "viewer.h"
 #include <objidl.h>
 
-extern AppContext g_ctx;
 
-static HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::wstring& filePath, const GUID& containerFormat) {
+
+HRESULT ViewerApp::EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::wstring& filePath, const GUID& containerFormat) {
     ComPtr<IWICStream> stream;
     ComPtr<IWICBitmapEncoder> encoder;
     ComPtr<IWICBitmapFrameEncode> frame;
     ComPtr<IPropertyBag2> props;
 
-    HRESULT hr = g_ctx.wicFactory->CreateStream(&stream);
+    HRESULT hr = m_ctx.wicFactory->CreateStream(&stream);
     if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(filePath.c_str(), GENERIC_WRITE);
-    if (SUCCEEDED(hr)) hr = g_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
+    if (SUCCEEDED(hr)) hr = m_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
     if (SUCCEEDED(hr)) hr = encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache);
     if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, &props);
     if (SUCCEEDED(hr)) hr = frame->Initialize(props.Get());
@@ -21,8 +21,8 @@ static HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::ws
     return hr;
 }
 
-ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
-    if ((g_ctx.brightness == 0.0f && g_ctx.contrast == 1.0f && g_ctx.saturation == 1.0f) || !inSource || !g_ctx.wicFactory) {
+ComPtr<IWICBitmapSource> ViewerApp::ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
+    if ((m_ctx.brightness == 0.0f && m_ctx.contrast == 1.0f && m_ctx.saturation == 1.0f) || !inSource || !m_ctx.wicFactory) {
         return inSource;
     }
 
@@ -32,7 +32,7 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
     }
 
     ComPtr<IWICFormatConverter> converter;
-    if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+    if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
         if (SUCCEEDED(converter->Initialize(inSource.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
             inSource = converter;
         }
@@ -48,7 +48,7 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
     }
 
     ComPtr<IWICBitmap> newBitmap;
-    if (FAILED(g_ctx.wicFactory->CreateBitmap(width, height, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnDemand, &newBitmap))) {
+    if (FAILED(m_ctx.wicFactory->CreateBitmap(width, height, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnDemand, &newBitmap))) {
         return inSource;
     }
 
@@ -71,9 +71,9 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
         return inSource;
     }
 
-    float contrastFactor = g_ctx.contrast;
-    float brightnessFactor = g_ctx.brightness;
-    float saturationFactor = g_ctx.saturation;
+    float contrastFactor = m_ctx.contrast;
+    float brightnessFactor = m_ctx.brightness;
+    float saturationFactor = m_ctx.saturation;
 
     auto clampf = [](float val) -> BYTE {
         if (val < 0.0f) return 0;
@@ -126,66 +126,66 @@ ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
     return ComPtr<IWICBitmapSource>(newBitmap);
 }
 
-void CommitCrop() {
-    CriticalSectionLock lock(g_ctx.wicMutex);
-    if (!g_ctx.isCropActive || !g_ctx.wicConverterOriginal) {
-        g_ctx.isCropActive = false;
+void ViewerApp::CommitCrop() {
+    CriticalSectionLock lock(m_ctx.wicMutex);
+    if (!m_ctx.isCropActive || !m_ctx.wicConverterOriginal) {
+        m_ctx.isCropActive = false;
         return;
     }
 
-    ComPtr<IWICBitmapSource> source = g_ctx.wicConverterOriginal;
+    ComPtr<IWICBitmapSource> source = m_ctx.wicConverterOriginal;
 
     ComPtr<IWICBitmapClipper> clipper;
-    if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+    if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
         WICRect rc;
-        rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
-        rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
-        rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
-        rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
+        rc.X = static_cast<INT>(floor(m_ctx.cropRectLocal.left));
+        rc.Y = static_cast<INT>(floor(m_ctx.cropRectLocal.top));
+        rc.Width = static_cast<INT>(ceil(m_ctx.cropRectLocal.right)) - rc.X;
+        rc.Height = static_cast<INT>(ceil(m_ctx.cropRectLocal.bottom)) - rc.Y;
         if (rc.Width > 0 && rc.Height > 0) {
             if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
                 ComPtr<IWICFormatConverter> converter;
-                if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+                if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
                     if (SUCCEEDED(converter->Initialize(clipper.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
 
-                        g_ctx.undoStack.push_back(g_ctx.wicConverterOriginal);
-                        g_ctx.wicConverterOriginal = converter;
+                        m_ctx.undoStack.push_back(m_ctx.wicConverterOriginal);
+                        m_ctx.wicConverterOriginal = converter;
 
-                        if (g_ctx.isAnimated) {
-                            g_ctx.isAnimated = false;
-                            g_ctx.animationFrameConverters.clear();
-                            g_ctx.animationFrameDelays.clear();
-                            KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
+                        if (m_ctx.isAnimated) {
+                            m_ctx.isAnimated = false;
+                            m_ctx.animationFrameConverters.clear();
+                            m_ctx.animationFrameDelays.clear();
+                            KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
                         }
                     }
                 }
             }
         }
     }
-    g_ctx.isCropActive = false;
-    g_ctx.cropRectLocal = { 0 };
+    m_ctx.isCropActive = false;
+    m_ctx.cropRectLocal = { 0 };
 }
 
-void ApplyEffectsToView() {
+void ViewerApp::ApplyEffectsToView() {
     ComPtr<IWICBitmapSource> source;
     {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        if (!g_ctx.wicConverterOriginal) {
-            g_ctx.wicConverter = nullptr;
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        if (!m_ctx.wicConverterOriginal) {
+            m_ctx.wicConverter = nullptr;
             return;
         }
-        source = g_ctx.wicConverterOriginal;
+        source = m_ctx.wicConverterOriginal;
     }
 
     // apply crop if active first.
-    if (g_ctx.isCropActive) {
+    if (m_ctx.isCropActive) {
         ComPtr<IWICBitmapClipper> clipper;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
             WICRect rc;
-            rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
-            rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
-            rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
-            rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
+            rc.X = static_cast<INT>(floor(m_ctx.cropRectLocal.left));
+            rc.Y = static_cast<INT>(floor(m_ctx.cropRectLocal.top));
+            rc.Width = static_cast<INT>(ceil(m_ctx.cropRectLocal.right)) - rc.X;
+            rc.Height = static_cast<INT>(ceil(m_ctx.cropRectLocal.bottom)) - rc.Y;
 
             if (rc.Width > 0 && rc.Height > 0) {
                 if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
@@ -194,18 +194,18 @@ void ApplyEffectsToView() {
             }
         }
     }
-    g_ctx.renderScale = 1.0f;
-    if (g_ctx.renderTarget) {
-        UINT maxDim = g_ctx.renderTarget->GetMaximumBitmapSize();
+    m_ctx.renderScale = 1.0f;
+    if (m_ctx.renderTarget) {
+        UINT maxDim = m_ctx.renderTarget->GetMaximumBitmapSize();
         UINT w = 0, h = 0;
         if (SUCCEEDED(source->GetSize(&w, &h)) && (w > maxDim || h > maxDim)) {
             float ratio = std::min(static_cast<float>(maxDim) / w, static_cast<float>(maxDim) / h);
-            g_ctx.renderScale = ratio;
+            m_ctx.renderScale = ratio;
             UINT newW = static_cast<UINT>(w * ratio);
             UINT newH = static_cast<UINT>(h * ratio);
 
             ComPtr<IWICBitmapScaler> scaler;
-            if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapScaler(&scaler))) {
+            if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapScaler(&scaler))) {
                 if (SUCCEEDED(scaler->Initialize(source.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
                     source = scaler;
                 }
@@ -214,39 +214,39 @@ void ApplyEffectsToView() {
     }
 
     ComPtr<IWICFormatConverter> converter;
-    if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+    if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
         if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-            CriticalSectionLock lock(g_ctx.wicMutex);
-            g_ctx.wicConverter = converter;
-            g_ctx.d2dBitmap = nullptr;
-            g_ctx.animationD2DBitmaps.clear();
+            CriticalSectionLock lock(m_ctx.wicMutex);
+            m_ctx.wicConverter = converter;
+            m_ctx.d2dBitmap = nullptr;
+            m_ctx.animationD2DBitmaps.clear();
         }
     }
 }
 
-static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
-    CriticalSectionLock lock(g_ctx.wicMutex);
+ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
+    CriticalSectionLock lock(m_ctx.wicMutex);
     ComPtr<IWICBitmapSource> source;
 
-    if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
-        source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+    if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
+        source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
     }
-    else if (g_ctx.wicConverterOriginal) {
-        source = g_ctx.wicConverterOriginal;
+    else if (m_ctx.wicConverterOriginal) {
+        source = m_ctx.wicConverterOriginal;
     }
     else {
         return nullptr;
     }
 
     // 1. crop first
-    if (g_ctx.isCropActive) {
+    if (m_ctx.isCropActive) {
         ComPtr<IWICBitmapClipper> clipper;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
             WICRect rc;
-            rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
-            rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
-            rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
-            rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
+            rc.X = static_cast<INT>(floor(m_ctx.cropRectLocal.left));
+            rc.Y = static_cast<INT>(floor(m_ctx.cropRectLocal.top));
+            rc.Width = static_cast<INT>(ceil(m_ctx.cropRectLocal.right)) - rc.X;
+            rc.Height = static_cast<INT>(ceil(m_ctx.cropRectLocal.bottom)) - rc.Y;
 
             if (rc.Width > 0 && rc.Height > 0) {
                 if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
@@ -257,16 +257,16 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
     }
 
     // 2. rotate flip second
-    if (g_ctx.rotationAngle != 0 || g_ctx.isFlippedHorizontal) {
+    if (m_ctx.rotationAngle != 0 || m_ctx.isFlippedHorizontal) {
         ComPtr<IWICBitmapFlipRotator> rotator;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
+        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
             WICBitmapTransformOptions options = WICBitmapTransformRotate0;
-            switch (g_ctx.rotationAngle) {
+            switch (m_ctx.rotationAngle) {
             case 90:  options = WICBitmapTransformRotate90;  break;
             case 180: options = WICBitmapTransformRotate180; break;
             case 270: options = WICBitmapTransformRotate270; break;
             }
-            if (g_ctx.isFlippedHorizontal) {
+            if (m_ctx.isFlippedHorizontal) {
                 options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
             }
 
@@ -276,9 +276,9 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
         }
     }
 
-    if (g_ctx.isGrayscale) {
+    if (m_ctx.isGrayscale) {
         ComPtr<IWICFormatConverter> grayConverter;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
+        if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
             if (SUCCEEDED(grayConverter->Initialize(source.Get(), GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                 source = grayConverter;
             }
@@ -290,7 +290,7 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
 
     if (targetFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
         ComPtr<IWICFormatConverter> converter;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+        if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
             if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
                 source = converter;
             }
@@ -299,13 +299,13 @@ static ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat) {
     return source;
 }
 
-void SaveImageAs() {
+void ViewerApp::SaveImageAs() {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
 
     wchar_t szFile[MAX_PATH] = L"Untitled.png";
     OPENFILENAMEW ofn = { sizeof(ofn) };
-    ofn.hwndOwner = g_ctx.hWnd;
+    ofn.hwndOwner = m_ctx.hWnd;
     ofn.lpstrFile = szFile;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrFilter = L"PNG File (*.png)\0*.png\0JPEG File (*.jpg)\0*.jpg\0BMP File (*.bmp)\0*.bmp\0All Files (*.*)\0*.*\0";
@@ -324,13 +324,13 @@ void SaveImageAs() {
 
     ComPtr<IWICBitmapSource> source = GetSaveSource(containerFormat);
     if (!source) {
-        MessageBoxW(g_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
         return;
     }
 
     source = ApplyImageEffects(source);
     if (!source) {
-        MessageBoxW(g_ctx.hWnd, L"Could not apply effects to image for saving.", L"Save Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Could not apply effects to image for saving.", L"Save Error", MB_ICONERROR);
         return;
     }
 
@@ -340,12 +340,12 @@ void SaveImageAs() {
         LoadImageFromFile(ofn.lpstrFile);
     }
     else {
-        MessageBoxW(g_ctx.hWnd, L"Failed to save image.", L"Save As Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Failed to save image.", L"Save As Error", MB_ICONERROR);
     }
 }
 
-void SaveImage() {
-    if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
+void ViewerApp::SaveImage() {
+    if (m_ctx.currentImageIndex < 0 || m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
         UINT imgWidth, imgHeight;
         if (GetCurrentImageSize(&imgWidth, &imgHeight)) {
             SaveImageAs();
@@ -353,17 +353,17 @@ void SaveImage() {
         return;
     }
 
-    const std::wstring& originalPath = g_ctx.imageFiles[g_ctx.currentImageIndex];
+    const std::wstring& originalPath = m_ctx.imageFiles[m_ctx.currentImageIndex];
 
-    if (g_ctx.rotationAngle == 0 && !g_ctx.isFlippedHorizontal && !g_ctx.isCropActive && !g_ctx.isGrayscale && g_ctx.brightness == 0.0f && g_ctx.contrast == 1.0f && g_ctx.saturation == 1.0f) {
-        MessageBoxW(g_ctx.hWnd, L"No changes to save.", L"Save", MB_OK | MB_ICONINFORMATION);
+    if (m_ctx.rotationAngle == 0 && !m_ctx.isFlippedHorizontal && !m_ctx.isCropActive && !m_ctx.isGrayscale && m_ctx.brightness == 0.0f && m_ctx.contrast == 1.0f && m_ctx.saturation == 1.0f) {
+        MessageBoxW(m_ctx.hWnd, L"No changes to save.", L"Save", MB_OK | MB_ICONINFORMATION);
         return;
     }
 
     // AVIF/HEIC save prompt
     const wchar_t* ext = PathFindExtensionW(originalPath.c_str());
     if (ext && (_wcsicmp(ext, L".heic") == 0 || _wcsicmp(ext, L".heif") == 0 || _wcsicmp(ext, L".avif") == 0)) {
-        if (MessageBoxW(g_ctx.hWnd, L"HEIC and AVIF files cannot be natively overwritten. Would you like to save your edits as a PNG instead?", L"Save Edits", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+        if (MessageBoxW(m_ctx.hWnd, L"HEIC and AVIF files cannot be natively overwritten. Would you like to save your edits as a PNG instead?", L"Save Edits", MB_YESNO | MB_ICONQUESTION) == IDYES) {
 
             wchar_t newPath[MAX_PATH];
             wcscpy_s(newPath, MAX_PATH, originalPath.c_str());
@@ -376,7 +376,7 @@ void SaveImage() {
                 LoadImageFromFile(newPath); // Load new png
             }
             else {
-                MessageBoxW(g_ctx.hWnd, L"Failed to save as PNG.", L"Save Error", MB_ICONERROR);
+                MessageBoxW(m_ctx.hWnd, L"Failed to save as PNG.", L"Save Error", MB_ICONERROR);
             }
         }
         return;
@@ -385,24 +385,24 @@ void SaveImage() {
 
     GUID containerFormat{};
     {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        containerFormat = g_ctx.originalContainerFormat;
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        containerFormat = m_ctx.originalContainerFormat;
     }
 
     if (containerFormat == GUID_NULL) {
-        MessageBoxW(g_ctx.hWnd, L"Could not determine original file format. Use 'Save As'.", L"Save Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Could not determine original file format. Use 'Save As'.", L"Save Error", MB_ICONERROR);
         return;
     }
 
     ComPtr<IWICBitmapSource> source = GetSaveSource(containerFormat);
     if (!source) {
-        MessageBoxW(g_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
         return;
     }
 
     source = ApplyImageEffects(source);
     if (!source) {
-        MessageBoxW(g_ctx.hWnd, L"Could not apply effects to image for saving.", L"Save Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Could not apply effects to image for saving.", L"Save Error", MB_ICONERROR);
         return;
     }
 
@@ -415,40 +415,40 @@ void SaveImage() {
         }
         else {
             DeleteFileW(tempPath.c_str());
-            MessageBoxW(g_ctx.hWnd, L"Failed to replace the original file.", L"Save Error", MB_ICONERROR);
+            MessageBoxW(m_ctx.hWnd, L"Failed to replace the original file.", L"Save Error", MB_ICONERROR);
         }
     }
     else {
         DeleteFileW(tempPath.c_str());
-        MessageBoxW(g_ctx.hWnd, L"Failed to save image to temporary file.", L"Save Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Failed to save image to temporary file.", L"Save Error", MB_ICONERROR);
     }
 }
 
-static void SaveImageWithResize(const std::wstring& filePath, const GUID& containerFormat, UINT newWidth, UINT newHeight) {
+void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& containerFormat, UINT newWidth, UINT newHeight) {
     ComPtr<IWICBitmapSource> source;
     {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
-            source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
+            source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
         }
-        else if (g_ctx.wicConverterOriginal) {
-            source = g_ctx.wicConverterOriginal;
+        else if (m_ctx.wicConverterOriginal) {
+            source = m_ctx.wicConverterOriginal;
         }
         else {
-            MessageBoxW(g_ctx.hWnd, L"Could not get image source to resize.", L"Resize Error", MB_ICONERROR);
+            MessageBoxW(m_ctx.hWnd, L"Could not get image source to resize.", L"Resize Error", MB_ICONERROR);
             return;
         }
     }
 
     // apply crop first
-    if (g_ctx.isCropActive) {
+    if (m_ctx.isCropActive) {
         ComPtr<IWICBitmapClipper> clipper;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
             WICRect rc;
-            rc.X = static_cast<INT>(floor(g_ctx.cropRectLocal.left));
-            rc.Y = static_cast<INT>(floor(g_ctx.cropRectLocal.top));
-            rc.Width = static_cast<INT>(ceil(g_ctx.cropRectLocal.right)) - rc.X;
-            rc.Height = static_cast<INT>(ceil(g_ctx.cropRectLocal.bottom)) - rc.Y;
+            rc.X = static_cast<INT>(floor(m_ctx.cropRectLocal.left));
+            rc.Y = static_cast<INT>(floor(m_ctx.cropRectLocal.top));
+            rc.Width = static_cast<INT>(ceil(m_ctx.cropRectLocal.right)) - rc.X;
+            rc.Height = static_cast<INT>(ceil(m_ctx.cropRectLocal.bottom)) - rc.Y;
             if (rc.Width > 0 && rc.Height > 0) {
                 if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
                     source = clipper;
@@ -458,16 +458,16 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
     }
 
     // Apply Rotate/Flip Second
-    if (g_ctx.rotationAngle != 0 || g_ctx.isFlippedHorizontal) {
+    if (m_ctx.rotationAngle != 0 || m_ctx.isFlippedHorizontal) {
         ComPtr<IWICBitmapFlipRotator> rotator;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
+        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
             WICBitmapTransformOptions options = WICBitmapTransformRotate0;
-            switch (g_ctx.rotationAngle) {
+            switch (m_ctx.rotationAngle) {
             case 90:  options = WICBitmapTransformRotate90;  break;
             case 180: options = WICBitmapTransformRotate180; break;
             case 270: options = WICBitmapTransformRotate270; break;
             }
-            if (g_ctx.isFlippedHorizontal) {
+            if (m_ctx.isFlippedHorizontal) {
                 options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
             }
             if (SUCCEEDED(rotator->Initialize(source.Get(), options))) {
@@ -476,9 +476,9 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
         }
     }
 
-    if (g_ctx.isGrayscale) {
+    if (m_ctx.isGrayscale) {
         ComPtr<IWICFormatConverter> grayConverter;
-        if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
+        if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
             if (SUCCEEDED(grayConverter->Initialize(source.Get(), GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                 source = grayConverter;
             }
@@ -487,22 +487,22 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
 
     source = ApplyImageEffects(source);
     if (!source) {
-        MessageBoxW(g_ctx.hWnd, L"Could not apply effects to image for resizing.", L"Resize Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Could not apply effects to image for resizing.", L"Resize Error", MB_ICONERROR);
         return;
     }
 
     ComPtr<IWICBitmapScaler> scaler;
-    if (SUCCEEDED(g_ctx.wicFactory->CreateBitmapScaler(&scaler))) {
+    if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapScaler(&scaler))) {
         if (SUCCEEDED(scaler->Initialize(source.Get(), newWidth, newHeight, WICBitmapInterpolationModeFant))) {
             source = scaler;
         }
         else {
-            MessageBoxW(g_ctx.hWnd, L"Failed to initialize image scaler.", L"Resize Error", MB_ICONERROR);
+            MessageBoxW(m_ctx.hWnd, L"Failed to initialize image scaler.", L"Resize Error", MB_ICONERROR);
             return;
         }
     }
     else {
-        MessageBoxW(g_ctx.hWnd, L"Failed to create image scaler.", L"Resize Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Failed to create image scaler.", L"Resize Error", MB_ICONERROR);
         return;
     }
 
@@ -510,7 +510,7 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
     if (SUCCEEDED(source->GetPixelFormat(&sourcePixelFormat))) {
         if (containerFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
             ComPtr<IWICFormatConverter> converter;
-            if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&converter))) {
+            if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
                 if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
                     source = converter;
                 }
@@ -524,7 +524,7 @@ static void SaveImageWithResize(const std::wstring& filePath, const GUID& contai
         LoadImageFromFile(filePath.c_str());
     }
     else {
-        MessageBoxW(g_ctx.hWnd, L"Failed to save resized image.", L"Resize Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"Failed to save resized image.", L"Resize Error", MB_ICONERROR);
     }
 }
 
@@ -533,13 +533,14 @@ struct ResizeDialogParams {
     UINT origHeight;
     UINT newWidth;
     UINT newHeight;
+    bool isUpdating;
 };
-static bool g_isUpdating = false;
 
 static INT_PTR CALLBACK ResizeDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_INITDIALOG: {
         ResizeDialogParams* pParams = reinterpret_cast<ResizeDialogParams*>(lParam);
+        pParams->isUpdating = false;
         SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pParams);
         SetDlgItemInt(hDlg, IDC_EDIT_WIDTH, pParams->origWidth, FALSE);
         SetDlgItemInt(hDlg, IDC_EDIT_HEIGHT, pParams->origHeight, FALSE);
@@ -548,12 +549,12 @@ static INT_PTR CALLBACK ResizeDialogProc(HWND hDlg, UINT message, WPARAM wParam,
     }
     case WM_COMMAND:
         if (HIWORD(wParam) == EN_CHANGE) {
-            if (g_isUpdating) return (INT_PTR)FALSE;
+            ResizeDialogParams* pParams = reinterpret_cast<ResizeDialogParams*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
+            if (!pParams || pParams->isUpdating) return (INT_PTR)FALSE;
             if (!IsDlgButtonChecked(hDlg, IDC_CHECK_ASPECT)) return (INT_PTR)FALSE;
 
-            g_isUpdating = true;
-            ResizeDialogParams* pParams = reinterpret_cast<ResizeDialogParams*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
-            if (pParams && pParams->origWidth > 0 && pParams->origHeight > 0) {
+            pParams->isUpdating = true;
+            if (pParams->origWidth > 0 && pParams->origHeight > 0) {
                 double aspect = static_cast<double>(pParams->origHeight) / pParams->origWidth;
                 int id = LOWORD(wParam);
                 BOOL success = FALSE;
@@ -569,21 +570,23 @@ static INT_PTR CALLBACK ResizeDialogProc(HWND hDlg, UINT message, WPARAM wParam,
                     }
                 }
             }
-            g_isUpdating = false;
+            pParams->isUpdating = false;
             return (INT_PTR)TRUE;
         }
 
         switch (LOWORD(wParam)) {
         case IDOK: {
             ResizeDialogParams* pParams = reinterpret_cast<ResizeDialogParams*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
-            BOOL successW, successH;
-            pParams->newWidth = GetDlgItemInt(hDlg, IDC_EDIT_WIDTH, &successW, FALSE);
-            pParams->newHeight = GetDlgItemInt(hDlg, IDC_EDIT_HEIGHT, &successH, FALSE);
-            if (successW && successH && pParams->newWidth > 0 && pParams->newHeight > 0) {
-                EndDialog(hDlg, IDOK);
-            }
-            else {
-                MessageBoxW(hDlg, L"Please enter valid (non-zero) positive numbers for width and height.", L"Invalid Input", MB_ICONERROR);
+            if (pParams) {
+                BOOL successW, successH;
+                pParams->newWidth = GetDlgItemInt(hDlg, IDC_EDIT_WIDTH, &successW, FALSE);
+                pParams->newHeight = GetDlgItemInt(hDlg, IDC_EDIT_HEIGHT, &successH, FALSE);
+                if (successW && successH && pParams->newWidth > 0 && pParams->newHeight > 0) {
+                    EndDialog(hDlg, IDOK);
+                }
+                else {
+                    MessageBoxW(hDlg, L"Please enter valid (non-zero) positive numbers for width and height.", L"Invalid Input", MB_ICONERROR);
+                }
             }
             return (INT_PTR)TRUE;
         }
@@ -596,16 +599,16 @@ static INT_PTR CALLBACK ResizeDialogProc(HWND hDlg, UINT message, WPARAM wParam,
     return (INT_PTR)FALSE;
 }
 
-void ResizeImageAction() {
+void ViewerApp::ResizeImageAction() {
     ResizeDialogParams params = {};
     if (!GetCurrentImageSize(&params.origWidth, &params.origHeight)) {
-        MessageBoxW(g_ctx.hWnd, L"No image loaded to resize.", L"Resize Error", MB_ICONERROR);
+        MessageBoxW(m_ctx.hWnd, L"No image loaded to resize.", L"Resize Error", MB_ICONERROR);
         return;
     }
     params.newWidth = params.origWidth;
     params.newHeight = params.origHeight;
 
-    if (DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_RESIZE_DIALOG), g_ctx.hWnd, ResizeDialogProc, (LPARAM)&params) == IDOK) {
+    if (DialogBoxParam(m_ctx.hInst, MAKEINTRESOURCE(IDD_RESIZE_DIALOG), m_ctx.hWnd, ResizeDialogProc, (LPARAM)&params) == IDOK) {
 
         wchar_t szFile[MAX_PATH] = L"Untitled.png";
         const wchar_t* filter = L"PNG File (*.png)\0*.png\0JPEG File (*.jpg)\0*.jpg\0BMP File (*.bmp)\0*.bmp\0All Files (*.*)\0*.*\0";
@@ -614,8 +617,8 @@ void ResizeImageAction() {
 
         GUID originalFormat = GUID_NULL;
         {
-            CriticalSectionLock lock(g_ctx.wicMutex);
-            originalFormat = g_ctx.originalContainerFormat;
+            CriticalSectionLock lock(m_ctx.wicMutex);
+            originalFormat = m_ctx.originalContainerFormat;
         }
 
         if (originalFormat == GUID_ContainerFormatJpeg) {
@@ -629,8 +632,8 @@ void ResizeImageAction() {
             wcscpy_s(szFile, L"Untitled.bmp");
         }
 
-        if (g_ctx.currentImageIndex >= 0 && g_ctx.currentImageIndex < static_cast<int>(g_ctx.imageFiles.size())) {
-            const std::wstring& originalPath = g_ctx.imageFiles[g_ctx.currentImageIndex];
+        if (m_ctx.currentImageIndex >= 0 && m_ctx.currentImageIndex < static_cast<int>(m_ctx.imageFiles.size())) {
+            const std::wstring& originalPath = m_ctx.imageFiles[m_ctx.currentImageIndex];
             wchar_t originalFileName[MAX_PATH];
             wcscpy_s(originalFileName, MAX_PATH, originalPath.c_str());
             PathRemoveExtensionW(originalFileName);
@@ -640,7 +643,7 @@ void ResizeImageAction() {
         }
 
         OPENFILENAMEW ofn = { sizeof(ofn) };
-        ofn.hwndOwner = g_ctx.hWnd;
+        ofn.hwndOwner = m_ctx.hWnd;
         ofn.lpstrFile = szFile;
         ofn.nMaxFile = MAX_PATH;
         ofn.lpstrFilter = filter;

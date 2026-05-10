@@ -2,7 +2,7 @@
 #include "viewer.h"
 #include <propvarutil.h>
 
-extern AppContext g_ctx;
+
 
 std::wstring GetMetadataString(IWICMetadataQueryReader* pReader, const wchar_t* query) {
     PROPVARIANT propValue;
@@ -111,14 +111,14 @@ std::wstring GetContainerFormatName(const GUID& guid) {
     return L"Unknown";
 }
 
-std::wstring GetBitDepth(IWICBitmapFrameDecode* pFrame) {
+std::wstring GetBitDepth(IWICBitmapFrameDecode* pFrame, IWICImagingFactory* wicFactory) {
     WICPixelFormatGUID pixelFormatGuid;
     if (FAILED(pFrame->GetPixelFormat(&pixelFormatGuid))) {
         return L"N/A";
     }
 
     ComPtr<IWICComponentInfo> componentInfo;
-    if (FAILED(g_ctx.wicFactory->CreateComponentInfo(pixelFormatGuid, &componentInfo))) {
+    if (FAILED(wicFactory->CreateComponentInfo(pixelFormatGuid, &componentInfo))) {
         return L"N/A";
     }
 

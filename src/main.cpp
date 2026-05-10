@@ -1,106 +1,49 @@
 #include "viewer.h"
 
-AppContext g_ctx;
+// define dark mode for older Windows
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
 
-static void ResetImageState() {
-    g_ctx.rotationAngle = 0;
-    g_ctx.offsetX = 0.0f;
-    g_ctx.offsetY = 0.0f;
-    g_ctx.isFlippedHorizontal = false;
-    switch (g_ctx.currentOrientation) {
-    case 2: g_ctx.isFlippedHorizontal = true; break;
-    case 3: g_ctx.rotationAngle = 180; break;
-    case 4: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 180; break;
-    case 5: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 270; break;
-    case 6: g_ctx.rotationAngle = 90; break;
-    case 7: g_ctx.isFlippedHorizontal = true; g_ctx.rotationAngle = 90; break;
-    case 8: g_ctx.rotationAngle = 270; break;
+void ViewerApp::CenterImage(bool resetZoom) {
+    if (resetZoom) {
+        m_ctx.zoomFactor = 1.0f;
     }
-
-    g_ctx.isGrayscale = false;
-    g_ctx.isCropActive = false;
-    g_ctx.isCropMode = false;
-    g_ctx.isSelectingCropRect = false;
-    g_ctx.isCropPending = false;
-    g_ctx.brightness = 0.0f;
-    g_ctx.contrast = 1.0f;
-    g_ctx.saturation = 1.0f;
-    {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        g_ctx.wicConverter = g_ctx.wicConverterOriginal;
-        g_ctx.d2dBitmap = nullptr;
-        g_ctx.d2dBitmapHq = nullptr;
-        g_ctx.isHqPending = false;
-        g_ctx.animationD2DBitmaps.clear();
-    }
-}
-
-void CenterImage(bool resetZoom) {
-    if (resetZoom) g_ctx.zoomFactor = 1.0f;
-    ResetImageState();
-    FitImageToWindow();
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
-}
-
-void SetActualSize() {
-    UINT imgWidth, imgHeight;
-    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
-    g_ctx.zoomFactor = 1.0f;
-    ResetImageState();
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    m_ctx.offsetX = 0.0f;
+    m_ctx.offsetY = 0.0f;
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
     TriggerHqRender();
 }
 
-// Try dark mode menus
-enum PreferredAppMode { AppModeDefault = 0, AllowDark = 1, ForceDark = 2, ForceLight = 3, MaxAppMode = 4 };
-using fnSetPreferredAppMode = PreferredAppMode(WINAPI*)(PreferredAppMode appMode);
-using fnFlushMenuThemes = void(WINAPI*)();
-
-void UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor) {
-    // dark mode for black/grey backgrounds
-    BOOL useDarkMode = (bgColor == BackgroundColor::Black || bgColor == BackgroundColor::Grey) ? TRUE : FALSE;
-
-    // title bar dark: 20 for W11; 19 for older
-    if (FAILED(DwmSetWindowAttribute(hWnd, 20, &useDarkMode, sizeof(useDarkMode)))) {
-        DwmSetWindowAttribute(hWnd, 19, &useDarkMode, sizeof(useDarkMode));
-    }
-
-    // dark mode context menu for newer Windows (1903+)
-    HMODULE hUxtheme = GetModuleHandleW(L"uxtheme.dll");
-    if (!hUxtheme) {
-        hUxtheme = LoadLibraryW(L"uxtheme.dll");
-    }
-
-    if (hUxtheme) {
-        // Fetch  ordinals 135 and 136
-        fnSetPreferredAppMode pSetPreferredAppMode = (fnSetPreferredAppMode)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(135));
-        fnFlushMenuThemes pFlushMenuThemes = (fnFlushMenuThemes)GetProcAddress(hUxtheme, MAKEINTRESOURCEA(136));
-
-        if (pSetPreferredAppMode && pFlushMenuThemes) {
-            // Force the app mode to Dark or Light
-            pSetPreferredAppMode(useDarkMode ? ForceDark : ForceLight);
-            // apply instantly without restart
-            pFlushMenuThemes();
-        }
-    }
+void ViewerApp::SetActualSize() {
+    m_ctx.zoomFactor = 1.0f;
+    m_ctx.offsetX = 0.0f;
+    m_ctx.offsetY = 0.0f;
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+    TriggerHqRender();
 }
 
-int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
-    g_ctx.hInst = hInstance;
+void ViewerApp::UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor) {
+    // black/grey background triggers dark mode
+    BOOL useDarkMode = (bgColor == BackgroundColor::Black || bgColor == BackgroundColor::Grey) ? TRUE : FALSE;
+    DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));
+}
 
+int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
+    m_ctx.hInst = hInstance;
     wchar_t exePath[MAX_PATH] = { 0 };
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     PathRemoveFileSpecW(exePath);
     PathAppendW(exePath, L"minimal_image_viewer_settings.ini");
-    g_ctx.settingsPath = exePath;
+    m_ctx.settingsPath = exePath;
 
     RECT startupRect;
-    ReadSettings(g_ctx.settingsPath, startupRect, g_ctx.startFullScreen, g_ctx.enforceSingleInstance, g_ctx.alwaysOnTop);
+    ReadSettings(m_ctx.settingsPath, startupRect, m_ctx.startFullScreen, m_ctx.enforceSingleInstance, m_ctx.alwaysOnTop);
     if (IsRectEmpty(&startupRect)) {
         startupRect = { CW_USEDEFAULT, CW_USEDEFAULT, 800, 600 };
     }
 
-    if (g_ctx.enforceSingleInstance) {
+    if (m_ctx.enforceSingleInstance) {
         HWND existingWnd = FindWindowW(L"MinimalImageViewer", nullptr);
         if (existingWnd) {
             SetForegroundWindow(existingWnd);
@@ -120,36 +63,36 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
 
     winrt::init_apartment(winrt::apartment_type::single_threaded);
 
-    InitializeCriticalSection(&g_ctx.wicMutex);
-    InitializeCriticalSection(&g_ctx.preloadMutex);
+    InitializeCriticalSection(&m_ctx.wicMutex);
+    InitializeCriticalSection(&m_ctx.preloadMutex);
 
-    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_ctx.wicFactory)))) {
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&m_ctx.wicFactory)))) {
         MessageBoxW(nullptr, L"Failed to create WIC Imaging Factory.", L"Error", MB_OK | MB_ICONERROR);
-        DeleteCriticalSection(&g_ctx.wicMutex);
-        DeleteCriticalSection(&g_ctx.preloadMutex);
+        DeleteCriticalSection(&m_ctx.wicMutex);
+        DeleteCriticalSection(&m_ctx.preloadMutex);
         winrt::uninit_apartment();
         return 1;
     }
 
-    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), (void**)&g_ctx.d2dFactory))) {
+    if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), (void**)&m_ctx.d2dFactory))) {
         MessageBoxW(nullptr, L"Failed to create Direct2D Factory.", L"Error", MB_OK | MB_ICONERROR);
-        DeleteCriticalSection(&g_ctx.wicMutex);
-        DeleteCriticalSection(&g_ctx.preloadMutex);
+        DeleteCriticalSection(&m_ctx.wicMutex);
+        DeleteCriticalSection(&m_ctx.preloadMutex);
         winrt::uninit_apartment();
         return 1;
     }
 
-    if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(g_ctx.writeFactory.GetAddressOf())))) {
+    if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_ctx.writeFactory.GetAddressOf())))) {
         MessageBoxW(nullptr, L"Failed to create DirectWrite Factory.", L"Error", MB_OK | MB_ICONERROR);
-        DeleteCriticalSection(&g_ctx.wicMutex);
-        DeleteCriticalSection(&g_ctx.preloadMutex);
+        DeleteCriticalSection(&m_ctx.wicMutex);
+        DeleteCriticalSection(&m_ctx.preloadMutex);
         winrt::uninit_apartment();
         return 1;
     }
 
     WNDCLASSEXW wcex = { sizeof(WNDCLASSEXW) };
     wcex.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
-    wcex.lpfnWndProc = WndProc;
+    wcex.lpfnWndProc = ViewerApp::StaticWndProc;
     wcex.hInstance = hInstance;
     wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPICON));
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
@@ -157,9 +100,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
     wcex.lpszClassName = L"MinimalImageViewer";
     RegisterClassExW(&wcex);
 
-    DWORD exStyle = (g_ctx.alwaysOnTop) ? WS_EX_TOPMOST : 0;
+    DWORD exStyle = (m_ctx.alwaysOnTop) ? WS_EX_TOPMOST : 0;
 
-    g_ctx.hWnd = CreateWindowExW(
+    m_ctx.hWnd = CreateWindowExW(
         exStyle,
         wcex.lpszClassName,
         L"Minimal Image Viewer",
@@ -167,31 +110,30 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         startupRect.left, startupRect.top,
         (startupRect.left == CW_USEDEFAULT) ? 800 : (startupRect.right - startupRect.left),
         (startupRect.top == CW_USEDEFAULT) ? 600 : (startupRect.bottom - startupRect.top),
-        nullptr, nullptr, hInstance, nullptr
+        nullptr, nullptr, hInstance, this
     );
 
-    if (!g_ctx.hWnd) {
+    if (!m_ctx.hWnd) {
         MessageBoxW(nullptr, L"Failed to create window.", L"Error", MB_OK | MB_ICONERROR);
-        DeleteCriticalSection(&g_ctx.wicMutex);
-        DeleteCriticalSection(&g_ctx.preloadMutex);
+        DeleteCriticalSection(&m_ctx.wicMutex);
+        DeleteCriticalSection(&m_ctx.preloadMutex);
         winrt::uninit_apartment();
         return 1;
     }
 
-    SetWindowLongPtr(g_ctx.hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&g_ctx));
-    DragAcceptFiles(g_ctx.hWnd, TRUE);
-    UpdateTitleBarTheme(g_ctx.hWnd, g_ctx.bgColor);
+    DragAcceptFiles(m_ctx.hWnd, TRUE);
+    UpdateTitleBarTheme(m_ctx.hWnd, m_ctx.bgColor);
 
-    g_ctx.isInitialized = true; 
+    m_ctx.isInitialized = true; 
 
-    if (g_ctx.startFullScreen) {
+    if (m_ctx.startFullScreen) {
         ToggleFullScreen();
     }
 
     Render();
 
-    ShowWindow(g_ctx.hWnd, nCmdShow);
-    UpdateWindow(g_ctx.hWnd);
+    ShowWindow(m_ctx.hWnd, nCmdShow);
+    UpdateWindow(m_ctx.hWnd);
 
     if (lpCmdLine && *lpCmdLine) {
         wchar_t filePath[MAX_PATH];
@@ -200,7 +142,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         LoadImageFromFile(filePath);
     }
 
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
 
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
@@ -208,28 +150,38 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         DispatchMessage(&msg);
     }
 
-    g_ctx.isShuttingDown = true;
+    m_ctx.isShuttingDown = true;
     CleanupLoadingThread();
 
-    while (g_ctx.activeBackgroundThreads > 0) {
+    while (m_ctx.activeBackgroundThreads > 0) {
         Sleep(10);
     }
 
-    g_ctx.wicConverter = nullptr;
-    g_ctx.wicConverterOriginal = nullptr;
-    g_ctx.undoStack.clear();
-    g_ctx.d2dBitmap = nullptr;
-    g_ctx.animationFrameConverters.clear();
-    g_ctx.animationD2DBitmaps.clear();
-    g_ctx.textBrush = nullptr;
-    g_ctx.textFormat = nullptr;
-    g_ctx.renderTarget = nullptr;
-    g_ctx.writeFactory = nullptr;
-    g_ctx.d2dFactory = nullptr;
-    g_ctx.wicFactory = nullptr;
+    if (m_ctx.darkBrush) {
+        DeleteObject(m_ctx.darkBrush);
+        m_ctx.darkBrush = nullptr;
+    }
 
-    DeleteCriticalSection(&g_ctx.wicMutex);
-    DeleteCriticalSection(&g_ctx.preloadMutex);
+    m_ctx.wicConverter = nullptr;
+    m_ctx.wicConverterOriginal = nullptr;
+    m_ctx.undoStack.clear();
+    m_ctx.d2dBitmap = nullptr;
+    m_ctx.animationFrameConverters.clear();
+    m_ctx.animationD2DBitmaps.clear();
+    m_ctx.textBrush = nullptr;
+    m_ctx.textFormat = nullptr;
+    m_ctx.renderTarget = nullptr;
+    m_ctx.writeFactory = nullptr;
+    m_ctx.d2dFactory = nullptr;
+    m_ctx.wicFactory = nullptr;
+
+    DeleteCriticalSection(&m_ctx.wicMutex);
+    DeleteCriticalSection(&m_ctx.preloadMutex);
     winrt::uninit_apartment();
     return static_cast<int>(msg.wParam);
+}
+
+int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
+    ViewerApp app;
+    return app.Run(hInstance, nCmdShow, lpCmdLine);
 }

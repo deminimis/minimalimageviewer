@@ -1,27 +1,27 @@
 #include "viewer.h"
 #include <stdio.h>
 
-extern AppContext g_ctx;
 
-void UpdateViewToCurrentFrame() {
+
+void ViewerApp::UpdateViewToCurrentFrame() {
     {
-        CriticalSectionLock lock(g_ctx.wicMutex);
-        if (g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
-            g_ctx.wicConverterOriginal = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+        CriticalSectionLock lock(m_ctx.wicMutex);
+        if (m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
+            m_ctx.wicConverterOriginal = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
         }
     }
     // Re-apply rotation, brightness, etc. to the new frame
     ApplyEffectsToView();
-    InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
 }
 
-void UpdateEyedropperColor(POINT pt) {
-    g_ctx.didCopyColor = false;
+void ViewerApp::UpdateEyedropperColor(POINT pt) {
+    m_ctx.didCopyColor = false;
     float localX = 0, localY = 0;
     UINT imgWidth = 0, imgHeight = 0;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) {
-        g_ctx.colorStringRgb = L"N/A";
-        g_ctx.colorStringHex = L"";
+        m_ctx.colorStringRgb = L"N/A";
+        m_ctx.colorStringHex = L"";
         return;
     }
 
@@ -30,13 +30,13 @@ void UpdateEyedropperColor(POINT pt) {
     BYTE r = 0, g = 0, b = 0;
     bool inImage = (localX >= 0 && localX < imgWidth && localY >= 0 && localY < imgHeight);
     if (inImage) {
-        CriticalSectionLock lock(g_ctx.wicMutex);
+        CriticalSectionLock lock(m_ctx.wicMutex);
         ComPtr<IWICBitmapSource> source;
-        if (g_ctx.isAnimated && g_ctx.currentAnimationFrame < g_ctx.animationFrameConverters.size()) {
-            source = g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame];
+        if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
+            source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
         }
         else {
-            source = g_ctx.wicConverter;
+            source = m_ctx.wicConverter;
         }
 
         if (source) {
@@ -58,7 +58,7 @@ void UpdateEyedropperColor(POINT pt) {
         }
     }
     else {
-        switch (g_ctx.bgColor) {
+        switch (m_ctx.bgColor) {
         case BackgroundColor::Black:
             r = 0;
             g = 0; b = 0;
@@ -72,60 +72,60 @@ void UpdateEyedropperColor(POINT pt) {
             g = 30; b = 30;
             break;
         case BackgroundColor::Transparent:
-            g_ctx.colorStringRgb = L"N/A (Transparent BG)";
-            g_ctx.colorStringHex = L"";
+            m_ctx.colorStringRgb = L"N/A (Transparent BG)";
+            m_ctx.colorStringHex = L"";
             return;
         }
     }
 
-    g_ctx.hoveredColor = RGB(r, g, b);
+    m_ctx.hoveredColor = RGB(r, g, b);
     wchar_t rgbBuf[32];
     swprintf_s(rgbBuf, L"RGB(%d, %d, %d)", r, g, b);
-    g_ctx.colorStringRgb = rgbBuf;
+    m_ctx.colorStringRgb = rgbBuf;
 
     wchar_t hexBuf[16];
     swprintf_s(hexBuf, L"#%02X%02X%02X", r, g, b);
-    g_ctx.colorStringHex = hexBuf;
+    m_ctx.colorStringHex = hexBuf;
 }
 
-void HandleEyedropperClick() {
-    if (g_ctx.colorStringHex.empty()) return;
+void ViewerApp::HandleEyedropperClick() {
+    if (m_ctx.colorStringHex.empty()) return;
 
-    if (!OpenClipboard(g_ctx.hWnd)) return;
+    if (!OpenClipboard(m_ctx.hWnd)) return;
     EmptyClipboard();
-    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, (g_ctx.colorStringHex.length() + 1) * sizeof(wchar_t));
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, (m_ctx.colorStringHex.length() + 1) * sizeof(wchar_t));
     if (hMem) {
         LPWSTR pMem = static_cast<LPWSTR>(GlobalLock(hMem));
         if (pMem) {
-            wcscpy_s(pMem, g_ctx.colorStringHex.length() + 1, g_ctx.colorStringHex.c_str());
+            wcscpy_s(pMem, m_ctx.colorStringHex.length() + 1, m_ctx.colorStringHex.c_str());
             GlobalUnlock(hMem);
             SetClipboardData(CF_UNICODETEXT, hMem);
-            g_ctx.didCopyColor = true;
-            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+            m_ctx.didCopyColor = true;
+            InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
         }
     }
     CloseClipboard();
 }
 
-void ToggleFullScreen() {
-    if (!g_ctx.isFullScreen) {
-        g_ctx.savedStyle = GetWindowLong(g_ctx.hWnd, GWL_STYLE);
-        GetWindowRect(g_ctx.hWnd, &g_ctx.savedRect);
-        HMONITOR hMonitor = MonitorFromWindow(g_ctx.hWnd, MONITOR_DEFAULTTONEAREST);
+void ViewerApp::ToggleFullScreen() {
+    if (!m_ctx.isFullScreen) {
+        m_ctx.savedStyle = GetWindowLong(m_ctx.hWnd, GWL_STYLE);
+        GetWindowRect(m_ctx.hWnd, &m_ctx.savedRect);
+        HMONITOR hMonitor = MonitorFromWindow(m_ctx.hWnd, MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = { sizeof(mi) };
         GetMonitorInfo(hMonitor, &mi);
-        SetWindowLong(g_ctx.hWnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        SetWindowPos(g_ctx.hWnd, g_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+        SetWindowLong(m_ctx.hWnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
+        SetWindowPos(m_ctx.hWnd, m_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
             mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
             SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-        g_ctx.isFullScreen = true;
+        m_ctx.isFullScreen = true;
     }
     else {
-        SetWindowLong(g_ctx.hWnd, GWL_STYLE, g_ctx.savedStyle | WS_VISIBLE);
-        SetWindowPos(g_ctx.hWnd, g_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, g_ctx.savedRect.left, g_ctx.savedRect.top,
-            g_ctx.savedRect.right - g_ctx.savedRect.left, g_ctx.savedRect.bottom - g_ctx.savedRect.top,
+        SetWindowLong(m_ctx.hWnd, GWL_STYLE, m_ctx.savedStyle | WS_VISIBLE);
+        SetWindowPos(m_ctx.hWnd, m_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, m_ctx.savedRect.left, m_ctx.savedRect.top,
+            m_ctx.savedRect.right - m_ctx.savedRect.left, m_ctx.savedRect.bottom - m_ctx.savedRect.top,
             SWP_FRAMECHANGED | SWP_SHOWWINDOW);
-        g_ctx.isFullScreen = false;
+        m_ctx.isFullScreen = false;
     }
     FitImageToWindow();
 }

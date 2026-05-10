@@ -3,7 +3,7 @@
 #include <string>
 #include <stdio.h>
 
-extern AppContext g_ctx;
+
 
 static std::wstring FormatFileTime(const FILETIME& ft) {
     SYSTEMTIME stUTC = {}, stLocal = {};
@@ -47,14 +47,14 @@ static std::wstring FormatFileSize(const LARGE_INTEGER& fileSize) {
     return buffer;
 }
 
-ImageProperties GetCurrentOsdProperties() {
+ImageProperties ViewerApp::GetCurrentOsdProperties() {
     ImageProperties pProps = {};
-    if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
-        if (!g_ctx.currentFilePathOverride.empty()) pProps.filePath = g_ctx.currentFilePathOverride;
+    if (m_ctx.currentImageIndex < 0 || m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
+        if (!m_ctx.currentFilePathOverride.empty()) pProps.filePath = m_ctx.currentFilePathOverride;
         return pProps;
     }
 
-    pProps.filePath = g_ctx.imageFiles[g_ctx.currentImageIndex];
+    pProps.filePath = m_ctx.imageFiles[m_ctx.currentImageIndex];
     UINT w = 0, h = 0;
     if (GetCurrentImageSize(&w, &h)) pProps.dimensions = std::to_wstring(w) + L" x " + std::to_wstring(h) + L" pixels";
 
@@ -78,11 +78,11 @@ ImageProperties GetCurrentOsdProperties() {
     if (SUCCEEDED(CreateDecoderFromFile(pProps.filePath.c_str(), &decoder))) {
         GUID fmt;
         if (SUCCEEDED(decoder->GetContainerFormat(&fmt))) {
-            pProps.imageFormat = GetContainerFormatName(fmt) + (g_ctx.isAnimated ? L" (Animated)" : L"");
+            pProps.imageFormat = GetContainerFormatName(fmt) + (m_ctx.isAnimated ? L" (Animated)" : L"");
         }
         ComPtr<IWICBitmapFrameDecode> frame;
         if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
-            pProps.bitDepth = GetBitDepth(frame.Get());
+            pProps.bitDepth = GetBitDepth(frame.Get(), m_ctx.wicFactory.Get());
             double dpiX, dpiY;
             if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) pProps.dpi = std::to_wstring(static_cast<int>(dpiX + 0.5)) + L" x " + std::to_wstring(static_cast<int>(dpiY + 0.5)) + L" DPI";
             ComPtr<IWICMetadataQueryReader> meta;
@@ -111,20 +111,25 @@ ImageProperties GetCurrentOsdProperties() {
     return pProps;
 }
 
-LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+struct PropsWndData {
+    ViewerApp* pApp;
+    ImageProperties* pProps;
+};
+
+LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE: {
         LPCREATESTRUCT pcs = (LPCREATESTRUCT)lParam;
-        ImageProperties* pProps = (ImageProperties*)pcs->lpCreateParams;
-        SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pProps);
+        PropsWndData* pData = (PropsWndData*)pcs->lpCreateParams;
+        SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pData);
         break;
     }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-        ImageProperties* pProps = (ImageProperties*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-
-        if (pProps) {
+        PropsWndData* pData = (PropsWndData*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+        if (pData && pData->pProps) {
+            ImageProperties* pProps = pData->pProps;
             SetBkMode(hdc, TRANSPARENT);
             HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
             SelectObject(hdc, hFont);
@@ -133,7 +138,6 @@ LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
             int x_label = 15;
             int x_value = 160;
             int y_step = 20;
-
             auto drawProp = [&](const wchar_t* label, const std::wstring& val, bool extraSpace = false) {
                 if (extraSpace) y += y_step / 2;
                 TextOutW(hdc, x_label, y, label, (int)wcslen(label));
@@ -179,9 +183,12 @@ LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
         DestroyWindow(hWnd);
         break;
     case WM_DESTROY: {
-        ImageProperties* pProps = (ImageProperties*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
-        delete pProps;
-        g_ctx.hPropsWnd = nullptr;
+        PropsWndData* pData = (PropsWndData*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+        if (pData) {
+            pData->pApp->m_ctx.hPropsWnd = nullptr;
+            delete pData->pProps;
+            delete pData;
+        }
         break;
     }
     default:
@@ -190,17 +197,18 @@ LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
     return 0;
 }
 
-void ShowImageProperties() {
-    if (g_ctx.hPropsWnd) {
-        SetForegroundWindow(g_ctx.hPropsWnd);
+void ViewerApp::ShowImageProperties() {
+    if (m_ctx.hPropsWnd) {
+        SetForegroundWindow(m_ctx.hPropsWnd);
         return;
     }
 
-    if (g_ctx.currentImageIndex < 0 || g_ctx.currentImageIndex >= static_cast<int>(g_ctx.imageFiles.size())) {
+    if (m_ctx.currentImageIndex < 0 || m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
         return;
     }
 
     ImageProperties* pProps = new ImageProperties(GetCurrentOsdProperties());
+    PropsWndData* pData = new PropsWndData{ this, pProps };
 
     static const wchar_t* PROPS_CLASS_NAME = L"MinimalImageViewerProperties";
     static bool classRegistered = false;
@@ -208,8 +216,8 @@ void ShowImageProperties() {
         WNDCLASSEXW wcex = { sizeof(WNDCLASSEXW) };
         wcex.style = CS_HREDRAW | CS_VREDRAW;
         wcex.lpfnWndProc = PropsWndProc;
-        wcex.hInstance = g_ctx.hInst;
-        wcex.hIcon = LoadIcon(g_ctx.hInst, MAKEINTRESOURCE(IDI_APPICON));
+        wcex.hInstance = m_ctx.hInst;
+        wcex.hIcon = LoadIcon(m_ctx.hInst, MAKEINTRESOURCE(IDI_APPICON));
         wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
         wcex.lpszClassName = PROPS_CLASS_NAME;
@@ -219,27 +227,28 @@ void ShowImageProperties() {
     }
 
     RECT rcParent = {};
-    GetWindowRect(g_ctx.hWnd, &rcParent);
+    GetWindowRect(m_ctx.hWnd, &rcParent);
     int wndWidth = 600;
     int wndHeight = 700;
     int xPos = rcParent.left + (rcParent.right - rcParent.left - wndWidth) / 2;
     int yPos = rcParent.top + (rcParent.bottom - rcParent.top - wndHeight) / 2;
 
-    g_ctx.hPropsWnd = CreateWindowW(
+    m_ctx.hPropsWnd = CreateWindowW(
         PROPS_CLASS_NAME,
         L"Image Properties",
         (WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU) & ~WS_THICKFRAME,
         xPos, yPos, wndWidth, wndHeight,
-        g_ctx.hWnd,
+        m_ctx.hWnd,
         nullptr,
-        g_ctx.hInst,
-        pProps
+        m_ctx.hInst,
+        pData
     );
 
-    if (g_ctx.hPropsWnd) {
-        ShowWindow(g_ctx.hPropsWnd, SW_SHOW);
+    if (m_ctx.hPropsWnd) {
+        ShowWindow(m_ctx.hPropsWnd, SW_SHOW);
     }
     else {
         delete pProps;
+        delete pData;
     }
 }
