@@ -23,6 +23,14 @@ void ViewerApp::SetActualSize() {
     TriggerHqRender();
 }
 
+void ViewerApp::SetZoomLevel(float zoom) {
+    m_ctx.zoomFactor = zoom;
+    m_ctx.offsetX = 0.0f;
+    m_ctx.offsetY = 0.0f;
+    InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+    TriggerHqRender();
+}
+
 void ViewerApp::UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor) {
     // black/grey background triggers dark mode
     BOOL useDarkMode = (bgColor == BackgroundColor::Black || bgColor == BackgroundColor::Grey) ? TRUE : FALSE;

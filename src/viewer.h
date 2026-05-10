@@ -109,7 +109,7 @@ enum class DefaultZoomMode {
 
 enum ActionID {
     Act_Next = 0, Act_Prev, Act_ZoomIn, Act_ZoomOut, Act_Fit, Act_Actual,
-    Act_Fullscreen, Act_RotateCW, Act_RotateCCW, Act_Flip, Act_Crop, Act_Exit, Act_Count
+    Act_Fullscreen, Act_RotateCW, Act_RotateCCW, Act_Flip, Act_Crop, Act_CustomZoom, Act_Exit, Act_Count
 };
 
 class ImageProperties {
@@ -320,6 +320,7 @@ public:
     // Core methods 
     void CenterImage(bool resetZoom);
     void SetActualSize();
+    void SetZoomLevel(float zoom);
     void TriggerHqRender();
     void ToggleFullScreen();
     void UpdateEyedropperColor(POINT pt);
@@ -349,6 +350,7 @@ public:
     void OpenPreferencesDialog();
     void OpenKeybindingsDialog();
     std::wstring GetHotkeyString(WORD hk);
+    void OpenZoomDialog();
     void OpenBrightnessContrastDialog();
     void PerformOcr();
     void PerformOcrArea(D2D1_RECT_F ocrRectLocal);
@@ -372,6 +374,7 @@ public:
     static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
     static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
     static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
+    static INT_PTR CALLBACK ZoomDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
     static LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 private:

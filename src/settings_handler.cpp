@@ -34,6 +34,7 @@ void ViewerApp::ReadSettings(const std::wstring& path, RECT& rect, bool& fullscr
     m_ctx.hotkeys[Act_RotateCCW] = getInt(L"Keys", L"RotateCCW", VK_DOWN);
     m_ctx.hotkeys[Act_Flip] = getInt(L"Keys", L"Flip", 'F');
     m_ctx.hotkeys[Act_Crop] = getInt(L"Keys", L"Crop", 'C');
+    m_ctx.hotkeys[Act_CustomZoom] = getInt(L"Keys", L"CustomZoom", MAKEWORD('Z', HOTKEYF_CONTROL | HOTKEYF_SHIFT));
     m_ctx.hotkeys[Act_Exit] = getInt(L"Keys", L"Exit", VK_ESCAPE);
 }
 
@@ -61,6 +62,7 @@ void ViewerApp::WriteSettings(const std::wstring& path, const RECT& rect, bool f
     writeInt(L"Keys", L"RotateCCW", m_ctx.hotkeys[Act_RotateCCW]);
     writeInt(L"Keys", L"Flip", m_ctx.hotkeys[Act_Flip]);
     writeInt(L"Keys", L"Crop", m_ctx.hotkeys[Act_Crop]);
+    writeInt(L"Keys", L"CustomZoom", m_ctx.hotkeys[Act_CustomZoom]);
     writeInt(L"Keys", L"Exit", m_ctx.hotkeys[Act_Exit]);
 
     if (!IsRectEmpty(&rect) && !IsIconic(m_ctx.hWnd) && !IsZoomed(m_ctx.hWnd)) {

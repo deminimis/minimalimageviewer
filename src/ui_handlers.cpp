@@ -76,6 +76,7 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
     }
     else if (isKey(Act_Fit)) { FitImageToWindow(); }
     else if (isKey(Act_Actual)) { SetActualSize(); }
+    else if (isKey(Act_CustomZoom)) { OpenZoomDialog(); }
     else if (isKey(Act_Fullscreen)) { ToggleFullScreen(); }
     else if (isKey(Act_RotateCW)) { RotateImage(true); }
     else if (isKey(Act_RotateCCW)) { RotateImage(false); }
@@ -190,6 +191,8 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     addAction(hViewMenu, IDM_ZOOM_IN, Act_ZoomIn, L"Zoom In");
     addAction(hViewMenu, IDM_ZOOM_OUT, Act_ZoomOut, L"Zoom Out");
     addAction(hViewMenu, IDM_ACTUAL_SIZE, Act_Actual, L"Actual Size (100%)");
+    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_200, L"Zoom 200%");
+    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_300, L"Zoom 300%");
     addAction(hViewMenu, IDM_FIT_TO_WINDOW, Act_Fit, L"Fit to Window");
     AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
     addAction(hViewMenu, IDM_FULLSCREEN, Act_Fullscreen, L"Full Screen");
@@ -237,6 +240,8 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
         break;
     }
     case IDM_ACTUAL_SIZE:   SetActualSize(); break;
+    case IDM_ZOOM_200:      SetZoomLevel(2.0f); break;
+    case IDM_ZOOM_300:      SetZoomLevel(3.0f); break;
     case IDM_FIT_TO_WINDOW: FitImageToWindow(); break;
     case IDM_FULLSCREEN:    ToggleFullScreen(); break;
     case IDM_DELETE_IMG:    DeleteCurrentImage(); break;

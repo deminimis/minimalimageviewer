@@ -17,6 +17,8 @@
 #define IDM_PASTE                   1016
 #define IDM_OPEN_LOCATION           1017
 #define IDM_ACTUAL_SIZE             1021
+#define IDM_ZOOM_200                1022
+#define IDM_ZOOM_300                1023
 #define IDM_PROPERTIES              1027
 #define IDM_SORT_BY_NAME_ASC        1028
 #define IDM_SORT_BY_NAME_DESC       1029
@@ -33,7 +35,9 @@
 #define IDM_KEYBINDINGS             1043
 
 #define IDD_KEYBINDINGS_DIALOG      204
+#define IDD_ZOOM_DIALOG             205
 #define IDC_COMBO_ACTION            2024
+#define IDC_EDIT_ZOOM               2028
 #define IDC_HOTKEY_CTRL             2025
 #define IDM_GRAYSCALE               1040
 #define IDM_OCR                     1041

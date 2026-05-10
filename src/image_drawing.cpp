@@ -646,7 +646,12 @@ void ViewerApp::Render() {
 
 void ViewerApp::TriggerHqRender() {
     m_ctx.d2dBitmapHq = nullptr;
-    if (!m_ctx.smoothScaling) return; // Skip HQ rendering if smooth scaling disabled. 
+    if (!m_ctx.smoothScaling) return; // Skip HQ rendering if smooth scaling disabled.
+
+    // Skip HQ smoothing for integer zoom levels > 1x 
+    if (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f) {
+        return;
+    }
 
     if (!m_ctx.isAnimated && m_ctx.wicConverter) {
         KillTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID);

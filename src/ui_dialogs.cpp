@@ -243,7 +243,7 @@ std::wstring ViewerApp::GetHotkeyString(WORD hk) {
 
 static const wchar_t* ActionNames[] = {
     L"Next Image", L"Previous Image", L"Zoom In", L"Zoom Out", L"Fit to Window", L"Actual Size",
-    L"Fullscreen", L"Rotate Clockwise", L"Rotate Counter-Clockwise", L"Flip", L"Crop", L"Exit"
+    L"Fullscreen", L"Rotate Clockwise", L"Rotate Counter-Clockwise", L"Flip", L"Crop", L"Custom Zoom", L"Exit"
 };
 
 INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -305,4 +305,47 @@ INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARA
 
 void ViewerApp::OpenKeybindingsDialog() {
     DialogBoxParam(m_ctx.hInst, MAKEINTRESOURCE(IDD_KEYBINDINGS_DIALOG), m_ctx.hWnd, KeybindingsDialogProc, (LPARAM)this);
+}
+
+INT_PTR CALLBACK ViewerApp::ZoomDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    ViewerApp* pApp = nullptr;
+    if (message == WM_INITDIALOG) {
+        pApp = reinterpret_cast<ViewerApp*>(lParam);
+        SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pApp);
+        // Default the text box to the current zoom level
+        SetDlgItemInt(hDlg, IDC_EDIT_ZOOM, static_cast<UINT>(pApp->GetContext().zoomFactor * 100.0f + 0.5f), FALSE);
+        return (INT_PTR)TRUE;
+    }
+    else {
+        pApp = reinterpret_cast<ViewerApp*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
+    }
+
+    if (!pApp) return (INT_PTR)FALSE;
+
+    switch (message) {
+    case WM_COMMAND:
+        switch (LOWORD(wParam)) {
+        case IDOK: {
+            BOOL success = FALSE;
+            UINT val = GetDlgItemInt(hDlg, IDC_EDIT_ZOOM, &success, FALSE);
+            if (success && val > 0) {
+                pApp->SetZoomLevel(val / 100.0f);
+                EndDialog(hDlg, IDOK);
+            }
+            else {
+                MessageBoxW(hDlg, L"Please enter a valid positive percentage.", L"Invalid Input", MB_ICONERROR);
+            }
+            return (INT_PTR)TRUE;
+        }
+        case IDCANCEL:
+            EndDialog(hDlg, IDCANCEL);
+            return (INT_PTR)TRUE;
+        }
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
+void ViewerApp::OpenZoomDialog() {
+    DialogBoxParam(m_ctx.hInst, MAKEINTRESOURCE(IDD_ZOOM_DIALOG), m_ctx.hWnd, ZoomDialogProc, (LPARAM)this);
 }
