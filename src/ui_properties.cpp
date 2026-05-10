@@ -2,6 +2,7 @@
 #include "exif_utils.h"
 #include <string>
 #include <stdio.h>
+#include <memory>
 
 
 
@@ -113,7 +114,7 @@ ImageProperties ViewerApp::GetCurrentOsdProperties() {
 
 struct PropsWndData {
     ViewerApp* pApp;
-    ImageProperties* pProps;
+    std::unique_ptr<ImageProperties> pProps;
 };
 
 LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -129,7 +130,7 @@ LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam,
         HDC hdc = BeginPaint(hWnd, &ps);
         PropsWndData* pData = (PropsWndData*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
         if (pData && pData->pProps) {
-            ImageProperties* pProps = pData->pProps;
+            ImageProperties* pProps = pData->pProps.get();
             SetBkMode(hdc, TRANSPARENT);
             HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
             SelectObject(hdc, hFont);
@@ -186,8 +187,7 @@ LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam,
         PropsWndData* pData = (PropsWndData*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
         if (pData) {
             pData->pApp->m_ctx.hPropsWnd = nullptr;
-            delete pData->pProps;
-            delete pData;
+            std::unique_ptr<PropsWndData> cleanup(pData);
         }
         break;
     }
@@ -207,8 +207,9 @@ void ViewerApp::ShowImageProperties() {
         return;
     }
 
-    ImageProperties* pProps = new ImageProperties(GetCurrentOsdProperties());
-    PropsWndData* pData = new PropsWndData{ this, pProps };
+    auto pData = std::make_unique<PropsWndData>();
+    pData->pApp = this;
+    pData->pProps = std::make_unique<ImageProperties>(GetCurrentOsdProperties());
 
     static const wchar_t* PROPS_CLASS_NAME = L"MinimalImageViewerProperties";
     static bool classRegistered = false;
@@ -241,14 +242,11 @@ void ViewerApp::ShowImageProperties() {
         m_ctx.hWnd,
         nullptr,
         m_ctx.hInst,
-        pData
+        pData.get() 
     );
 
     if (m_ctx.hPropsWnd) {
         ShowWindow(m_ctx.hPropsWnd, SW_SHOW);
-    }
-    else {
-        delete pProps;
-        delete pData;
+        pData.release(); 
     }
 }
