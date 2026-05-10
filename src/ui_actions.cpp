@@ -62,20 +62,19 @@ void ViewerApp::HandleDropFiles(HDROP hDrop) {
 void ViewerApp::HandleCopy() {
     if (OpenClipboard(m_ctx.hWnd)) {
         EmptyClipboard();
-
         // Copy as CF_HDROP
         if (!m_ctx.loadingFilePath.empty() && m_ctx.loadingFilePath != L"Clipboard Image") {
             size_t size = (m_ctx.loadingFilePath.length() + 1) * sizeof(wchar_t);
             HGLOBAL hMemDrop = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + size + sizeof(wchar_t));
             if (hMemDrop) {
-                BYTE* pData = (BYTE*)GlobalLock(hMemDrop);
+                BYTE* pData = static_cast<BYTE*>(GlobalLock(hMemDrop));
                 if (pData) {
-                    DROPFILES* pDrop = (DROPFILES*)pData;
+                    DROPFILES* pDrop = reinterpret_cast<DROPFILES*>(pData);
                     pDrop->pFiles = sizeof(DROPFILES);
                     pDrop->pt = { 0, 0 };
                     pDrop->fNC = FALSE;
                     pDrop->fWide = TRUE;
-                    wchar_t* pPath = (wchar_t*)(pData + sizeof(DROPFILES));
+                    wchar_t* pPath = reinterpret_cast<wchar_t*>(pData + sizeof(DROPFILES));
                     wcscpy_s(pPath, m_ctx.loadingFilePath.length() + 1, m_ctx.loadingFilePath.c_str());
 
                     GlobalUnlock(hMemDrop);
@@ -106,7 +105,8 @@ void ViewerApp::HandleCopy() {
                 if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
                     WICBitmapTransformOptions options = WICBitmapTransformRotate0;
                     switch (rotAngle) {
-                    case 90:  options = WICBitmapTransformRotate90; break;
+                    case 90:  options = WICBitmapTransformRotate90;
+                        break;
                     case 180: options = WICBitmapTransformRotate180; break;
                     case 270: options = WICBitmapTransformRotate270; break;
                     }
@@ -129,20 +129,18 @@ void ViewerApp::HandleCopy() {
                         UINT cbImage = stride * height;
                         UINT cbHeader = sizeof(BITMAPINFOHEADER);
                         UINT cbTotal = cbHeader + cbImage;
-
                         HGLOBAL hMemDib = GlobalAlloc(GMEM_MOVEABLE, cbTotal);
                         if (hMemDib) {
-                            BYTE* pData = (BYTE*)GlobalLock(hMemDib);
+                            BYTE* pData = static_cast<BYTE*>(GlobalLock(hMemDib));
                             if (pData) {
-                                BITMAPINFOHEADER* bmi = (BITMAPINFOHEADER*)pData;
+                                BITMAPINFOHEADER* bmi = reinterpret_cast<BITMAPINFOHEADER*>(pData);
                                 ZeroMemory(bmi, sizeof(BITMAPINFOHEADER));
                                 bmi->biSize = sizeof(BITMAPINFOHEADER);
                                 bmi->biWidth = width;
-                                bmi->biHeight = -(LONG)height; 
+                                bmi->biHeight = -(LONG)height;
                                 bmi->biPlanes = 1;
                                 bmi->biBitCount = 32;
                                 bmi->biCompression = BI_RGB;
-
                                 BYTE* pPixels = pData + cbHeader;
                                 WICRect rc = { 0, 0, (INT)width, (INT)height };
                                 if (SUCCEEDED(converter->CopyPixels(&rc, stride, cbImage, pPixels))) {
@@ -171,7 +169,7 @@ void ViewerApp::HandlePaste() {
         if (IsClipboardFormatAvailable(CF_HDROP)) {
             HANDLE hData = GetClipboardData(CF_HDROP);
             if (hData) {
-                HDROP hDrop = (HDROP)hData;
+                HDROP hDrop = static_cast<HDROP>(hData);
                 wchar_t filePath[MAX_PATH];
                 if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH)) {
                     LoadImageFromFile(filePath);
@@ -179,7 +177,7 @@ void ViewerApp::HandlePaste() {
             }
         }
         else if (IsClipboardFormatAvailable(CF_BITMAP) || IsClipboardFormatAvailable(CF_DIB)) {
-            HBITMAP hBitmap = (HBITMAP)GetClipboardData(CF_BITMAP);
+            HBITMAP hBitmap = static_cast<HBITMAP>(GetClipboardData(CF_BITMAP));
             if (hBitmap) {
                 CriticalSectionLock lock(m_ctx.wicMutex);
                 ComPtr<IWICBitmap> wicBitmap;

@@ -120,19 +120,19 @@ struct PropsWndData {
 LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_CREATE: {
-        LPCREATESTRUCT pcs = (LPCREATESTRUCT)lParam;
-        PropsWndData* pData = (PropsWndData*)pcs->lpCreateParams;
-        SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)pData);
+        LPCREATESTRUCT pcs = reinterpret_cast<LPCREATESTRUCT>(lParam);
+        PropsWndData* pData = reinterpret_cast<PropsWndData*>(pcs->lpCreateParams);
+        SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pData));
         break;
     }
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-        PropsWndData* pData = (PropsWndData*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+        PropsWndData* pData = reinterpret_cast<PropsWndData*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
         if (pData && pData->pProps) {
             ImageProperties* pProps = pData->pProps.get();
             SetBkMode(hdc, TRANSPARENT);
-            HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            HFONT hFont = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
             SelectObject(hdc, hFont);
 
             int y = 15;
@@ -141,8 +141,8 @@ LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam,
             int y_step = 20;
             auto drawProp = [&](const wchar_t* label, const std::wstring& val, bool extraSpace = false) {
                 if (extraSpace) y += y_step / 2;
-                TextOutW(hdc, x_label, y, label, (int)wcslen(label));
-                TextOutW(hdc, x_value, y, val.c_str(), (int)val.length());
+                TextOutW(hdc, x_label, y, label, static_cast<int>(wcslen(label)));
+                TextOutW(hdc, x_value, y, val.c_str(), static_cast<int>(val.length()));
                 y += y_step;
                 };
 
@@ -184,7 +184,7 @@ LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam,
         DestroyWindow(hWnd);
         break;
     case WM_DESTROY: {
-        PropsWndData* pData = (PropsWndData*)GetWindowLongPtr(hWnd, GWLP_USERDATA);
+        PropsWndData* pData = reinterpret_cast<PropsWndData*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
         if (pData) {
             pData->pApp->m_ctx.hPropsWnd = nullptr;
             std::unique_ptr<PropsWndData> cleanup(pData);

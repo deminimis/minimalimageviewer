@@ -4,7 +4,6 @@
 #include <stdio.h>
 
 
-
 INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     ViewerApp* pApp = nullptr;
     if (message == WM_INITDIALOG) {
@@ -88,17 +87,6 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             return (INT_PTR)TRUE;
         }
         break;
-    case WM_CTLCOLORDLG:
-    case WM_CTLCOLORSTATIC:
-    case WM_CTLCOLORBTN: {
-        if (ctx.bgColor == BackgroundColor::Black || ctx.bgColor == BackgroundColor::Grey) {
-            HDC hdc = (HDC)wParam;
-            SetTextColor(hdc, RGB(255, 255, 255));
-            SetBkColor(hdc, RGB(32, 32, 32));
-            return (INT_PTR)ctx.darkBrush;
-        }
-        break;
-    }
     case WM_DESTROY:
         break;
     }
@@ -109,22 +97,11 @@ void ViewerApp::OpenPreferencesDialog() {
     DialogBoxParam(m_ctx.hInst, MAKEINTRESOURCE(IDD_PREFERENCES_DIALOG), m_ctx.hWnd, PreferencesDialogProc, (LPARAM)this);
 }
 
-static void UpdateEffectLabels(HWND hDlg, ViewerApp* pApp) {
-    auto& ctx = pApp->GetContext();
-    wchar_t buf[64];
-    swprintf_s(buf, L"Brightness: %d%%", static_cast<int>(ctx.brightness * 100));
-    SetDlgItemTextW(hDlg, IDC_LABEL_BRIGHTNESS, buf);
-    swprintf_s(buf, L"Contrast: %d%%", static_cast<int>(ctx.contrast * 100));
-    SetDlgItemTextW(hDlg, IDC_LABEL_CONTRAST, buf);
-    swprintf_s(buf, L"Saturation: %d%%", static_cast<int>(ctx.saturation * 100));
-    SetDlgItemTextW(hDlg, IDC_LABEL_SATURATION, buf);
-}
-
 INT_PTR CALLBACK ViewerApp::BrightnessContrastDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     ViewerApp* pApp = nullptr;
     if (message == WM_INITDIALOG) {
         pApp = reinterpret_cast<ViewerApp*>(lParam);
-        SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pApp);
+        SetWindowLongPtr(hDlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pApp));
     }
     else {
         pApp = reinterpret_cast<ViewerApp*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
@@ -133,6 +110,17 @@ INT_PTR CALLBACK ViewerApp::BrightnessContrastDialogProc(HWND hDlg, UINT message
     if (!pApp) return (INT_PTR)FALSE;
 
     auto& ctx = pApp->GetContext();
+
+    // Inline lambda replacing the old UpdateEffectLabels helper
+    auto updateLabels = [&ctx](HWND dlg) {
+        wchar_t buf[64];
+        swprintf_s(buf, L"Brightness: %d%%", static_cast<int>(ctx.brightness * 100));
+        SetDlgItemTextW(dlg, IDC_LABEL_BRIGHTNESS, buf);
+        swprintf_s(buf, L"Contrast: %d%%", static_cast<int>(ctx.contrast * 100));
+        SetDlgItemTextW(dlg, IDC_LABEL_CONTRAST, buf);
+        swprintf_s(buf, L"Saturation: %d%%", static_cast<int>(ctx.saturation * 100));
+        SetDlgItemTextW(dlg, IDC_LABEL_SATURATION, buf);
+        };
 
     switch (message) {
     case WM_INITDIALOG: {
@@ -145,21 +133,23 @@ INT_PTR CALLBACK ViewerApp::BrightnessContrastDialogProc(HWND hDlg, UINT message
         ctx.savedBrightness = ctx.brightness;
         ctx.savedContrast = ctx.contrast;
         ctx.savedSaturation = ctx.saturation;
+
         auto setupSlider = [&](int id, int minV, int maxV, float val) {
             HWND hSlider = GetDlgItem(hDlg, id);
             SendMessageW(hSlider, TBM_SETRANGE, TRUE, MAKELPARAM(minV, maxV));
             SendMessageW(hSlider, TBM_SETPOS, TRUE, static_cast<int>(val * 100));
             };
+
         setupSlider(IDC_SLIDER_BRIGHTNESS, -100, 100, ctx.brightness);
         setupSlider(IDC_SLIDER_CONTRAST, 0, 300, ctx.contrast);
         setupSlider(IDC_SLIDER_SATURATION, 0, 300, ctx.saturation);
 
-        UpdateEffectLabels(hDlg, pApp);
+        updateLabels(hDlg);
         return (INT_PTR)TRUE;
     }
     case WM_HSCROLL: {
-        HWND hSlider = (HWND)lParam;
-        int pos = (int)SendMessageW(hSlider, TBM_GETPOS, 0, 0);
+        HWND hSlider = reinterpret_cast<HWND>(lParam);
+        int pos = static_cast<int>(SendMessageW(hSlider, TBM_GETPOS, 0, 0));
 
         if (hSlider == GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS)) {
             ctx.brightness = pos / 100.0f;
@@ -173,7 +163,7 @@ INT_PTR CALLBACK ViewerApp::BrightnessContrastDialogProc(HWND hDlg, UINT message
 
         pApp->ApplyEffectsToView();
         InvalidateRect(ctx.hWnd, nullptr, FALSE);
-        UpdateEffectLabels(hDlg, pApp);
+        updateLabels(hDlg);
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
@@ -187,7 +177,7 @@ INT_PTR CALLBACK ViewerApp::BrightnessContrastDialogProc(HWND hDlg, UINT message
             SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_SATURATION), TBM_SETPOS, TRUE, 100);
             pApp->ApplyEffectsToView();
             InvalidateRect(ctx.hWnd, nullptr, FALSE);
-            UpdateEffectLabels(hDlg, pApp);
+            updateLabels(hDlg);
             return (INT_PTR)TRUE;
         case IDOK:
             EndDialog(hDlg, IDOK);
