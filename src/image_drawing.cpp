@@ -818,13 +818,3 @@ void ConvertImageToWindowPoint(float localX, float localY, POINT& pt) {
     pt.x = static_cast<LONG>(translatedX + windowCenterX + g_ctx.offsetX);
     pt.y = static_cast<LONG>(translatedY + windowCenterY + g_ctx.offsetY);
 }
-
-bool IsPointInImage(POINT pt, const RECT& clientRect) {
-    UINT imgWidth, imgHeight;
-    if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return false;
-
-    float localX, localY;
-    ConvertWindowToImagePoint(pt, localX, localY);
-
-    return localX >= 0 && localX < imgWidth && localY >= 0 && localY < imgHeight;
-}

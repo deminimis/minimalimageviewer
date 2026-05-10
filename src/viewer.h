@@ -329,7 +329,6 @@ void FitImageToWindow();
 void ZoomImage(float factor, POINT pt);
 void RotateImage(bool clockwise);
 void FlipImage();
-bool IsPointInImage(POINT pt, const RECT& clientRect);
 bool GetCurrentImageSize(UINT* width, UINT* height);
 ImageProperties GetCurrentOsdProperties();
 void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY);

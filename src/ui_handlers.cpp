@@ -580,7 +580,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         }
         else {
             UINT w = 0, h = 0;
-            if (GetCurrentImageSize(&w, &h) && IsPointInImage(pt, {})) {
+            if (GetCurrentImageSize(&w, &h)) {
                 g_ctx.isDraggingImage = true;
                 dragStart = pt;
                 SetCapture(hWnd);
