@@ -274,7 +274,7 @@ INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARA
             if (idx != CB_ERR) {
                 ctx.hotkeys[idx] = static_cast<WORD>(SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0));
                 SetDlgItemTextW(hDlg, IDOK, L"Applied!");
-                SetTimer(hDlg, 1, 1500, nullptr);
+                SetTimer(hDlg, KEYBINDING_TIMER_ID, 1500, nullptr);
             }
             return (INT_PTR)TRUE;
         }
@@ -284,8 +284,8 @@ INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARA
         }
         break;
     case WM_TIMER:
-        if (wParam == 1) {
-            KillTimer(hDlg, 1);
+        if (wParam == KEYBINDING_TIMER_ID) {
+            KillTimer(hDlg, KEYBINDING_TIMER_ID);
             SetDlgItemTextW(hDlg, IDOK, L"Apply");
         }
         return (INT_PTR)TRUE;

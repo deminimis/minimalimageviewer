@@ -74,6 +74,7 @@ constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 constexpr UINT LOADING_TIMER_ID = 4;
 constexpr UINT HQ_RENDER_TIMER_ID = 5;
 constexpr UINT NAV_DEBOUNCE_TIMER_ID = 6;
+constexpr UINT KEYBINDING_TIMER_ID = 7;
 
 class CriticalSectionLock {
 public:
