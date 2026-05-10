@@ -208,7 +208,13 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR 
         DispatchMessage(&msg);
     }
 
+    g_ctx.isShuttingDown = true;
     CleanupLoadingThread();
+
+    while (g_ctx.activeBackgroundThreads > 0) {
+        Sleep(10);
+    }
+
     g_ctx.wicConverter = nullptr;
     g_ctx.wicConverterOriginal = nullptr;
     g_ctx.undoStack.clear();

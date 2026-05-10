@@ -98,7 +98,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
     }
 
     InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
-    std::thread([filePath, mySeqId]() {
+    g_ctx.RunBackgroundTask([filePath, mySeqId]() {
         if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
             if (IsSequenceValid(mySeqId)) {
                 PostMessage(g_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
@@ -362,7 +362,7 @@ void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd) {
 
         PostMessage(g_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
         CoUninitialize();
-        }).detach();
+    });
 }
 
 // directory scanner that checks sequence validity
@@ -552,7 +552,7 @@ void OnImageReady(bool success, int seqId) {
         // Start background folder scan ONLY AFTER image is ready to display
         std::wstring currentFilePath = g_ctx.loadingFilePath;
         int currentSeqId = seqId;
-        std::thread([currentFilePath, currentSeqId]() {
+        g_ctx.RunBackgroundTask([currentFilePath, currentSeqId]() {
             wchar_t folder[MAX_PATH] = { 0 };
             wcscpy_s(folder, MAX_PATH, currentFilePath.c_str());
             PathRemoveFileSpecW(folder);
@@ -574,7 +574,7 @@ void OnImageReady(bool success, int seqId) {
             }
 
             PostMessage(g_ctx.hWnd, WM_APP_DIR_READY, 0, (LPARAM)currentSeqId);
-            }).detach();
+            });
     }
     else {
         g_ctx.isLoading = false;

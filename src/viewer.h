@@ -284,6 +284,25 @@ struct AppContext {
     bool preserveView = false;
     float renderScale = 1.0f;
     WORD hotkeys[Act_Count]{};
+
+    // Thread Management
+    std::atomic<int> activeBackgroundThreads{ 0 };
+    std::atomic<bool> isShuttingDown{ false };
+
+    template <typename Func>
+    void RunBackgroundTask(Func&& task) {
+        activeBackgroundThreads++;
+        std::thread([this, t = std::forward<Func>(task)]() mutable {
+            struct Tracker {
+                AppContext* ctx;
+                ~Tracker() { ctx->activeBackgroundThreads--; }
+            } tracker{ this };
+
+            if (!isShuttingDown) {
+                t();
+            }
+            }).detach();
+    }
 };
 
 void CenterImage(bool resetZoom);

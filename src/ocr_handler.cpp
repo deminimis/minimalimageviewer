@@ -102,9 +102,9 @@ void PerformOcr() {
     SetCursor(LoadCursor(nullptr, IDC_WAIT));
     std::wstring path = g_ctx.loadingFilePath;
     HWND hwnd = g_ctx.hWnd;
-    std::thread([path, hwnd]() {
+    g_ctx.RunBackgroundTask([path, hwnd]() {
         PerformOcrTask(path, hwnd, false, D2D1_RECT_F{});
-        }).detach();
+        });
 }
 
 void PerformOcrArea(D2D1_RECT_F ocrRectLocal) {
@@ -115,7 +115,7 @@ void PerformOcrArea(D2D1_RECT_F ocrRectLocal) {
     SetCursor(LoadCursor(nullptr, IDC_WAIT));
     std::wstring path = g_ctx.loadingFilePath;
     HWND hwnd = g_ctx.hWnd;
-    std::thread([path, hwnd, ocrRectLocal]() {
+    g_ctx.RunBackgroundTask([path, hwnd, ocrRectLocal]() {
         PerformOcrTask(path, hwnd, true, ocrRectLocal);
-        }).detach();
+        });
 }

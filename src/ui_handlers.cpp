@@ -449,7 +449,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 float targetZoom = g_ctx.zoomFactor;
                 ComPtr<IWICFormatConverter> source = g_ctx.wicConverter;
 
-                std::thread([source, targetZoom]() {
+                g_ctx.RunBackgroundTask([source, targetZoom]() {
                     if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
                     ComPtr<IWICImagingFactory> localFactory;
                     if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory)))) {
@@ -471,7 +471,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                         }
                     }
                     CoUninitialize();
-                    }).detach();
+                    });
             }
         }
         else if (wParam == NAV_DEBOUNCE_TIMER_ID) {
