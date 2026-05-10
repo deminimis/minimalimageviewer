@@ -25,6 +25,7 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
         CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, g_ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_AUTO_REFRESH, g_ctx.isAutoRefresh ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_SMOOTH_SCALING, g_ctx.smoothScaling ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_FADE_ANIMATION, g_ctx.enableFadeAnimation ? BST_CHECKED : BST_UNCHECKED);
         CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL,
             g_ctx.defaultZoomMode == DefaultZoomMode::Fit ? IDC_RADIO_ZOOM_FIT : IDC_RADIO_ZOOM_ACTUAL);
         return (INT_PTR)TRUE;
@@ -54,8 +55,10 @@ static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wP
             bool newSmoothScaling = (IsDlgButtonChecked(hDlg, IDC_CHECK_SMOOTH_SCALING) == BST_CHECKED);
             if (newSmoothScaling != g_ctx.smoothScaling) {
                 g_ctx.smoothScaling = newSmoothScaling;
-                TriggerHqRender(); 
+                TriggerHqRender();
             }
+
+            g_ctx.enableFadeAnimation = (IsDlgButtonChecked(hDlg, IDC_CHECK_FADE_ANIMATION) == BST_CHECKED);
 
             if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) g_ctx.defaultZoomMode = DefaultZoomMode::Fit;
             else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) g_ctx.defaultZoomMode = DefaultZoomMode::Actual;

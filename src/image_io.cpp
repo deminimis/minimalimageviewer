@@ -523,8 +523,14 @@ void OnImageReady(bool success, int seqId) {
         g_ctx.isLoading = false;
         if (!g_ctx.isSvg) g_ctx.currentOrientation = g_ctx.stagedOrientation;
 
-        g_ctx.isFading = true;
-        g_ctx.fadeStartTime = GetTickCount64();
+        if (g_ctx.enableFadeAnimation) {
+            g_ctx.isFading = true;
+            g_ctx.fadeStartTime = GetTickCount64();
+        }
+        else {
+            g_ctx.isFading = false;
+        }
+
         if (g_ctx.preserveView) {
             g_ctx.preserveView = false;
         }

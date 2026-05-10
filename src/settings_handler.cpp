@@ -9,6 +9,7 @@ void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& 
     singleInstance = getInt(L"Settings", L"EnforceSingleInstance", 1) == 1;
     g_ctx.alwaysOnTop = getInt(L"Settings", L"AlwaysOnTop", 0) == 1;
     g_ctx.smoothScaling = getInt(L"Settings", L"SmoothScaling", 1) == 1;
+    g_ctx.enableFadeAnimation = getInt(L"Settings", L"EnableFadeAnimation", 1) == 1;
 
     int bgChoice = getInt(L"Settings", L"BackgroundColor", 0);
     g_ctx.bgColor = static_cast<BackgroundColor>((bgChoice < 0 || bgChoice > 3) ? 0 : bgChoice);
@@ -45,6 +46,7 @@ void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, 
     writeInt(L"Settings", L"EnforceSingleInstance", singleInstance ? 1 : 0);
     writeInt(L"Settings", L"AlwaysOnTop", alwaysOnTop ? 1 : 0);
     writeInt(L"Settings", L"SmoothScaling", g_ctx.smoothScaling ? 1 : 0);
+    writeInt(L"Settings", L"EnableFadeAnimation", g_ctx.enableFadeAnimation ? 1 : 0);
     writeInt(L"Settings", L"BackgroundColor", static_cast<int>(g_ctx.bgColor));
     writeInt(L"Settings", L"DefaultZoomMode", static_cast<int>(g_ctx.defaultZoomMode));
 

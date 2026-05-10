@@ -279,6 +279,7 @@ struct AppContext {
 
     bool isAutoRefresh = false;
     bool smoothScaling = true;
+    bool enableFadeAnimation = true;
     FILETIME lastWriteTime = { 0 };
     bool preserveView = false;
     float renderScale = 1.0f;
