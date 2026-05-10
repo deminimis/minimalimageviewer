@@ -193,7 +193,6 @@ void ApplyEffectsToView() {
         }
     }
     g_ctx.renderScale = 1.0f;
-    source = ApplyImageEffects(source);
     if (g_ctx.renderTarget) {
         UINT maxDim = g_ctx.renderTarget->GetMaximumBitmapSize();
         UINT w = 0, h = 0;

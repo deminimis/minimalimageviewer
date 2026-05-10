@@ -18,56 +18,63 @@ void CreateDeviceResources() {
     if (!g_ctx.renderTarget) {
         RECT rc;
         GetClientRect(g_ctx.hWnd, &rc);
-        D2D1_SIZE_U size = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
+        UINT width = std::max(1L, rc.right - rc.left);
+        UINT height = std::max(1L, rc.bottom - rc.top);
 
-        HRESULT hr = g_ctx.d2dFactory->CreateHwndRenderTarget(
-            D2D1::RenderTargetProperties(),
-            D2D1::HwndRenderTargetProperties(g_ctx.hWnd, size),
-            &g_ctx.renderTarget
-        );
+        D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3 };
+        ComPtr<ID3D11Device> d3dDevice;
 
-        if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(D2D1::ColorF::White),
-                &g_ctx.textBrush
-            );
+        // Try gpu
+        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
+
+        // Fallback to software emulation
+        if (FAILED(hr)) {
+            hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
         }
-        if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f),
-                &g_ctx.cropRectBrush
-            );
+
+        if (FAILED(hr)) {
+            return;
         }
-        if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f),
-                &g_ctx.fadeBrush
-            );
-        }
-        if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(D2D1::ColorF::White),
-                &g_ctx.ocrMessageBrush
-            );
-        }
-        if (SUCCEEDED(hr)) {
-            hr = g_ctx.renderTarget->CreateSolidColorBrush(
-                D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f),
-                &g_ctx.ocrMessageBgBrush
-            );
-        }
-        if (SUCCEEDED(hr)) {
-            hr = g_ctx.writeFactory->CreateTextFormat(
-                L"Segoe UI",
-                NULL,
-                DWRITE_FONT_WEIGHT_NORMAL,
-                DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL,
-                14.0f,
-                L"en-us",
-                &g_ctx.textFormat
-            );
-        }
+        D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
+
+        ComPtr<IDXGIDevice> dxgiDevice;
+        d3dDevice.As(&dxgiDevice);
+
+        ComPtr<ID2D1Device> d2dDevice;
+        g_ctx.d2dFactory->CreateDevice(dxgiDevice.Get(), &d2dDevice);
+        d2dDevice->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &g_ctx.renderTarget);
+
+        ComPtr<IDXGIAdapter> dxgiAdapter;
+        dxgiDevice->GetAdapter(&dxgiAdapter);
+        ComPtr<IDXGIFactory2> dxgiFactory;
+        dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
+
+        DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
+        swapDesc.Width = width;
+        swapDesc.Height = height;
+        swapDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        swapDesc.SampleDesc.Count = 1;
+        swapDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        swapDesc.BufferCount = 2;
+        swapDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+        dxgiFactory->CreateSwapChainForHwnd(d3dDevice.Get(), g_ctx.hWnd, &swapDesc, nullptr, nullptr, &g_ctx.swapChain);
+
+        ComPtr<IDXGISurface> backBuffer;
+        g_ctx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+        D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+        ComPtr<ID2D1Bitmap1> targetBmp;
+        g_ctx.renderTarget->CreateBitmapFromDxgiSurface(backBuffer.Get(), &bmpProps, &targetBmp);
+        g_ctx.renderTarget->SetTarget(targetBmp.Get());
+
+        g_ctx.renderTarget->CreateEffect(CLSID_D2D1ColorMatrix, &g_ctx.colorMatrixEffect);
+
+        HRESULT hr = S_OK;
+        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &g_ctx.textBrush); }
+        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f), &g_ctx.cropRectBrush); }
+        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &g_ctx.fadeBrush); }
+        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &g_ctx.ocrMessageBrush); }
+        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &g_ctx.ocrMessageBgBrush); }
+        if (SUCCEEDED(hr)) { hr = g_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f, L"en-us", &g_ctx.textFormat); }
         if (SUCCEEDED(hr)) {
             g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
@@ -76,9 +83,7 @@ void CreateDeviceResources() {
 
     if (g_ctx.bgColor == BackgroundColor::Transparent) {
         if (!g_ctx.checkerboardBrush && g_ctx.renderTarget) {
-            const int dim = 8;
-            const int w = dim * 2;
-            const int h = dim * 2;
+            const int dim = 8; const int w = dim * 2; const int h = dim * 2;
             std::vector<UINT32> pixels(w * h);
             for (int y = 0; y < h; ++y) {
                 for (int x = 0; x < w; ++x) {
@@ -89,25 +94,22 @@ void CreateDeviceResources() {
             ComPtr<ID2D1Bitmap> checkerboardBitmap;
             D2D1_SIZE_U size = D2D1::SizeU(w, h);
             D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
-
-            HRESULT hr = g_ctx.renderTarget->CreateBitmap(size, pixels.data(), w * 4, &props, &checkerboardBitmap);
-
-            if (SUCCEEDED(hr)) {
+            if (SUCCEEDED(g_ctx.renderTarget->CreateBitmap(size, pixels.data(), w * 4, &props, &checkerboardBitmap))) {
                 D2D1_BITMAP_BRUSH_PROPERTIES brushProps = D2D1::BitmapBrushProperties(D2D1_EXTEND_MODE_WRAP, D2D1_EXTEND_MODE_WRAP, D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
                 g_ctx.renderTarget->CreateBitmapBrush(checkerboardBitmap, brushProps, &g_ctx.checkerboardBrush);
             }
         }
     }
     else {
-        if (g_ctx.checkerboardBrush) {
-            g_ctx.checkerboardBrush = nullptr;
-        }
+        if (g_ctx.checkerboardBrush) { g_ctx.checkerboardBrush = nullptr; }
     }
 }
 
 void DiscardDeviceResources() {
     CriticalSectionLock lock(g_ctx.wicMutex);
     g_ctx.renderTarget = nullptr;
+    g_ctx.swapChain = nullptr;
+    g_ctx.colorMatrixEffect = nullptr;
     g_ctx.d2dBitmap = nullptr;
     g_ctx.textBrush = nullptr;
     g_ctx.textFormat = nullptr;
@@ -448,12 +450,43 @@ void Render() {
                 }
             }
 
-            g_ctx.renderTarget->DrawBitmap(
-                bitmapToDraw,
-                nullptr,
-                opacity,
-                (isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
-            );
+            if (g_ctx.colorMatrixEffect) {
+                g_ctx.colorMatrixEffect->SetInput(0, bitmapToDraw.Get());
+
+                float b = g_ctx.brightness;
+                float c = g_ctx.contrast;
+                float s = g_ctx.saturation;
+
+                // Natively calculated on GPU
+                float invS = 1.0f - s;
+                float rR = invS * 0.299f + s; float rG = invS * 0.587f;     float rB = invS * 0.114f;
+                float gR = invS * 0.299f;     float gG = invS * 0.587f + s; float gB = invS * 0.114f;
+                float bR = invS * 0.299f;     float bG = invS * 0.587f;     float bB = invS * 0.114f + s;
+                float offset = (0.5f * (1.0f - c)) + b;
+
+                D2D1_MATRIX_5X4_F matrix = D2D1::Matrix5x4F(
+                    rR * c, gR * c, bR * c, 0.0f,
+                    rG * c, gG * c, bG * c, 0.0f,
+                    rB * c, gB * c, bB ,* c, 0.0f,
+                    0.0f, 0.0f, 0.0f, opacity 
+                    offset, offset, offset, 0.0f
+                );
+
+                g_ctx.colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
+
+                g_ctx.renderTarget->DrawImage(
+                    g_ctx.colorMatrixEffect.Get(),
+                    nullptr,
+                    nullptr,
+                    (isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_INTERPOLATION_MODE_LINEAR : D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                );
+            }
+            else {
+                g_ctx.renderTarget->DrawBitmap(
+                    bitmapToDraw, nullptr, opacity,
+                    (isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR
+                );
+            }
 
             if ((g_ctx.isSelectingCropRect || g_ctx.isCropPending) && g_ctx.fadeBrush) {
                 D2D1_RECT_F localRect;
@@ -590,7 +623,10 @@ void Render() {
     }
 
     HRESULT hr = g_ctx.renderTarget->EndDraw();
-    if (hr == D2DERR_RECREATE_TARGET) {
+    if (g_ctx.swapChain) {
+        hr = g_ctx.swapChain->Present(1, 0); 
+    }
+    if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
         DiscardDeviceResources();
         InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
     }

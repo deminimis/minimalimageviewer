@@ -27,6 +27,10 @@
 #include <d2d1.h>
 #include <dwrite.h>
 #include <dwmapi.h>
+#include <d2d1_1.h>
+#include <d2d1effects.h>
+#include <d3d11.h>
+#include <dxgi1_2.h>
 #include <thread>
 #include <atomic>
 #include "ComPtr.h"
@@ -48,6 +52,9 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "dxguid.lib")
 
 constexpr UINT WM_APP_IMAGE_LOADED = (WM_APP + 1);
 constexpr UINT WM_APP_IMAGE_LOAD_FAILED = (WM_APP + 2);
@@ -138,9 +145,11 @@ struct AppContext {
     HINSTANCE hInst = nullptr;
     HWND hWnd = nullptr;
     ComPtr<IWICImagingFactory> wicFactory = nullptr;
-    ComPtr<ID2D1Factory> d2dFactory = nullptr;
+    ComPtr<ID2D1Factory1> d2dFactory = nullptr;
     ComPtr<IDWriteFactory> writeFactory = nullptr;
-    ComPtr<ID2D1HwndRenderTarget> renderTarget = nullptr;
+    ComPtr<ID2D1DeviceContext> renderTarget = nullptr;
+    ComPtr<IDXGISwapChain1> swapChain = nullptr;
+    ComPtr<ID2D1Effect> colorMatrixEffect = nullptr;
     ComPtr<ID2D1Bitmap> d2dBitmap = nullptr;
     ComPtr<ID2D1Bitmap> d2dBitmapHq = nullptr;
     float hqZoomFactor = 1.0f;

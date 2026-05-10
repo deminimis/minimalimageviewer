@@ -711,7 +711,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
                 KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
             }
             else {
-                g_ctx.renderTarget->Resize(D2D1::SizeU(LOWORD(lParam), HIWORD(lParam)));
+                if (g_ctx.swapChain) {
+                    g_ctx.renderTarget->SetTarget(nullptr);
+                    g_ctx.swapChain->ResizeBuffers(0, LOWORD(lParam), HIWORD(lParam), DXGI_FORMAT_UNKNOWN, 0);
+                    ComPtr<IDXGISurface> backBuffer;
+                    g_ctx.swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+                    D2D1_BITMAP_PROPERTIES1 bmpProps = D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+                    ComPtr<ID2D1Bitmap1> targetBmp;
+                    g_ctx.renderTarget->CreateBitmapFromDxgiSurface(backBuffer.Get(), &bmpProps, &targetBmp);
+                    g_ctx.renderTarget->SetTarget(targetBmp.Get());
+                }
                 if (g_ctx.isAnimated && !g_ctx.animationFrameDelays.empty()) {
                     KillTimer(g_ctx.hWnd, ANIMATION_TIMER_ID);
                     SetTimer(g_ctx.hWnd, ANIMATION_TIMER_ID, g_ctx.animationFrameDelays[g_ctx.currentAnimationFrame], nullptr);
