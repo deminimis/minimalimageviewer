@@ -28,6 +28,7 @@
 #include <dwrite.h>
 #include <dwmapi.h>
 #include <d2d1_1.h>
+#include <d2d1_3.h> 
 #include <d2d1effects.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
@@ -210,6 +211,12 @@ struct AppContext {
     GUID preloadedPrevFormat = {};
     std::wstring preloadedNextPath;
     std::wstring preloadedPrevPath;
+
+    // SVG State
+    bool isSvg = false;
+    ComPtr<ID2D1SvgDocument> svgDocument = nullptr;
+    std::vector<BYTE> svgData;
+    std::vector<BYTE> stagedSvgData;
     UINT preloadedNextOrientation = 1;
     UINT preloadedPrevOrientation = 1;
     std::thread preloadingNextThread;

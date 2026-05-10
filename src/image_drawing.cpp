@@ -5,7 +5,13 @@ extern AppContext g_ctx;
 
 bool GetCurrentImageSize(UINT* width, UINT* height) {
     CriticalSectionLock lock(g_ctx.wicMutex);
-    if (g_ctx.isAnimated && !g_ctx.animationFrameConverters.empty()) {
+    if (g_ctx.isSvg && g_ctx.svgDocument) {
+        D2D1_SIZE_F size = g_ctx.svgDocument->GetViewportSize();
+        *width = static_cast<UINT>(size.width);
+        *height = static_cast<UINT>(size.height);
+        return true;
+    }
+    else if (g_ctx.isAnimated && !g_ctx.animationFrameConverters.empty()) {
         return SUCCEEDED(g_ctx.animationFrameConverters[0]->GetSize(width, height));
     }
     else if (g_ctx.wicConverter) {
@@ -20,13 +26,10 @@ void CreateDeviceResources() {
         GetClientRect(g_ctx.hWnd, &rc);
         UINT width = std::max(1L, rc.right - rc.left);
         UINT height = std::max(1L, rc.bottom - rc.top);
-
         D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3 };
         ComPtr<ID3D11Device> d3dDevice;
-
         // Try gpu
         HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
-
         // Fallback to software emulation
         if (FAILED(hr)) {
             hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
@@ -50,7 +53,6 @@ void CreateDeviceResources() {
         dxgiDevice->GetAdapter(&dxgiAdapter);
         ComPtr<IDXGIFactory2> dxgiFactory;
         dxgiAdapter->GetParent(IID_PPV_ARGS(&dxgiFactory));
-
         DXGI_SWAP_CHAIN_DESC1 swapDesc = {};
         swapDesc.Width = width;
         swapDesc.Height = height;
@@ -72,20 +74,41 @@ void CreateDeviceResources() {
 
         hr = S_OK;
         if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &g_ctx.textBrush); }
-        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f), &g_ctx.cropRectBrush); }
-        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &g_ctx.fadeBrush); }
-        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &g_ctx.ocrMessageBrush); }
-        if (SUCCEEDED(hr)) { hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &g_ctx.ocrMessageBgBrush); }
-        if (SUCCEEDED(hr)) { hr = g_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f, L"en-us", &g_ctx.textFormat); }
+        if (SUCCEEDED(hr)) {
+            hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.7f), &g_ctx.cropRectBrush);
+        }
+        if (SUCCEEDED(hr)) {
+            hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &g_ctx.fadeBrush);
+        }
+        if (SUCCEEDED(hr)) {
+            hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &g_ctx.ocrMessageBrush);
+        }
+        if (SUCCEEDED(hr)) {
+            hr = g_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &g_ctx.ocrMessageBgBrush);
+        }
+        if (SUCCEEDED(hr)) {
+            hr = g_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f, L"en-us", &g_ctx.textFormat);
+        }
         if (SUCCEEDED(hr)) {
             g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
     }
 
+    if (g_ctx.renderTarget && g_ctx.isSvg && !g_ctx.svgDocument && !g_ctx.svgData.empty()) {
+        ComPtr<ID2D1DeviceContext5> dc5;
+        if (SUCCEEDED(g_ctx.renderTarget->QueryInterface(IID_PPV_ARGS(&dc5)))) {
+            ComPtr<IStream> stream = SHCreateMemStream(g_ctx.svgData.data(), static_cast<UINT>(g_ctx.svgData.size()));
+            if (stream) {
+                dc5->CreateSvgDocument(stream.Get(), D2D1::SizeF(1000.0f, 1000.0f), &g_ctx.svgDocument);
+            }
+        }
+    }
+
     if (g_ctx.bgColor == BackgroundColor::Transparent) {
         if (!g_ctx.checkerboardBrush && g_ctx.renderTarget) {
-            const int dim = 8; const int w = dim * 2; const int h = dim * 2;
+            const int dim = 8;
+            const int w = dim * 2; const int h = dim * 2;
             std::vector<UINT32> pixels(w * h);
             for (int y = 0; y < h; ++y) {
                 for (int x = 0; x < w; ++x) {
@@ -121,6 +144,7 @@ void DiscardDeviceResources() {
     g_ctx.ocrMessageBrush = nullptr;
     g_ctx.ocrMessageBgBrush = nullptr;
     g_ctx.animationD2DBitmaps.clear();
+    g_ctx.svgDocument = nullptr;
 }
 
 static void DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
@@ -292,7 +316,6 @@ void Render() {
     if (!g_ctx.renderTarget) return;
 
     g_ctx.renderTarget->BeginDraw();
-
     if (g_ctx.bgColor == BackgroundColor::Transparent && g_ctx.checkerboardBrush) {
         D2D1_SIZE_F rtSize = g_ctx.renderTarget->GetSize();
         g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -304,7 +327,8 @@ void Render() {
         case BackgroundColor::Black: color = D2D1::ColorF(0.0f, 0.0f, 0.0f); break;
         case BackgroundColor::White: color = D2D1::ColorF(1.0f, 1.0f, 1.0f); break;
         default:
-        case BackgroundColor::Grey: color = D2D1::ColorF(0.117f, 0.117f, 0.117f); break;
+        case BackgroundColor::Grey: color = D2D1::ColorF(0.117f, 0.117f, 0.117f);
+            break;
         }
         g_ctx.renderTarget->Clear(color);
     }
@@ -318,7 +342,6 @@ void Render() {
             static_cast<float>(rc.right),
             static_cast<float>(rc.bottom)
         );
-
         D2D1_COLOR_F textColor;
         if (g_ctx.bgColor == BackgroundColor::White || g_ctx.bgColor == BackgroundColor::Transparent) {
             textColor = D2D1::ColorF(D2D1::ColorF::Black);
@@ -347,7 +370,6 @@ void Render() {
 
         if (g_ctx.isAnimated) {
             CriticalSectionLock lock(g_ctx.wicMutex);
-
             if (g_ctx.animationD2DBitmaps.size() != g_ctx.animationFrameConverters.size()) {
                 g_ctx.animationD2DBitmaps.assign(g_ctx.animationFrameConverters.size(), nullptr);
                 g_ctx.d2dBitmap = nullptr;
@@ -359,7 +381,6 @@ void Render() {
                 if (!g_ctx.animationD2DBitmaps[g_ctx.currentAnimationFrame]) {
 
                     ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.animationFrameConverters[g_ctx.currentAnimationFrame]));
-
                     if (g_ctx.isGrayscale) {
                         ComPtr<IWICFormatConverter> grayConverter;
                         if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
@@ -383,11 +404,10 @@ void Render() {
             }
             hasImage = (bitmapToDraw != nullptr);
         }
-        else {
+        else if (!g_ctx.isSvg) {
             CriticalSectionLock lock(g_ctx.wicMutex);
             if (!g_ctx.d2dBitmap && g_ctx.wicConverter) {
                 ComPtr<IWICBitmapSource> source(static_cast<IWICFormatConverter*>(g_ctx.wicConverter));
-
                 if (g_ctx.isGrayscale) {
                     ComPtr<IWICFormatConverter> grayConverter;
                     if (SUCCEEDED(g_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
@@ -413,14 +433,24 @@ void Render() {
             hasImage = (g_ctx.wicConverter != nullptr);
         }
 
+        bool isSvgToDraw = (g_ctx.isSvg && g_ctx.svgDocument);
+        if (isSvgToDraw) hasImage = true;
+
         bool isHq = false;
-        if (!g_ctx.isAnimated && g_ctx.d2dBitmapHq && abs(g_ctx.hqZoomFactor - g_ctx.zoomFactor) < 0.01f) {
+        if (!g_ctx.isAnimated && !g_ctx.isSvg && g_ctx.d2dBitmapHq && abs(g_ctx.hqZoomFactor - g_ctx.zoomFactor) < 0.01f) {
             bitmapToDraw = g_ctx.d2dBitmapHq;
             isHq = true;
         }
 
-        if (bitmapToDraw && !IsIconic(g_ctx.hWnd)) {
-            D2D1_SIZE_F bmpSize = bitmapToDraw->GetSize();
+        if ((bitmapToDraw || isSvgToDraw) && !IsIconic(g_ctx.hWnd)) {
+            D2D1_SIZE_F bmpSize;
+            if (isSvgToDraw) {
+                bmpSize = g_ctx.svgDocument->GetViewportSize();
+            }
+            else {
+                bmpSize = bitmapToDraw->GetSize();
+            }
+
             D2D1_SIZE_F rtSize = g_ctx.renderTarget->GetSize();
             D2D1_POINT_2F bmpCenter = D2D1::Point2F(bmpSize.width / 2.f, bmpSize.height / 2.f);
             D2D1_POINT_2F windowCenter = D2D1::Point2F(rtSize.width / 2.f, rtSize.height / 2.f);
@@ -443,7 +473,7 @@ void Render() {
             float opacity = 1.0f;
             if (g_ctx.isFading) {
                 ULONGLONG elapsed = GetTickCount64() - g_ctx.fadeStartTime;
-                const float FADE_DURATION = 120.0f; 
+                const float FADE_DURATION = 120.0f;
                 if (elapsed >= FADE_DURATION) {
                     g_ctx.isFading = false;
                 }
@@ -452,20 +482,23 @@ void Render() {
                 }
             }
 
-            if (g_ctx.colorMatrixEffect) {
+            if (isSvgToDraw) {
+                ComPtr<ID2D1DeviceContext5> dc5;
+                if (SUCCEEDED(g_ctx.renderTarget->QueryInterface(IID_PPV_ARGS(&dc5)))) {
+                    dc5->DrawSvgDocument(g_ctx.svgDocument.Get());
+                }
+            }
+            else if (g_ctx.colorMatrixEffect) {
                 g_ctx.colorMatrixEffect->SetInput(0, bitmapToDraw.Get());
-
                 float b = g_ctx.brightness;
                 float c = g_ctx.contrast;
                 float s = g_ctx.saturation;
-
                 // Natively calculated on GPU
                 float invS = 1.0f - s;
                 float rR = invS * 0.299f + s; float rG = invS * 0.587f;     float rB = invS * 0.114f;
                 float gR = invS * 0.299f;     float gG = invS * 0.587f + s; float gB = invS * 0.114f;
                 float bR = invS * 0.299f;     float bG = invS * 0.587f;     float bB = invS * 0.114f + s;
                 float offset = (0.5f * (1.0f - c)) + b;
-
                 D2D1_MATRIX_5X4_F matrix = D2D1::Matrix5x4F(
                     rR * c, gR * c, bR * c, 0.0f,
                     rG * c, gG * c, bG * c, 0.0f,
@@ -473,12 +506,10 @@ void Render() {
                     0.0f, 0.0f, 0.0f, opacity,
                     offset, offset, offset, 0.0f
                 );
-
                 g_ctx.colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
 
                 D2D1_INTERPOLATION_MODE interpModeD2D = (!g_ctx.smoothScaling) ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
                     ((isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_INTERPOLATION_MODE_LINEAR : D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
-
                 g_ctx.renderTarget->DrawImage(
                     g_ctx.colorMatrixEffect.Get(),
                     nullptr,
@@ -487,9 +518,9 @@ void Render() {
                 );
             }
             else {
-                D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!g_ctx.smoothScaling) ? D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
+                D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!g_ctx.smoothScaling) ?
+                    D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
                     ((isHq || g_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
-
                 g_ctx.renderTarget->DrawBitmap(
                     bitmapToDraw, nullptr, opacity,
                     interpModeBmp
@@ -513,7 +544,6 @@ void Render() {
                 localRect.top = std::max(0.0f, localRect.top);
                 localRect.right = std::min(bmpSize.width, localRect.right);
                 localRect.bottom = std::min(bmpSize.height, localRect.bottom);
-
                 if (localRect.left < localRect.right && localRect.top < localRect.bottom) {
                     g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, 0.0f, bmpSize.width, localRect.top), g_ctx.fadeBrush);
                     g_ctx.renderTarget->FillRectangle(D2D1::RectF(0.0f, localRect.bottom, bmpSize.width, bmpSize.height), g_ctx.fadeBrush);
@@ -531,7 +561,6 @@ void Render() {
                 static_cast<float>(rc.right),
                 static_cast<float>(rc.bottom)
             );
-
             D2D1_COLOR_F textColor;
             if (g_ctx.bgColor == BackgroundColor::White || g_ctx.bgColor == BackgroundColor::Transparent) {
                 textColor = D2D1::ColorF(D2D1::ColorF::Black);
@@ -556,11 +585,11 @@ void Render() {
         }
 
         if (g_ctx.isOsdVisible && hasImage) {
-            DrawOsdOverlay(g_ctx.renderTarget);
+            DrawOsdOverlay(g_ctx.renderTarget.Get());
         }
 
         if (g_ctx.isEyedropperActive) {
-            DrawEyedropperOverlay(g_ctx.renderTarget);
+            DrawEyedropperOverlay(g_ctx.renderTarget.Get());
         }
 
         if ((g_ctx.isSelectingCropRect || g_ctx.isDraggingOcrRect) && g_ctx.cropRectBrush) {
@@ -568,15 +597,13 @@ void Render() {
             D2D1_RECT_F rect = g_ctx.isSelectingCropRect ? g_ctx.cropRectWindow : g_ctx.ocrRectWindow;
             if (rect.left > rect.right) std::swap(rect.left, rect.right);
             if (rect.top > rect.bottom) std::swap(rect.top, rect.bottom);
-
             if (g_ctx.isDraggingOcrRect) {
                 g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Red, 1.0f));
             }
             else {
                 g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
             }
-            g_ctx.renderTarget->DrawRectangle(rect, g_ctx.cropRectBrush, 1.0f);
-        
+            g_ctx.renderTarget->DrawRectangle(rect, g_ctx.cropRectBrush.Get(), 1.0f);
         }
         else if (g_ctx.isCropPending && g_ctx.cropRectBrush) {
             POINT p1, p2, p3, p4;
@@ -587,10 +614,10 @@ void Render() {
 
             g_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
             g_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
-            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p1.x, (float)p1.y), D2D1::Point2F((float)p2.x, (float)p2.y), g_ctx.cropRectBrush, 2.0f);
-            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p2.x, (float)p2.y), D2D1::Point2F((float)p3.x, (float)p3.y), g_ctx.cropRectBrush, 2.0f);
-            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p3.x, (float)p3.y), D2D1::Point2F((float)p4.x, (float)p4.y), g_ctx.cropRectBrush, 2.0f);
-            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p4.x, (float)p4.y), D2D1::Point2F((float)p1.x, (float)p1.y), g_ctx.cropRectBrush, 2.0f);
+            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p1.x, (float)p1.y), D2D1::Point2F((float)p2.x, (float)p2.y), g_ctx.cropRectBrush.Get(), 2.0f);
+            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p2.x, (float)p2.y), D2D1::Point2F((float)p3.x, (float)p3.y), g_ctx.cropRectBrush.Get(), 2.0f);
+            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p3.x, (float)p3.y), D2D1::Point2F((float)p4.x, (float)p4.y), g_ctx.cropRectBrush.Get(), 2.0f);
+            g_ctx.renderTarget->DrawLine(D2D1::Point2F((float)p4.x, (float)p4.y), D2D1::Point2F((float)p1.x, (float)p1.y), g_ctx.cropRectBrush.Get(), 2.0f);
         }
 
         if (g_ctx.isCropPending && g_ctx.textFormat && g_ctx.textBrush) {
@@ -601,7 +628,6 @@ void Render() {
                 rtSize.width,
                 rtSize.height
             );
-
             D2D1_COLOR_F textColor;
             if (g_ctx.bgColor == BackgroundColor::White) {
                 textColor = D2D1::ColorF(D2D1::ColorF::Black);
@@ -617,9 +643,9 @@ void Render() {
             g_ctx.renderTarget->DrawTextW(
                 L"Press Enter to apply crop, Esc to cancel",
                 40,
-                g_ctx.textFormat,
+                g_ctx.textFormat.Get(),
                 layoutRect,
-                g_ctx.textBrush
+                g_ctx.textBrush.Get()
             );
             g_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             g_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
@@ -627,12 +653,12 @@ void Render() {
     }
 
     if (g_ctx.isOcrMessageVisible) {
-        DrawOcrMessageOverlay(g_ctx.renderTarget);
+        DrawOcrMessageOverlay(g_ctx.renderTarget.Get());
     }
 
     HRESULT hr = g_ctx.renderTarget->EndDraw();
     if (g_ctx.swapChain) {
-        hr = g_ctx.swapChain->Present(1, 0); 
+        hr = g_ctx.swapChain->Present(1, 0);
     }
     if (hr == D2DERR_RECREATE_TARGET || hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
         DiscardDeviceResources();

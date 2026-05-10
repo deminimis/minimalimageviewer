@@ -152,35 +152,30 @@ static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WP
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
-        if (LOWORD(wParam) == IDC_COMBO_ACTION && HIWORD(wParam) == CBN_SELCHANGE) {
-            int idx = static_cast<int>(SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0));
-            if (idx != CB_ERR) {
-                SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, g_ctx.hotkeys[idx], 0);
-            }
-            return (INT_PTR)TRUE;
-        }
         switch (LOWORD(wParam)) {
-        case IDOK: {
-            int idx = static_cast<int>(SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0));
-            if (idx != CB_ERR) {
-                g_ctx.hotkeys[idx] = static_cast<WORD>(SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0));
-                SetDlgItemTextW(hDlg, IDOK, L"Applied!");
-                SetTimer(hDlg, 1, 1500, nullptr);
-            }
-            return (INT_PTR)TRUE;
-        }
-        case IDC_BUTTON_RESET_BC: {
+        case IDC_BUTTON_RESET_BC:
             g_ctx.brightness = 0.0f;
             g_ctx.contrast = 1.0f;
             g_ctx.saturation = 1.0f;
-            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS), TBM_SETPOS, (WPARAM)TRUE, (LPARAM)0);
-            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_CONTRAST), TBM_SETPOS, (WPARAM)TRUE, (LPARAM)100);
-            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_SATURATION), TBM_SETPOS, (WPARAM)TRUE, (LPARAM)100);
+            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_BRIGHTNESS), TBM_SETPOS, TRUE, 0);
+            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_CONTRAST), TBM_SETPOS, TRUE, 100);
+            SendMessageW(GetDlgItem(hDlg, IDC_SLIDER_SATURATION), TBM_SETPOS, TRUE, 100);
             ApplyEffectsToView();
             InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
             UpdateEffectLabels(hDlg);
             return (INT_PTR)TRUE;
-        }
+        case IDOK:
+            EndDialog(hDlg, IDOK);
+            return (INT_PTR)TRUE;
+        case IDCANCEL:
+            // revert to saved values if cancelled
+            g_ctx.brightness = g_ctx.savedBrightness;
+            g_ctx.contrast = g_ctx.savedContrast;
+            g_ctx.saturation = g_ctx.savedSaturation;
+            ApplyEffectsToView();
+            InvalidateRect(g_ctx.hWnd, nullptr, FALSE);
+            EndDialog(hDlg, IDCANCEL);
+            return (INT_PTR)TRUE;
         }
         break;
     }
@@ -241,7 +236,7 @@ static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wP
     }
     case WM_COMMAND:
         if (LOWORD(wParam) == IDC_COMBO_ACTION && HIWORD(wParam) == CBN_SELCHANGE) {
-            int idx = SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0);
+            int idx = static_cast<int>(SendMessageW((HWND)lParam, CB_GETCURSEL, 0, 0));
             if (idx != CB_ERR) {
                 SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_SETHOTKEY, g_ctx.hotkeys[idx], 0);
             }
@@ -249,9 +244,9 @@ static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wP
         }
         switch (LOWORD(wParam)) {
         case IDOK: {
-            int idx = SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0);
+            int idx = static_cast<int>(SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0));
             if (idx != CB_ERR) {
-                g_ctx.hotkeys[idx] = SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0);
+                g_ctx.hotkeys[idx] = static_cast<WORD>(SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0));
                 SetDlgItemTextW(hDlg, IDOK, L"Applied!");
                 SetTimer(hDlg, 1, 1500, nullptr);
             }
@@ -261,16 +256,16 @@ static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wP
             EndDialog(hDlg, IDCANCEL);
             return (INT_PTR)TRUE;
         }
-                 break;
-        case WM_TIMER:
-            if (wParam == 1) {
-                KillTimer(hDlg, 1);
-                SetDlgItemTextW(hDlg, IDOK, L"Apply");
-            }
-            return (INT_PTR)TRUE;
+        break;
+    case WM_TIMER:
+        if (wParam == 1) {
+            KillTimer(hDlg, 1);
+            SetDlgItemTextW(hDlg, IDOK, L"Apply");
         }
-        return (INT_PTR)FALSE;
+        return (INT_PTR)TRUE;
     }
+    return (INT_PTR)FALSE;
+}
 
 void OpenKeybindingsDialog() {
     DialogBoxParam(g_ctx.hInst, MAKEINTRESOURCE(IDD_KEYBINDINGS_DIALOG), g_ctx.hWnd, KeybindingsDialogProc, 0);
