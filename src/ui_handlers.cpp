@@ -131,9 +131,26 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
                 m_ctx.isCropActive = true; m_ctx.isCropPending = false; m_ctx.isCropMode = false;
                 CommitCrop(); ApplyEffectsToView(); FitImageToWindow(); InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
             } break;
-        case 'I': m_ctx.isOsdVisible = !m_ctx.isOsdVisible; InvalidateRect(m_ctx.hWnd, nullptr, FALSE); break;
+        case 'I': m_ctx.isOsdVisible = !m_ctx.isOsdVisible;
+            InvalidateRect(m_ctx.hWnd, nullptr, FALSE); break;
         case 'Q': PerformOcr(); break;
-        case 'W': m_ctx.isSelectingOcrRect = true; m_ctx.isDraggingOcrRect = false; m_ctx.isCropMode = false; m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false; m_ctx.isEyedropperActive = false; SetCursor(LoadCursor(nullptr, IDC_CROSS)); break;
+        case 'W': m_ctx.isSelectingOcrRect = true; m_ctx.isDraggingOcrRect = false; m_ctx.isCropMode = false;
+            m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false; m_ctx.isEyedropperActive = false; SetCursor(LoadCursor(nullptr, IDC_CROSS)); break;
+        case VK_SPACE:
+            // Manual frame-by-frame animation stepping
+            if (m_ctx.animationFrameConverters.size() > 1) {
+                if (m_ctx.isAnimated) {
+                    // Pause the animation
+                    m_ctx.isAnimated = false;
+                    KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+                }
+                else {
+                    // Advance one frame and loop around
+                    m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameConverters.size();
+                    UpdateViewToCurrentFrame();
+                }
+            }
+            break;
         case VK_F5: if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str()); break;
         }
     }
