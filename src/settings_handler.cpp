@@ -23,19 +23,12 @@ void ViewerApp::ReadSettings(const std::wstring& path, RECT& rect, bool& fullscr
     rect.bottom = getInt(L"Window", L"bottom", CW_USEDEFAULT);
     if (rect.left == CW_USEDEFAULT || rect.top == CW_USEDEFAULT || rect.right == CW_USEDEFAULT || rect.bottom == CW_USEDEFAULT) SetRectEmpty(&rect);
 
-    m_ctx.hotkeys[Act_Next] = getInt(L"Keys", L"Next", VK_RIGHT);
-    m_ctx.hotkeys[Act_Prev] = getInt(L"Keys", L"Prev", VK_LEFT);
-    m_ctx.hotkeys[Act_ZoomIn] = getInt(L"Keys", L"ZoomIn", MAKEWORD(VK_ADD, HOTKEYF_CONTROL));
-    m_ctx.hotkeys[Act_ZoomOut] = getInt(L"Keys", L"ZoomOut", MAKEWORD(VK_SUBTRACT, HOTKEYF_CONTROL));
-    m_ctx.hotkeys[Act_Fit] = getInt(L"Keys", L"Fit", MAKEWORD('0', HOTKEYF_CONTROL));
-    m_ctx.hotkeys[Act_Actual] = getInt(L"Keys", L"Actual", MAKEWORD(VK_MULTIPLY, HOTKEYF_CONTROL));
-    m_ctx.hotkeys[Act_Fullscreen] = getInt(L"Keys", L"Fullscreen", VK_F11);
-    m_ctx.hotkeys[Act_RotateCW] = getInt(L"Keys", L"RotateCW", VK_UP);
-    m_ctx.hotkeys[Act_RotateCCW] = getInt(L"Keys", L"RotateCCW", VK_DOWN);
-    m_ctx.hotkeys[Act_Flip] = getInt(L"Keys", L"Flip", 'F');
-    m_ctx.hotkeys[Act_Crop] = getInt(L"Keys", L"Crop", 'C');
-    m_ctx.hotkeys[Act_CustomZoom] = getInt(L"Keys", L"CustomZoom", MAKEWORD('Z', HOTKEYF_CONTROL | HOTKEYF_SHIFT));
-    m_ctx.hotkeys[Act_Exit] = getInt(L"Keys", L"Exit", VK_ESCAPE);
+    const wchar_t* keyNames[Act_Count] = { L"Next", L"Prev", L"ZoomIn", L"ZoomOut", L"Fit", L"Actual", L"Fullscreen", L"RotateCW", L"RotateCCW", L"Flip", L"Crop", L"CustomZoom", L"Exit" };
+    const WORD defaultKeys[Act_Count] = { VK_RIGHT, VK_LEFT, MAKEWORD(VK_ADD, HOTKEYF_CONTROL), MAKEWORD(VK_SUBTRACT, HOTKEYF_CONTROL), MAKEWORD('0', HOTKEYF_CONTROL), MAKEWORD(VK_MULTIPLY, HOTKEYF_CONTROL), VK_F11, VK_UP, VK_DOWN, 'F', 'C', MAKEWORD('Z', HOTKEYF_CONTROL | HOTKEYF_SHIFT), VK_ESCAPE };
+
+    for (int i = 0; i < Act_Count; ++i) {
+        m_ctx.hotkeys[i] = getInt(L"Keys", keyNames[i], defaultKeys[i]);
+    }
 }
 
 void ViewerApp::WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop) {
@@ -51,19 +44,10 @@ void ViewerApp::WriteSettings(const std::wstring& path, const RECT& rect, bool f
     writeInt(L"Settings", L"BackgroundColor", static_cast<int>(m_ctx.bgColor));
     writeInt(L"Settings", L"DefaultZoomMode", static_cast<int>(m_ctx.defaultZoomMode));
 
-    writeInt(L"Keys", L"Next", m_ctx.hotkeys[Act_Next]);
-    writeInt(L"Keys", L"Prev", m_ctx.hotkeys[Act_Prev]);
-    writeInt(L"Keys", L"ZoomIn", m_ctx.hotkeys[Act_ZoomIn]);
-    writeInt(L"Keys", L"ZoomOut", m_ctx.hotkeys[Act_ZoomOut]);
-    writeInt(L"Keys", L"Fit", m_ctx.hotkeys[Act_Fit]);
-    writeInt(L"Keys", L"Actual", m_ctx.hotkeys[Act_Actual]);
-    writeInt(L"Keys", L"Fullscreen", m_ctx.hotkeys[Act_Fullscreen]);
-    writeInt(L"Keys", L"RotateCW", m_ctx.hotkeys[Act_RotateCW]);
-    writeInt(L"Keys", L"RotateCCW", m_ctx.hotkeys[Act_RotateCCW]);
-    writeInt(L"Keys", L"Flip", m_ctx.hotkeys[Act_Flip]);
-    writeInt(L"Keys", L"Crop", m_ctx.hotkeys[Act_Crop]);
-    writeInt(L"Keys", L"CustomZoom", m_ctx.hotkeys[Act_CustomZoom]);
-    writeInt(L"Keys", L"Exit", m_ctx.hotkeys[Act_Exit]);
+    const wchar_t* keyNames[Act_Count] = { L"Next", L"Prev", L"ZoomIn", L"ZoomOut", L"Fit", L"Actual", L"Fullscreen", L"RotateCW", L"RotateCCW", L"Flip", L"Crop", L"CustomZoom", L"Exit" };
+    for (int i = 0; i < Act_Count; ++i) {
+        writeInt(L"Keys", keyNames[i], m_ctx.hotkeys[i]);
+    }
 
     if (!IsRectEmpty(&rect) && !IsIconic(m_ctx.hWnd) && !IsZoomed(m_ctx.hWnd)) {
         writeInt(L"Window", L"top", rect.top);

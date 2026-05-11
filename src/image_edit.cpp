@@ -224,6 +224,42 @@ void ViewerApp::ApplyEffectsToView() {
     }
 }
 
+ComPtr<IWICBitmapSource> ViewerApp::ApplyCropAndTransform(ComPtr<IWICBitmapSource> source) {
+    if (m_ctx.isCropActive) {
+        ComPtr<IWICBitmapClipper> clipper;
+        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
+            WICRect rc = {
+                static_cast<INT>(floor(m_ctx.cropRectLocal.left)),
+                static_cast<INT>(floor(m_ctx.cropRectLocal.top)),
+                static_cast<INT>(ceil(m_ctx.cropRectLocal.right)) - static_cast<INT>(floor(m_ctx.cropRectLocal.left)),
+                static_cast<INT>(ceil(m_ctx.cropRectLocal.bottom)) - static_cast<INT>(floor(m_ctx.cropRectLocal.top))
+            };
+            if (rc.Width > 0 && rc.Height > 0 && SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
+                source = clipper;
+            }
+        }
+    }
+
+    if (m_ctx.rotationAngle != 0 || m_ctx.isFlippedHorizontal) {
+        ComPtr<IWICBitmapFlipRotator> rotator;
+        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
+            WICBitmapTransformOptions options = WICBitmapTransformRotate0;
+            switch (m_ctx.rotationAngle) {
+            case 90:  options = WICBitmapTransformRotate90; break;
+            case 180: options = WICBitmapTransformRotate180; break;
+            case 270: options = WICBitmapTransformRotate270; break;
+            }
+            if (m_ctx.isFlippedHorizontal) {
+                options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
+            }
+            if (SUCCEEDED(rotator->Initialize(source.Get(), options))) {
+                source = rotator;
+            }
+        }
+    }
+    return source;
+}
+
 ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
     CriticalSectionLock lock(m_ctx.wicMutex);
     ComPtr<IWICBitmapSource> source;
@@ -238,43 +274,7 @@ ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
         return nullptr;
     }
 
-    // 1. crop first
-    if (m_ctx.isCropActive) {
-        ComPtr<IWICBitmapClipper> clipper;
-        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
-            WICRect rc;
-            rc.X = static_cast<INT>(floor(m_ctx.cropRectLocal.left));
-            rc.Y = static_cast<INT>(floor(m_ctx.cropRectLocal.top));
-            rc.Width = static_cast<INT>(ceil(m_ctx.cropRectLocal.right)) - rc.X;
-            rc.Height = static_cast<INT>(ceil(m_ctx.cropRectLocal.bottom)) - rc.Y;
-
-            if (rc.Width > 0 && rc.Height > 0) {
-                if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
-                    source = clipper;
-                }
-            }
-        }
-    }
-
-    // 2. rotate flip second
-    if (m_ctx.rotationAngle != 0 || m_ctx.isFlippedHorizontal) {
-        ComPtr<IWICBitmapFlipRotator> rotator;
-        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
-            WICBitmapTransformOptions options = WICBitmapTransformRotate0;
-            switch (m_ctx.rotationAngle) {
-            case 90:  options = WICBitmapTransformRotate90;  break;
-            case 180: options = WICBitmapTransformRotate180; break;
-            case 270: options = WICBitmapTransformRotate270; break;
-            }
-            if (m_ctx.isFlippedHorizontal) {
-                options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
-            }
-
-            if (SUCCEEDED(rotator->Initialize(source.Get(), options))) {
-                source = rotator;
-            }
-        }
-    }
+    source = ApplyCropAndTransform(source);
 
     if (m_ctx.isGrayscale) {
         ComPtr<IWICFormatConverter> grayConverter;
@@ -440,41 +440,7 @@ void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& co
         }
     }
 
-    // apply crop first
-    if (m_ctx.isCropActive) {
-        ComPtr<IWICBitmapClipper> clipper;
-        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapClipper(&clipper))) {
-            WICRect rc;
-            rc.X = static_cast<INT>(floor(m_ctx.cropRectLocal.left));
-            rc.Y = static_cast<INT>(floor(m_ctx.cropRectLocal.top));
-            rc.Width = static_cast<INT>(ceil(m_ctx.cropRectLocal.right)) - rc.X;
-            rc.Height = static_cast<INT>(ceil(m_ctx.cropRectLocal.bottom)) - rc.Y;
-            if (rc.Width > 0 && rc.Height > 0) {
-                if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
-                    source = clipper;
-                }
-            }
-        }
-    }
-
-    // Apply Rotate/Flip Second
-    if (m_ctx.rotationAngle != 0 || m_ctx.isFlippedHorizontal) {
-        ComPtr<IWICBitmapFlipRotator> rotator;
-        if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
-            WICBitmapTransformOptions options = WICBitmapTransformRotate0;
-            switch (m_ctx.rotationAngle) {
-            case 90:  options = WICBitmapTransformRotate90;  break;
-            case 180: options = WICBitmapTransformRotate180; break;
-            case 270: options = WICBitmapTransformRotate270; break;
-            }
-            if (m_ctx.isFlippedHorizontal) {
-                options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
-            }
-            if (SUCCEEDED(rotator->Initialize(source.Get(), options))) {
-                source = rotator;
-            }
-        }
-    }
+    source = ApplyCropAndTransform(source);
 
     if (m_ctx.isGrayscale) {
         ComPtr<IWICFormatConverter> grayConverter;

@@ -399,6 +399,7 @@ private:
     HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::wstring& filePath, const GUID& containerFormat);
     ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat);
     void SaveImageWithResize(const std::wstring& filePath, const GUID& containerFormat, UINT newWidth, UINT newHeight);
+    ComPtr<IWICBitmapSource> ApplyCropAndTransform(ComPtr<IWICBitmapSource> source);
 
     // IO Helpers
     bool IsSequenceValid(int seqId);

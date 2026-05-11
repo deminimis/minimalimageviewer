@@ -3,6 +3,14 @@
 #include <commctrl.h>
 #include <stdio.h>
 
+template<typename T>
+T* GetAppFromDialog(HWND hDlg, UINT message, LPARAM lParam) {
+    if (message == WM_INITDIALOG) {
+        SetWindowLongPtr(hDlg, GWLP_USERDATA, lParam);
+        return reinterpret_cast<T*>(lParam);
+    }
+    return reinterpret_cast<T*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
+}
 
 INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
     ViewerApp* pApp = nullptr;
@@ -98,15 +106,7 @@ void ViewerApp::OpenPreferencesDialog() {
 }
 
 INT_PTR CALLBACK ViewerApp::BrightnessContrastDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
-    ViewerApp* pApp = nullptr;
-    if (message == WM_INITDIALOG) {
-        pApp = reinterpret_cast<ViewerApp*>(lParam);
-        SetWindowLongPtr(hDlg, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pApp));
-    }
-    else {
-        pApp = reinterpret_cast<ViewerApp*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
-    }
-
+    ViewerApp* pApp = GetAppFromDialog<ViewerApp>(hDlg, message, lParam);
     if (!pApp) return (INT_PTR)FALSE;
 
     auto& ctx = pApp->GetContext();
@@ -237,15 +237,7 @@ static const wchar_t* ActionNames[] = {
 };
 
 INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
-    ViewerApp* pApp = nullptr;
-    if (message == WM_INITDIALOG) {
-        pApp = reinterpret_cast<ViewerApp*>(lParam);
-        SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pApp);
-    }
-    else {
-        pApp = reinterpret_cast<ViewerApp*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
-    }
-
+    ViewerApp* pApp = GetAppFromDialog<ViewerApp>(hDlg, message, lParam);
     if (!pApp) return (INT_PTR)FALSE;
 
     auto& ctx = pApp->GetContext();
@@ -298,19 +290,14 @@ void ViewerApp::OpenKeybindingsDialog() {
 }
 
 INT_PTR CALLBACK ViewerApp::ZoomDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
-    ViewerApp* pApp = nullptr;
+    ViewerApp* pApp = GetAppFromDialog<ViewerApp>(hDlg, message, lParam);
+    if (!pApp) return (INT_PTR)FALSE;
+
     if (message == WM_INITDIALOG) {
-        pApp = reinterpret_cast<ViewerApp*>(lParam);
-        SetWindowLongPtr(hDlg, GWLP_USERDATA, (LONG_PTR)pApp);
         // Default the text box to the current zoom level
         SetDlgItemInt(hDlg, IDC_EDIT_ZOOM, static_cast<UINT>(pApp->GetContext().zoomFactor * 100.0f + 0.5f), FALSE);
         return (INT_PTR)TRUE;
     }
-    else {
-        pApp = reinterpret_cast<ViewerApp*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
-    }
-
-    if (!pApp) return (INT_PTR)FALSE;
 
     switch (message) {
     case WM_COMMAND:
