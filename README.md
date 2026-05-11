@@ -29,21 +29,27 @@ _For a stripped-down 21kb version, you can try the [stable stripped .exe](https:
     
 - **Smooth Viewing**:
     
-    - Smooth zoom (Ctrl + Mouse Wheel).
+    - Smooth zoom (Ctrl + Mouse Wheel) with customizable high-quality **Smooth Scaling (Interpolation)**.
         
     - Pan by clicking and dragging the image.
         
     - Fit to Window (Ctrl+0 / Double-Click).
         
     - Actual Size (100%) (Ctrl+*).
+
+    - Custom Zoom Dialog (Ctrl+Shift+Z).
         
 - **Configurable Interface**:
     
+    - **Custom Keybindings**: Fully remap default shortcuts to fit your workflow via the Keybindings menu.
+
     - **Backgrounds**: Switch between Grey (default), Black, White, or a transparent checkerboard.
+
+    - **Visuals**: Toggle image **Fade Animations** and high-quality **Smooth Scaling** for zoomed images.
         
-    - **Always on Top**: Toggle to keep the window on top.
+    - **Window State**: Toggle "Always on Top", "Start in Fullscreen", or "Enforce Single Instance".
         
-    - **Default Zoom**: Set the default zoom to "Fit to Window" or "Actual Size (100%)" in Preferences.
+    - **Default Zoom**: Set the default zoom to "Fit to Window" or "Actual Size (100%)".
  
 
 ### OCR
@@ -62,11 +68,13 @@ _For a stripped-down 21kb version, you can try the [stable stripped .exe](https:
     
 - **Rotate & Flip**: Rotate images in 90° increments or flip them horizontally. All changes are saved correctly.
     
+- **Undo System**: Press `Ctrl+Z` to revert the last applied edit or crop.
+
 - **Grayscale Filter**: Instantly apply or remove a non-destructive grayscale filter.
     
-- **Eyedropper Tool**: Hold the `Alt` key to activate an eyedropper. It displays the **RGB** and **Hex** value of the pixel under your cursor. Click to copy the Hex value to your clipboard.
+- **Eyedropper Tool**: Toggle via the context menu to activate the eyedropper. It displays the **RGB** and **Hex** value of the pixel under your cursor. Click to copy the Hex value to your clipboard.
 
-- **Image Effects**: Click to open a box with sliders to adjust the contrast, brightness, and saturation. 
+- **Image Effects**: Adjust **Contrast**, **Brightness**, and **Saturation** with real-time GPU-accelerated previews before saving.
     
 
 ### Data & File Management
@@ -133,6 +141,8 @@ To set it as your default viewer, see the [Default Viewer Instructions](https://
 
 ### Hotkeys
 
+*Note: Most action hotkeys listed below are defaults and can be fully customized by right-clicking and selecting "Keybindings..."*
+
 #### File Operations
 
 - **Open Image**: `Ctrl+O` or **Drag & Drop**
@@ -151,6 +161,7 @@ To set it as your default viewer, see the [Default Viewer Instructions](https://
     
 - **Properties**: Right-Click → "Properties..."
     
+- **Refresh File/Directory**: `F5`
 
 #### Image Navigation
 
@@ -159,22 +170,26 @@ To set it as your default viewer, see the [Default Viewer Instructions](https://
 - **Pan Image**: **Click and Drag** (when zoomed in)
     
 - **Sort By**: Right-Click → "Sort By" → (Name/Date/Size)
-    
 
+- **Step Animation Frame**: `Spacebar` (Pauses auto-play and advances GIF frame-by-frame)
+    
 #### Viewing
 
-- **Zoom In/Out**: `Ctrl+` / `Ctrl-` or **Mouse Wheel**
+- **Zoom In/Out**: `Ctrl++` / `Ctrl+-` or **Mouse Wheel**
     
 - **Fit to Window**: `Ctrl+0` or **Double-Click**
     
 - **Actual Size (100%)**: `Ctrl+*`
+
+- **Custom Zoom**: `Ctrl+Shift+Z`
     
 - **Toggle Fullscreen**: `F11`
     
 - **Exit**: `Esc`
     
-
 #### Editing & Tools
+
+- **Undo Last Edit**: `Ctrl+Z`
 
 - **Rotate Clockwise**: `Up Arrow`
     
@@ -186,7 +201,7 @@ To set it as your default viewer, see the [Default Viewer Instructions](https://
     
 - **Apply Crop**: `Enter` (while in crop mode)
     
-- **Cancel Crop**: `Esc` (while in crop mode)
+- **Cancel Action**: `Esc` (Exits crop mode, eyedropper, or OCR selection)
     
 - **Toggle Grayscale**: Right-Click → "Edit" → "Grayscale"
     
@@ -194,7 +209,7 @@ To set it as your default viewer, see the [Default Viewer Instructions](https://
     
 - **Toggle OSD**: `I`
     
-- **Eyedropper Tool**: **Hold Alt** (Click to copy hex code)
+- **Eyedropper Tool**: Right-Click → "Edit" → "Pick Color" (Click to copy hex code)
     
 - **Preferences**: Right-Click → "Preferences..."
     
