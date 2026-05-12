@@ -375,9 +375,16 @@ void ViewerApp::Render() {
                 m_ctx.wicConverter = nullptr;
             }
 
-            // Lazy load 
+            // Lazy load and aggressive unload
             if (m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
                 if (!m_ctx.animationD2DBitmaps[m_ctx.currentAnimationFrame]) {
+
+
+                    for (size_t i = 0; i < m_ctx.animationD2DBitmaps.size(); ++i) {
+                        if (i != m_ctx.currentAnimationFrame) {
+                            m_ctx.animationD2DBitmaps[i] = nullptr;
+                        }
+                    }
 
                     ComPtr<IWICBitmapSource> source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
                     ComPtr<ID2D1Bitmap> d2dFrameBitmap;

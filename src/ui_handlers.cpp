@@ -34,33 +34,30 @@ bool ViewerApp::CheckHotkey(WORD hk, WPARAM wParam) {
 
 void ViewerApp::OnKeyDown(WPARAM wParam) {
     bool ctrlPressed = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    bool shiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
     auto isKey = [&](ActionID act) { return CheckHotkey(m_ctx.hotkeys[act], wParam); };
 
     if (isKey(Act_Next)) {
-        if (!m_ctx.isAnimated && m_ctx.animationFrameConverters.size() > 1 && m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size() - 1) {
-            m_ctx.currentAnimationFrame++; UpdateViewToCurrentFrame();
-        }
-        else if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
+        if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex + 1) % static_cast<int>(size);
             m_ctx.pendingNavIndex = m_ctx.currentImageIndex;
             m_ctx.startAtEnd = false;
             std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
-            title += L"  [Loading...]"; SetWindowTextW(m_ctx.hWnd, title.c_str());
+            title += L"  [Loading...]";
+            SetWindowTextW(m_ctx.hWnd, title.c_str());
             SetTimer(m_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID, 150, nullptr);
         }
     }
     else if (isKey(Act_Prev)) {
-        if (!m_ctx.isAnimated && m_ctx.animationFrameConverters.size() > 1 && m_ctx.currentAnimationFrame > 0) {
-            m_ctx.currentAnimationFrame--; UpdateViewToCurrentFrame();
-        }
-        else if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
+        if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
             m_ctx.pendingNavIndex = m_ctx.currentImageIndex;
             m_ctx.startAtEnd = true;
             std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
-            title += L"  [Loading...]"; SetWindowTextW(m_ctx.hWnd, title.c_str());
+            title += L"  [Loading...]";
+            SetWindowTextW(m_ctx.hWnd, title.c_str());
             SetTimer(m_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID, 150, nullptr);
         }
     }
@@ -137,17 +134,27 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
         case 'W': m_ctx.isSelectingOcrRect = true; m_ctx.isDraggingOcrRect = false; m_ctx.isCropMode = false;
             m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false; m_ctx.isEyedropperActive = false; SetCursor(LoadCursor(nullptr, IDC_CROSS)); break;
         case VK_SPACE:
-            // Manual frame-by-frame animation stepping
+            // Gif playback controls
             if (m_ctx.animationFrameConverters.size() > 1) {
-                if (m_ctx.isAnimated) {
-                    // Pause the animation
-                    m_ctx.isAnimated = false;
-                    KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+                if (shiftPressed) {
+                    // Shift+Space: Resume playback 
+                    if (!m_ctx.isAnimated) {
+                        m_ctx.isAnimated = true;
+                        UINT delay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
+                        SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, delay > 0 ? delay : 100, nullptr);
+                    }
                 }
                 else {
-                    // Advance one frame and loop around
-                    m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameConverters.size();
-                    UpdateViewToCurrentFrame();
+                    if (m_ctx.isAnimated) {
+                        // Pause 
+                        m_ctx.isAnimated = false;
+                        KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+                    }
+                    else {
+                        // Advance one frame and loop
+                        m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameConverters.size();
+                        UpdateViewToCurrentFrame();
+                    }
                 }
             }
             break;
@@ -464,6 +471,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
                 m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameDelays.size();
                 UINT nextDelay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
 
+                UpdateWindowTitle();
                 InvalidateRect(hWnd, nullptr, FALSE);
 
                 if (currentDelay != nextDelay) {

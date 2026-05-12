@@ -3,6 +3,18 @@
 
 
 
+void ViewerApp::UpdateWindowTitle() {
+    if (m_ctx.loadingFilePath.empty()) {
+        SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer");
+        return;
+    }
+    std::wstring title = m_ctx.loadingFilePath;
+    if (m_ctx.animationFrameConverters.size() > 1) {
+        title += L" (Frame " + std::to_wstring(m_ctx.currentAnimationFrame + 1) + L"/" + std::to_wstring(m_ctx.animationFrameConverters.size()) + L")";
+    }
+    SetWindowTextW(m_ctx.hWnd, title.c_str());
+}
+
 void ViewerApp::UpdateViewToCurrentFrame() {
     {
         CriticalSectionLock lock(m_ctx.wicMutex);
@@ -12,6 +24,7 @@ void ViewerApp::UpdateViewToCurrentFrame() {
     }
     // Re-apply rotation, brightness, etc. to the new frame
     ApplyEffectsToView();
+    UpdateWindowTitle();
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
 }
 

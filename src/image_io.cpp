@@ -552,7 +552,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
             FitImageToWindow();
         }
 
-        SetWindowTextW(m_ctx.hWnd, m_ctx.loadingFilePath.c_str());
+        UpdateWindowTitle();
 
         WIN32_FILE_ATTRIBUTE_DATA fad = {};
         if (GetFileAttributesExW(m_ctx.loadingFilePath.c_str(), GetFileExInfoStandard, &fad)) {
@@ -639,7 +639,7 @@ void ViewerApp::FinalizeImageLoad(bool success, int foundIndex) {
 
     if (success) {
         m_ctx.currentImageIndex = foundIndex;
-        SetWindowTextW(m_ctx.hWnd, m_ctx.loadingFilePath.c_str());
+        UpdateWindowTitle();
         CenterImage(true);
     }
     else {

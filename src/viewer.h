@@ -324,6 +324,7 @@ public:
     void SetZoomLevel(float zoom);
     void TriggerHqRender();
     void ToggleFullScreen();
+    void UpdateWindowTitle();
     void UpdateEyedropperColor(POINT pt);
     void HandleEyedropperClick();
     void OpenFileAction();
