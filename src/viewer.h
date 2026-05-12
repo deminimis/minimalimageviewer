@@ -289,6 +289,8 @@ struct AppContext {
     // Thread Management
     std::atomic<int> activeBackgroundThreads{ 0 };
     std::atomic<bool> isShuttingDown{ false };
+    std::atomic<int> hqRenderSequenceId{ 0 };
+    std::atomic<bool> isHqTaskRunning{ false };
 
     template <typename Func>
     void RunBackgroundTask(Func&& task) {

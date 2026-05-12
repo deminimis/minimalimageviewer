@@ -680,11 +680,12 @@ void ViewerApp::StartPreloading() {
         // Skip GIFs and TIFFs to preserve animation frame extraction during a normal load
         const wchar_t* ext = PathFindExtensionW(path.c_str());
         if (ext && (_wcsicmp(ext, L".gif") == 0 || _wcsicmp(ext, L".tiff") == 0 || _wcsicmp(ext, L".tif") == 0)) return;
-
         if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
-        ComPtr<IWICImagingFactory> factory;
-        if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
-            ComPtr<IWICBitmapDecoder> decoder;
+
+        { 
+            ComPtr<IWICImagingFactory> factory;
+            if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
+                ComPtr<IWICBitmapDecoder> decoder;
             if (SUCCEEDED(factory->CreateDecoderFromFilename(path.c_str(), NULL, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder))) {
                 ComPtr<IWICBitmapFrameDecode> frame;
                 if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
@@ -722,7 +723,8 @@ void ViewerApp::StartPreloading() {
                     }
                 }
             }
-        }
+            }
+        } 
         CoUninitialize();
         };
 

@@ -479,8 +479,10 @@ void ViewerApp::Render() {
                 );
                 m_ctx.colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
 
-                D2D1_INTERPOLATION_MODE interpModeD2D = (!m_ctx.smoothScaling) ? D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
-                    ((isHq || m_ctx.zoomFactor < 1.0f) ? D2D1_INTERPOLATION_MODE_LINEAR : D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+                bool isIntegerZoom = (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f);
+                D2D1_INTERPOLATION_MODE interpModeD2D = (!m_ctx.smoothScaling || isIntegerZoom) ?
+                    D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_INTERPOLATION_MODE_LINEAR;
+
                 m_ctx.renderTarget->DrawImage(
                     m_ctx.colorMatrixEffect.Get(),
                     nullptr,
@@ -489,9 +491,10 @@ void ViewerApp::Render() {
                 );
             }
             else {
-                D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!m_ctx.smoothScaling) ?
-                    D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR :
-                    ((isHq || m_ctx.zoomFactor < 1.0f) ? D2D1_BITMAP_INTERPOLATION_MODE_LINEAR : D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR);
+                bool isIntegerZoom = (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f);
+                D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!m_ctx.smoothScaling || isIntegerZoom) ?
+                    D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
+
                 m_ctx.renderTarget->DrawBitmap(
                     bitmapToDraw.Get(), nullptr, opacity,
                     interpModeBmp
@@ -646,15 +649,20 @@ void ViewerApp::Render() {
 
 void ViewerApp::TriggerHqRender() {
     m_ctx.d2dBitmapHq = nullptr;
+
+    // Increment the sequence ID and kill pending timers after crosing 1x. 
+    m_ctx.hqRenderSequenceId++;
+    KillTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID);
+    m_ctx.isHqPending = false;
+
     if (!m_ctx.smoothScaling) return; // Skip HQ rendering if smooth scaling disabled.
 
-    // Skip HQ smoothing for integer zoom levels > 1x 
-    if (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f) {
+    // WIC scaling above 1x causes memory spikes, use Direct2d
+    if (m_ctx.zoomFactor >= 1.0f) {
         return;
     }
 
     if (!m_ctx.isAnimated && m_ctx.wicConverter) {
-        KillTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID);
         m_ctx.isHqPending = true;
         SetTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID, 200, nullptr);
     }

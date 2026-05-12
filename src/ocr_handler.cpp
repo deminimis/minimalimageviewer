@@ -37,16 +37,17 @@ static void CopyToClipboardAndNotify(HWND hWnd, const std::wstring& text, UINT s
 
 static void PerformOcrTask(std::wstring filePath, HWND hWnd, bool useArea, D2D1_RECT_F area) {
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
-    auto ocrEngine = OcrEngine::TryCreateFromUserProfileLanguages();
-    if (!ocrEngine) {
-        PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)5);
-        winrt::uninit_apartment();
-        return;
-    }
 
-    try {
-        auto file = StorageFile::GetFileFromPathAsync(filePath.c_str()).get();
-        auto stream = file.OpenAsync(FileAccessMode::Read).get();
+    { 
+        auto ocrEngine = OcrEngine::TryCreateFromUserProfileLanguages();
+        if (!ocrEngine) {
+            PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)5);
+            return; 
+        }
+
+        try {
+            auto file = StorageFile::GetFileFromPathAsync(filePath.c_str()).get();
+            auto stream = file.OpenAsync(FileAccessMode::Read).get();
         auto decoder = BitmapDecoder::CreateAsync(stream).get();
         winrt::Windows::Graphics::Imaging::SoftwareBitmap softwareBitmap{ nullptr };
 
@@ -87,9 +88,10 @@ static void PerformOcrTask(std::wstring filePath, HWND hWnd, bool useArea, D2D1_
             }
             CopyToClipboardAndNotify(hWnd, allText, useArea ? WM_APP_OCR_DONE_AREA : WM_APP_OCR_DONE_TEXT);
         }
+        }
+        catch (winrt::hresult_error const&) { PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)1); }
+        catch (...) { PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)2); }
     }
-    catch (winrt::hresult_error const&) { PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)1); }
-    catch (...) { PostMessage(hWnd, WM_APP_OCR_FAILED, 0, (LPARAM)2); }
 
     winrt::uninit_apartment();
 }

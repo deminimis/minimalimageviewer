@@ -162,6 +162,14 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     m_ctx.isShuttingDown = true;
     CleanupLoadingThread();
 
+    // Drain message queue 
+    while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        if (msg.message == WM_APP_HQ_READY) {
+            IWICBitmap* pBitmap = reinterpret_cast<IWICBitmap*>(msg.wParam);
+            if (pBitmap) pBitmap->Release();
+        }
+    }
+
     while (m_ctx.activeBackgroundThreads > 0) {
         Sleep(10);
     }
