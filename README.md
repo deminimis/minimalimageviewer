@@ -22,6 +22,8 @@ _For a stripped-down 21kb version, you can try the [stable stripped .exe](https:
 - **Comprehensive Format Support**: Leverages Windows Imaging Component (WIC) to support JPEG, PNG, BMP, GIF, TIFF, ICO, WebP, HEIF, AVIF, and many RAW formats (.cr2, .nef, .dng, etc.) with the proper codecs installed.
     
 - **Animated Image Support**: Plays animated formats (like GIF) by decoding all frames and their metadata-defined delays.
+    - Space to pause and cycle through frames.
+    - Shift + space to restart animation. 
     
 - **Asynchronous Pre-loading**: Intelligently pre-loads the next and previous images in a directory on background threads for instantaneous browsing.
     
