@@ -61,22 +61,11 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
     m_ctx.startAtEnd = startAtEnd;
     {
         CriticalSectionLock lock(m_ctx.wicMutex);
-        m_ctx.wicConverter = nullptr;
-        m_ctx.wicConverterOriginal = nullptr;
+        // Keep current display resources alive until the replacement image is ready.
         m_ctx.undoStack.clear();
-        m_ctx.d2dBitmap = nullptr;
-        m_ctx.d2dBitmapHq = nullptr;
         m_ctx.isHqPending = false;
-        m_ctx.animationD2DBitmaps.clear();
-        m_ctx.isAnimated = false;
-        m_ctx.animationFrameConverters.clear();
-        m_ctx.animationFrameDelays.clear();
-        m_ctx.currentAnimationFrame = 0;
+        ++m_ctx.hqRenderSequenceId;
         m_ctx.originalContainerFormat = GUID_NULL;
-
-        // Reset view transforms for new image
-        m_ctx.rotationAngle = 0;
-        m_ctx.isFlippedHorizontal = false;
 
         m_ctx.stagedFrames.clear();
         m_ctx.stagedDelays.clear();
@@ -84,9 +73,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         m_ctx.stagedHeight = 0;
         m_ctx.stagedOrientation = 1;
 
-        m_ctx.isSvg = false;
-        m_ctx.svgDocument = nullptr;
-        m_ctx.svgData.clear();
         m_ctx.stagedSvgData.clear();
     }
     m_ctx.currentFilePathOverride.clear();
@@ -462,6 +448,8 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
             return;
         }
 
+        ClearCurrentImageDisplayState();
+
         if (!m_ctx.stagedSvgData.empty()) {
             m_ctx.svgData = std::move(m_ctx.stagedSvgData);
             m_ctx.isSvg = true;
@@ -480,11 +468,8 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
             }
 
             m_ctx.isAnimated = animated;
-            m_ctx.animationFrameConverters.clear();
-            m_ctx.animationFrameDelays.clear();
 
             // Determine start frame
-            m_ctx.currentAnimationFrame = 0;
             if (m_ctx.startAtEnd && !animated && !m_ctx.stagedFrames.empty()) {
                 m_ctx.currentAnimationFrame = static_cast<UINT>(m_ctx.stagedFrames.size() - 1);
             }
@@ -653,6 +638,25 @@ void ViewerApp::CleanupLoadingThread() {
     m_ctx.cancelPreloading = true;
     CleanupPreloadingThreads();
     KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+}
+
+void ViewerApp::ClearCurrentImageDisplayState() {
+    KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+    m_ctx.wicConverter = nullptr;
+    m_ctx.wicConverterOriginal = nullptr;
+    m_ctx.d2dBitmap = nullptr;
+    m_ctx.d2dBitmapHq = nullptr;
+    m_ctx.isHqPending = false;
+    m_ctx.animationD2DBitmaps.clear();
+    m_ctx.animationFrameConverters.clear();
+    m_ctx.animationFrameDelays.clear();
+    m_ctx.currentAnimationFrame = 0;
+    m_ctx.isAnimated = false;
+    m_ctx.isSvg = false;
+    m_ctx.svgDocument = nullptr;
+    m_ctx.svgData.clear();
+    m_ctx.rotationAngle = 0;
+    m_ctx.isFlippedHorizontal = false;
 }
 
 void ViewerApp::CleanupPreloadingThreads() {
