@@ -1,5 +1,6 @@
 #include "viewer.h"
 #include "exif_utils.h"
+#include <propkey.h>
 #include <string>
 #include <stdio.h>
 #include <memory>
@@ -86,27 +87,28 @@ ImageProperties ViewerApp::GetCurrentOsdProperties() {
             pProps.bitDepth = GetBitDepth(frame.Get(), m_ctx.wicFactory.Get());
             double dpiX, dpiY;
             if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) pProps.dpi = std::to_wstring(static_cast<int>(dpiX + 0.5)) + L" x " + std::to_wstring(static_cast<int>(dpiY + 0.5)) + L" DPI";
-            ComPtr<IWICMetadataQueryReader> meta;
-            if (SUCCEEDED(frame->GetMetadataQueryReader(&meta))) {
-                auto getMeta = [&](const wchar_t* q) { return GetMetadataString(meta.Get(), q); };
-                pProps.dateTaken = getMeta(L"/app1/ifd/exif/{ushort=36867}");
-                pProps.orientation = getMeta(L"/app1/ifd/{ushort=274}");
-                pProps.cameraMake = getMeta(L"/app1/ifd/{ushort=271}");
-                pProps.cameraModel = getMeta(L"/app1/ifd/{ushort=272}");
-                pProps.fStop = getMeta(L"/app1/ifd/exif/{rational=33437}");
-                pProps.exposureTime = getMeta(L"/app1/ifd/exif/{rational=33434}");
-                pProps.iso = getMeta(L"/app1/ifd/exif/{ushort=34855}");
-                pProps.software = getMeta(L"/app1/ifd/{ushort=305}");
-                pProps.focalLength = getMeta(L"/app1/ifd/exif/{rational=37386}");
-                pProps.focalLength35mm = getMeta(L"/app1/ifd/exif/{ushort=41989}");
-                pProps.exposureBias = getMeta(L"/app1/ifd/exif/{srational=37380}");
-                pProps.meteringMode = getMeta(L"/app1/ifd/exif/{ushort=37383}");
-                pProps.flash = getMeta(L"/app1/ifd/exif/{ushort=37385}");
-                pProps.exposureProgram = getMeta(L"/app1/ifd/exif/{ushort=34850}");
-                pProps.whiteBalance = getMeta(L"/app1/ifd/exif/{ushort=41987}");
-                pProps.author = getMeta(L"/app1/ifd/{ushort=315}");
-                pProps.copyright = getMeta(L"/app1/ifd/{ushort=33432}");
-                pProps.lensModel = getMeta(L"/app1/ifd/exif/{ushort=42036}");
+            ComPtr<IPropertyStore> pStore;
+            if (SUCCEEDED(SHGetPropertyStoreFromParsingName(pProps.filePath.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&pStore)))) {
+                auto getProp = [&](REFPROPERTYKEY key) { return GetPropertyString(pStore.Get(), key); };
+
+                pProps.dateTaken = getProp(PKEY_Photo_DateTaken);
+                pProps.orientation = getProp(PKEY_Photo_Orientation);
+                pProps.cameraMake = getProp(PKEY_Photo_CameraManufacturer);
+                pProps.cameraModel = getProp(PKEY_Photo_CameraModel);
+                pProps.fStop = getProp(PKEY_Photo_FNumber);
+                pProps.exposureTime = getProp(PKEY_Photo_ExposureTime);
+                pProps.iso = getProp(PKEY_Photo_ISOSpeed);
+                pProps.software = getProp(PKEY_SoftwareUsed);
+                pProps.focalLength = getProp(PKEY_Photo_FocalLength);
+                pProps.focalLength35mm = getProp(PKEY_Photo_FocalLengthInFilm);
+                pProps.exposureBias = getProp(PKEY_Photo_ExposureBias);
+                pProps.meteringMode = getProp(PKEY_Photo_MeteringMode);
+                pProps.flash = getProp(PKEY_Photo_Flash);
+                pProps.exposureProgram = getProp(PKEY_Photo_ExposureProgram);
+                pProps.whiteBalance = getProp(PKEY_Photo_WhiteBalance);
+                pProps.author = getProp(PKEY_Author);
+                pProps.copyright = getProp(PKEY_Copyright);
+                pProps.lensModel = getProp(PKEY_Photo_LensModel);
             }
         }
     }

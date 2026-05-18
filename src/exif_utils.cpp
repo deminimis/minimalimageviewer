@@ -4,110 +4,26 @@
 
 
 
-std::wstring GetMetadataString(IWICMetadataQueryReader* pReader, const wchar_t* query) {
+#include <propsys.h>
+#include <propkey.h>
+
+std::wstring GetPropertyString(IPropertyStore* pStore, REFPROPERTYKEY key) {
+    if (!pStore) return L"N/A";
+
     PROPVARIANT propValue;
     PropVariantInit(&propValue);
     std::wstring val = L"N/A";
-    if (FAILED(pReader->GetMetadataByName(query, &propValue))) {
+
+    if (SUCCEEDED(pStore->GetValue(key, &propValue))) {
+        PWSTR pszDisplayValue = nullptr;
+        if (SUCCEEDED(PSFormatForDisplayAlloc(key, propValue, PDFF_DEFAULT, &pszDisplayValue))) {
+            if (pszDisplayValue && wcslen(pszDisplayValue) > 0) {
+                val = pszDisplayValue;
+            }
+            CoTaskMemFree(pszDisplayValue);
+        }
         PropVariantClear(&propValue);
-        return val;
     }
-
-    wchar_t buffer[256] = { 0 };
-
-    if (wcscmp(query, L"/app1/ifd/exif/{rational=33437}") == 0 && propValue.vt == (VT_UI4 | VT_VECTOR) && propValue.caul.cElems == 2) {
-        double fstop_val = (double)propValue.caul.pElems[0] / (double)propValue.caul.pElems[1];
-        swprintf_s(buffer, 256, L"f/%.1f", fstop_val);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{rational=33434}") == 0 && propValue.vt == (VT_UI4 | VT_VECTOR) && propValue.caul.cElems == 2) {
-        double num = (double)propValue.caul.pElems[0];
-        double den = (double)propValue.caul.pElems[1];
-        if (den == 0) den = 1.0;
-        if (num == 1 && den > 1) {
-            swprintf_s(buffer, 256, L"1/%.0f s", den);
-        }
-        else {
-            swprintf_s(buffer, 256, L"%.4f s", num / den);
-        }
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=34855}") == 0 && propValue.vt == VT_UI2) {
-        swprintf_s(buffer, 256, L"ISO %u", propValue.uiVal);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{rational=37386}") == 0 && propValue.vt == (VT_UI4 | VT_VECTOR) && propValue.caul.cElems == 2) {
-        double focal_val = (double)propValue.caul.pElems[0] / (double)propValue.caul.pElems[1];
-        swprintf_s(buffer, 256, L"%.0f mm", focal_val);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=41989}") == 0 && propValue.vt == VT_UI2) {
-        swprintf_s(buffer, 256, L"%u mm", propValue.uiVal);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{srational=37380}") == 0 && propValue.vt == (VT_I4 | VT_VECTOR) && propValue.caul.cElems == 2) {
-        double bias_val = (double)propValue.caul.pElems[0] / (double)propValue.caul.pElems[1];
-        swprintf_s(buffer, 256, L"%.2f EV", bias_val);
-        val = buffer;
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=37383}") == 0 && propValue.vt == VT_UI2) {
-        switch (propValue.uiVal) {
-        case 0: val = L"Unknown"; break;
-        case 1: val = L"Average"; break;
-        case 2: val = L"Center Weighted Average"; break;
-        case 3: val = L"Spot"; break;
-        case 4: val = L"Multi-spot"; break;
-        case 5: val = L"Pattern"; break;
-        case 6: val = L"Partial"; break;
-        default: val = L"Other"; break;
-        }
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=37385}") == 0 && propValue.vt == VT_UI2) {
-        if (propValue.uiVal & 0x1) val = L"Fired";
-        else val = L"Did not fire";
-        if (propValue.uiVal & 0x4) val += L", Strobe";
-        if (propValue.uiVal & 0x10) val += L", Auto";
-        if (propValue.uiVal & 0x40) val += L", Red-eye reduction";
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=34850}") == 0 && propValue.vt == VT_UI2) {
-        switch (propValue.uiVal) {
-        case 0: val = L"Not defined"; break;
-        case 1: val = L"Manual"; break;
-        case 2: val = L"Normal program (Auto)"; break;
-        case 3: val = L"Aperture priority"; break;
-        case 4: val = L"Shutter priority"; break;
-        case 5: val = L"Creative program"; break;
-        case 6: val = L"Action program"; break;
-        case 7: val = L"Portrait mode"; break;
-        case 8: val = L"Landscape mode"; break;
-        default: val = L"Other"; break;
-        }
-    }
-    else if (wcscmp(query, L"/app1/ifd/exif/{ushort=41987}") == 0 && propValue.vt == VT_UI2) {
-        switch (propValue.uiVal) {
-        case 0: val = L"Auto"; break;
-        case 1: val = L"Manual"; break;
-        default: val = L"Other"; break;
-        }
-    }
-    else if (wcscmp(query, L"/app1/ifd/{ushort=274}") == 0 && propValue.vt == VT_UI2) {
-        switch (propValue.uiVal) {
-        case 1: val = L"Normal"; break;
-        case 2: val = L"Flipped Horizontal"; break;
-        case 3: val = L"Rotated 180"; break;
-        case 4: val = L"Flipped Vertical"; break;
-        case 5: val = L"Transpose"; break;
-        case 6: val = L"Rotated 90 CW"; break;
-        case 7: val = L"Transverse"; break;
-        case 8: val = L"Rotated 90 CCW"; break;
-        default: val = L"Unknown"; break;
-        }
-    }
-    else if (SUCCEEDED(PropVariantToString(propValue, buffer, 256))) {
-        val = buffer;
-    }
-
-    PropVariantClear(&propValue);
     return val;
 }
 
