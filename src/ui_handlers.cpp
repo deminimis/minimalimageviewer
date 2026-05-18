@@ -41,24 +41,20 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
         if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex + 1) % static_cast<int>(size);
-            m_ctx.pendingNavIndex = m_ctx.currentImageIndex;
-            m_ctx.startAtEnd = false;
             std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
             title += L"  [Loading...]";
             SetWindowTextW(m_ctx.hWnd, title.c_str());
-            SetTimer(m_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID, 150, nullptr);
+            LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], false);
         }
     }
     else if (isKey(Act_Prev)) {
         if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
-            m_ctx.pendingNavIndex = m_ctx.currentImageIndex;
-            m_ctx.startAtEnd = true;
             std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
             title += L"  [Loading...]";
             SetWindowTextW(m_ctx.hWnd, title.c_str());
-            SetTimer(m_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID, 150, nullptr);
+            LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], true);
         }
     }
     else if (isKey(Act_ZoomIn)) {
