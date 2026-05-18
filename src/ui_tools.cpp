@@ -22,7 +22,7 @@ void ViewerApp::UpdateViewToCurrentFrame() {
             m_ctx.wicConverterOriginal = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
         }
     }
-    // Re-apply rotation, brightness, etc. to the new frame
+    // Re-apply rotation, flip, grayscale, etc. to the new frame
     ApplyEffectsToView();
     UpdateWindowTitle();
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);

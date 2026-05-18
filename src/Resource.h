@@ -29,7 +29,6 @@
 #define IDM_FLIP                    1035
 #define IDM_CROP                    1036
 #define IDM_RESIZE                  1037
-#define IDM_BRIGHTNESS_CONTRAST     1038
 
 #define IDM_PREFERENCES             1039
 #define IDM_KEYBINDINGS             1043
@@ -40,8 +39,6 @@
 #define IDC_EDIT_ZOOM               2028
 #define IDC_HOTKEY_CTRL             2025
 #define IDM_GRAYSCALE               1040
-#define IDM_OCR                     1041
-#define IDM_OCR_AREA                1042
 #define IDM_REFRESH                 1051  
 #define IDM_EYEDROPPER              1052
 
@@ -66,14 +63,5 @@
 #define IDC_CHECK_AUTO_REFRESH      2023  
 #define IDC_CHECK_SMOOTH_SCALING    2026
 #define IDC_CHECK_FADE_ANIMATION    2027
-
-#define IDD_BRIGHTNESS_DIALOG       203
-#define IDC_SLIDER_BRIGHTNESS       2016
-#define IDC_SLIDER_CONTRAST         2017
-#define IDC_LABEL_BRIGHTNESS        2018
-#define IDC_LABEL_CONTRAST          2019
-#define IDC_BUTTON_RESET_BC         2020
-#define IDC_SLIDER_SATURATION       2021
-#define IDC_LABEL_SATURATION        2022
 
 #define IDC_STATIC                  -1

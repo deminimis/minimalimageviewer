@@ -71,7 +71,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
         }
     }
 
-    winrt::init_apartment(winrt::apartment_type::single_threaded);
+    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
     InitializeCriticalSection(&m_ctx.wicMutex);
     InitializeCriticalSection(&m_ctx.preloadMutex);
@@ -80,7 +80,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
         MessageBoxW(nullptr, L"Failed to create WIC Imaging Factory.", L"Error", MB_OK | MB_ICONERROR);
         DeleteCriticalSection(&m_ctx.wicMutex);
         DeleteCriticalSection(&m_ctx.preloadMutex);
-        winrt::uninit_apartment();
+        CoUninitialize();
         return 1;
     }
 
@@ -88,7 +88,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
         MessageBoxW(nullptr, L"Failed to create Direct2D Factory.", L"Error", MB_OK | MB_ICONERROR);
         DeleteCriticalSection(&m_ctx.wicMutex);
         DeleteCriticalSection(&m_ctx.preloadMutex);
-        winrt::uninit_apartment();
+        CoUninitialize();
         return 1;
     }
 
@@ -96,7 +96,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
         MessageBoxW(nullptr, L"Failed to create DirectWrite Factory.", L"Error", MB_OK | MB_ICONERROR);
         DeleteCriticalSection(&m_ctx.wicMutex);
         DeleteCriticalSection(&m_ctx.preloadMutex);
-        winrt::uninit_apartment();
+        CoUninitialize();
         return 1;
     }
 
@@ -126,7 +126,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
         MessageBoxW(nullptr, L"Failed to create window.", L"Error", MB_OK | MB_ICONERROR);
         DeleteCriticalSection(&m_ctx.wicMutex);
         DeleteCriticalSection(&m_ctx.preloadMutex);
-        winrt::uninit_apartment();
+        CoUninitialize();
         return 1;
     }
 
@@ -194,7 +194,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     DeleteCriticalSection(&m_ctx.wicMutex);
     DeleteCriticalSection(&m_ctx.preloadMutex);
-    winrt::uninit_apartment();
+    CoUninitialize();
     return static_cast<int>(msg.wParam);
 }
 

@@ -18,20 +18,19 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-	<ItemGroup>
-		<ClCompile Include="exif_utils.cpp" />
-		<ClCompile Include="image_drawing.cpp" />
-		<ClCompile Include="image_edit.cpp" />
-		<ClCompile Include="image_io.cpp" />
-		<ClCompile Include="main.cpp" />
-		<ClCompile Include="ocr_handler.cpp" />
-		<ClCompile Include="settings_handler.cpp" />
-		<ClCompile Include="ui_actions.cpp" />
-		<ClCompile Include="ui_dialogs.cpp" />
-		<ClCompile Include="ui_handlers.cpp" />
-		<ClCompile Include="ui_properties.cpp" />
-		<ClCompile Include="ui_tools.cpp" />
-	</ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="exif_utils.cpp" />
+    <ClCompile Include="image_drawing.cpp" />
+    <ClCompile Include="image_edit.cpp" />
+    <ClCompile Include="image_io.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="settings_handler.cpp" />
+    <ClCompile Include="ui_actions.cpp" />
+    <ClCompile Include="ui_dialogs.cpp" />
+    <ClCompile Include="ui_handlers.cpp" />
+    <ClCompile Include="ui_properties.cpp" />
+    <ClCompile Include="ui_tools.cpp" />
+  </ItemGroup>
   <ItemGroup>
     <ClInclude Include="exif_utils.h" />
     <ClInclude Include="Resource.h" />
@@ -108,7 +107,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;shlwapi.lib;windowscodecs.lib;ole32.lib;shell32.lib;propsys.lib;oleaut32.lib;advapi32.lib;d2d1.lib;dwrite.lib;comctl32.lib;WindowsApp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;shlwapi.lib;windowscodecs.lib;ole32.lib;shell32.lib;propsys.lib;oleaut32.lib;advapi32.lib;d2d1.lib;dwrite.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -126,7 +125,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;shlwapi.lib;windowscodecs.lib;ole32.lib;shell32.lib;propsys.lib;oleaut32.lib;advapi32.lib;d2d1.lib;dwrite.lib;comctl32.lib;WindowsApp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;shlwapi.lib;windowscodecs.lib;ole32.lib;shell32.lib;propsys.lib;oleaut32.lib;advapi32.lib;d2d1.lib;dwrite.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -142,7 +141,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;shlwapi.lib;windowscodecs.lib;ole32.lib;shell32.lib;propsys.lib;oleaut32.lib;advapi32.lib;d2d1.lib;dwrite.lib;comctl32.lib;WindowsApp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;shlwapi.lib;windowscodecs.lib;ole32.lib;shell32.lib;propsys.lib;oleaut32.lib;advapi32.lib;d2d1.lib;dwrite.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -160,7 +159,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;shlwapi.lib;windowscodecs.lib;ole32.lib;shell32.lib;propsys.lib;oleaut32.lib;advapi32.lib;d2d1.lib;dwrite.lib;comctl32.lib;WindowsApp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>user32.lib;gdi32.lib;comdlg32.lib;shlwapi.lib;windowscodecs.lib;ole32.lib;shell32.lib;propsys.lib;oleaut32.lib;advapi32.lib;d2d1.lib;dwrite.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

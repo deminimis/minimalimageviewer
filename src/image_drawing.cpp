@@ -81,12 +81,6 @@ void ViewerApp::CreateDeviceResources() {
             hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 0.5f), &m_ctx.fadeBrush);
         }
         if (SUCCEEDED(hr)) {
-            hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_ctx.ocrMessageBrush);
-        }
-        if (SUCCEEDED(hr)) {
-            hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &m_ctx.ocrMessageBgBrush);
-        }
-        if (SUCCEEDED(hr)) {
             float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
             hr = m_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f * dpiScale, L"en-us", &m_ctx.textFormat);
         }
@@ -142,8 +136,6 @@ void ViewerApp::DiscardDeviceResources() {
     m_ctx.checkerboardBrush = nullptr;
     m_ctx.cropRectBrush = nullptr;
     m_ctx.fadeBrush = nullptr;
-    m_ctx.ocrMessageBrush = nullptr;
-    m_ctx.ocrMessageBgBrush = nullptr;
     m_ctx.animationD2DBitmaps.clear();
     m_ctx.svgDocument = nullptr;
 }
@@ -256,58 +248,6 @@ void ViewerApp::DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
     D2D1_RECT_F textRect = D2D1::RectF(bgX + padding, bgY + padding, bgX + bgWidth - padding, bgY + bgHeight - padding);
     m_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
     renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), m_ctx.textBrush.Get());
-}
-
-void ViewerApp::DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget) {
-    if (m_ctx.ocrMessage.empty() || !m_ctx.ocrMessageBrush || !m_ctx.ocrMessageBgBrush || !m_ctx.textFormat) return;
-
-    ULONGLONG elapsedTime = GetTickCount64() - m_ctx.ocrMessageStartTime;
-    float opacity = 1.0f;
-
-    if (elapsedTime > 700) {
-        opacity = std::max(0.0f, 1.0f - static_cast<float>(elapsedTime - 700) / 300.0f);
-    }
-    if (opacity == 0.0f) return;
-
-    float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
-    D2D1_SIZE_F rtSize = renderTarget->GetSize();
-    float padding = 15.0f * dpiScale;
-
-    renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-
-    ComPtr<IDWriteTextLayout> textLayout;
-    if (FAILED(m_ctx.writeFactory->CreateTextLayout(
-        m_ctx.ocrMessage.c_str(),
-        static_cast<UINT32>(m_ctx.ocrMessage.length()),
-        m_ctx.textFormat.Get(),
-        rtSize.width - 4 * padding,
-        rtSize.height,
-        &textLayout
-    ))) return;
-
-    m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-
-    DWRITE_TEXT_METRICS metrics;
-    textLayout->GetMetrics(&metrics);
-
-    float bgWidth = metrics.widthIncludingTrailingWhitespace + padding * 2;
-    float bgHeight = metrics.height + padding * 2;
-    float bgX = (rtSize.width - bgWidth) / 2.0f;
-    float bgY = (rtSize.height - bgHeight) / 2.0f;
-
-    D2D1_RECT_F bgRect = D2D1::RectF(bgX, bgY, bgX + bgWidth, bgY + bgHeight);
-    D2D1_ROUNDED_RECT roundedBgRect = D2D1::RoundedRect(bgRect, 5.0f * dpiScale, 5.0f * dpiScale);
-
-    m_ctx.ocrMessageBgBrush->SetOpacity(opacity * 0.7f);
-    m_ctx.ocrMessageBrush->SetOpacity(opacity);
-
-    renderTarget->FillRoundedRectangle(roundedBgRect, m_ctx.ocrMessageBgBrush.Get());
-    D2D1_RECT_F textRect = D2D1::RectF(bgX, bgY + padding, bgX + bgWidth, bgY + bgHeight - padding);
-    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), m_ctx.ocrMessageBrush.Get());
-
-    m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-    m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 }
 
 void ViewerApp::Render() {
@@ -466,30 +406,22 @@ void ViewerApp::Render() {
                     dc5->DrawSvgDocument(m_ctx.svgDocument.Get());
                 }
             }
-            else if (m_ctx.colorMatrixEffect) {
+            else if (m_ctx.isGrayscale && m_ctx.colorMatrixEffect) {
                 m_ctx.colorMatrixEffect->SetInput(0, bitmapToDraw.Get());
-                float b = m_ctx.brightness;
-                float c = m_ctx.contrast;
-                float s = m_ctx.isGrayscale ? 0.0f : m_ctx.saturation;
-                // Natively calculated on GPU
-                float invS = 1.0f - s;
-                float rR = invS * 0.299f + s; float rG = invS * 0.587f;     float rB = invS * 0.114f;
-                float gR = invS * 0.299f;     float gG = invS * 0.587f + s; float gB = invS * 0.114f;
-                float bR = invS * 0.299f;     float bG = invS * 0.587f;     float bB = invS * 0.114f + s;
-                float offset = (0.5f * (1.0f - c)) + b;
+
+                // Pure Grayscale Matrix calculation
                 D2D1_MATRIX_5X4_F matrix = D2D1::Matrix5x4F(
-                    rR * c, gR * c, bR * c, 0.0f,
-                    rG * c, gG * c, bG * c, 0.0f,
-                    rB * c, gB * c, bB * c, 0.0f,
+                    0.299f, 0.299f, 0.299f, 0.0f,
+                    0.587f, 0.587f, 0.587f, 0.0f,
+                    0.114f, 0.114f, 0.114f, 0.0f,
                     0.0f, 0.0f, 0.0f, opacity,
-                    offset, offset, offset, 0.0f
+                    0.0f, 0.0f, 0.0f, 0.0f
                 );
                 m_ctx.colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
 
                 bool isIntegerZoom = (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f);
                 D2D1_INTERPOLATION_MODE interpModeD2D = (!m_ctx.smoothScaling || isIntegerZoom) ?
                     D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_INTERPOLATION_MODE_LINEAR;
-
                 m_ctx.renderTarget->DrawImage(
                     m_ctx.colorMatrixEffect.Get(),
                     nullptr,
@@ -501,7 +433,6 @@ void ViewerApp::Render() {
                 bool isIntegerZoom = (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f);
                 D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!m_ctx.smoothScaling || isIntegerZoom) ?
                     D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
-
                 m_ctx.renderTarget->DrawBitmap(
                     bitmapToDraw.Get(), nullptr, opacity,
                     interpModeBmp
@@ -573,17 +504,12 @@ void ViewerApp::Render() {
             DrawEyedropperOverlay(m_ctx.renderTarget.Get());
         }
 
-        if ((m_ctx.isSelectingCropRect || m_ctx.isDraggingOcrRect) && m_ctx.cropRectBrush) {
+        if(m_ctx.isSelectingCropRect&& m_ctx.cropRectBrush) {
             m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-            D2D1_RECT_F rect = m_ctx.isSelectingCropRect ? m_ctx.cropRectWindow : m_ctx.ocrRectWindow;
+            D2D1_RECT_F rect = m_ctx.cropRectWindow;
             if (rect.left > rect.right) std::swap(rect.left, rect.right);
             if (rect.top > rect.bottom) std::swap(rect.top, rect.bottom);
-            if (m_ctx.isDraggingOcrRect) {
-                m_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::Red, 1.0f));
-            }
-            else {
-                m_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
-            }
+            m_ctx.cropRectBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White, 0.7f));
             m_ctx.renderTarget->DrawRectangle(rect, m_ctx.cropRectBrush.Get(), 1.0f);
         }
         else if (m_ctx.isCropPending && m_ctx.cropRectBrush) {
@@ -635,10 +561,6 @@ void ViewerApp::Render() {
             m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
             m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
         }
-    }
-
-    if (m_ctx.isOcrMessageVisible) {
-        DrawOcrMessageOverlay(m_ctx.renderTarget.Get());
     }
 
     HRESULT hr = m_ctx.renderTarget->EndDraw();

@@ -21,111 +21,6 @@ HRESULT ViewerApp::EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std
     return hr;
 }
 
-ComPtr<IWICBitmapSource> ViewerApp::ApplyImageEffects(ComPtr<IWICBitmapSource> inSource) {
-    if ((m_ctx.brightness == 0.0f && m_ctx.contrast == 1.0f && m_ctx.saturation == 1.0f) || !inSource || !m_ctx.wicFactory) {
-        return inSource;
-    }
-
-    UINT width, height;
-    if (FAILED(inSource->GetSize(&width, &height))) {
-        return inSource;
-    }
-
-    ComPtr<IWICFormatConverter> converter;
-    if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
-        if (SUCCEEDED(converter->Initialize(inSource.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-            inSource = converter;
-        }
-        else {
-            WICPixelFormatGUID pixelFormat;
-            if (FAILED(inSource->GetPixelFormat(&pixelFormat)) || !IsEqualGUID(pixelFormat, GUID_WICPixelFormat32bppPBGRA)) {
-                return inSource;
-            }
-        }
-    }
-    else {
-        return inSource;
-    }
-
-    ComPtr<IWICBitmap> newBitmap;
-    if (FAILED(m_ctx.wicFactory->CreateBitmap(width, height, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnDemand, &newBitmap))) {
-        return inSource;
-    }
-
-    WICRect rc = { 0, 0, (INT)width, (INT)height };
-    ComPtr<IWICBitmapLock> lock;
-    if (FAILED(newBitmap->Lock(&rc, WICBitmapLockWrite, &lock))) {
-        return inSource;
-    }
-
-    UINT bufferSize = 0;
-    UINT stride = 0;
-    BYTE* pPixels = nullptr;
-    if (FAILED(lock->GetStride(&stride)) || FAILED(lock->GetDataPointer(&bufferSize, &pPixels)) || pPixels == nullptr) {
-        lock->Release();
-        return inSource;
-    }
-
-    if (FAILED(inSource->CopyPixels(&rc, stride, bufferSize, pPixels))) {
-        lock->Release();
-        return inSource;
-    }
-
-    float contrastFactor = m_ctx.contrast;
-    float brightnessFactor = m_ctx.brightness;
-    float saturationFactor = m_ctx.saturation;
-
-    auto clampf = [](float val) -> BYTE {
-        if (val < 0.0f) return 0;
-        if (val > 255.0f) return 255;
-        return static_cast<BYTE>(val);
-        };
-
-    // precompute brightness/contrast
-    BYTE bcLut[256];
-    for (int i = 0; i < 256; ++i) {
-        float val = ((i - 128.0f) * contrastFactor) + 128.0f + (brightnessFactor * 255.0f);
-        bcLut[i] = clampf(val);
-    }
-
-    const float lumR = 0.299f;
-    const float lumG = 0.587f;
-    const float lumB = 0.114f;
-    bool adjustSat = (saturationFactor != 1.0f);
-    float invSat = 1.0f - saturationFactor; 
-    for (UINT y = 0; y < height; ++y) {
-        BYTE* pRow = pPixels + (y * stride);
-        for (UINT x = 0; x < width; ++x) {
-
-            // Bounds check 
-            if ((y * stride) + (x * 4) + 3 >= bufferSize) break;
-
-            BYTE* pPixel = pRow + (x * 4);
-
-            BYTE b = bcLut[pPixel[0]];
-            BYTE g = bcLut[pPixel[1]];
-            BYTE r = bcLut[pPixel[2]];
-            if (adjustSat) {
-                float luminance = (r * lumR) + (g * lumG) + (b * lumB);
-                float lumBase = invSat * luminance;
-
-                pPixel[0] = clampf(lumBase + saturationFactor * b);
-                pPixel[1] = clampf(lumBase + saturationFactor * g);
-                pPixel[2] = clampf(lumBase + saturationFactor * r);
-            }
-            else {
-                pPixel[0] = b;
-                pPixel[1] = g;
-                pPixel[2] = r;
-            }
-        }
-    }
-
-    lock->Release();
-
-    return ComPtr<IWICBitmapSource>(newBitmap);
-}
-
 void ViewerApp::CommitCrop() {
     CriticalSectionLock lock(m_ctx.wicMutex);
     if (!m_ctx.isCropActive || !m_ctx.wicConverterOriginal) {
@@ -328,12 +223,6 @@ void ViewerApp::SaveImageAs() {
         return;
     }
 
-    source = ApplyImageEffects(source);
-    if (!source) {
-        MessageBoxW(m_ctx.hWnd, L"Could not apply effects to image for saving.", L"Save Error", MB_ICONERROR);
-        return;
-    }
-
     HRESULT hr = EncodeAndSaveImage(source, ofn.lpstrFile, containerFormat);
 
     if (SUCCEEDED(hr)) {
@@ -354,8 +243,7 @@ void ViewerApp::SaveImage() {
     }
 
     const std::wstring& originalPath = m_ctx.imageFiles[m_ctx.currentImageIndex];
-
-    if (m_ctx.rotationAngle == 0 && !m_ctx.isFlippedHorizontal && !m_ctx.isCropActive && !m_ctx.isGrayscale && m_ctx.brightness == 0.0f && m_ctx.contrast == 1.0f && m_ctx.saturation == 1.0f) {
+    if (m_ctx.rotationAngle == 0 && !m_ctx.isFlippedHorizontal && !m_ctx.isCropActive && !m_ctx.isGrayscale) {
         MessageBoxW(m_ctx.hWnd, L"No changes to save.", L"Save", MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -370,10 +258,8 @@ void ViewerApp::SaveImage() {
             PathRenameExtensionW(newPath, L".png");
 
             ComPtr<IWICBitmapSource> source = GetSaveSource(GUID_ContainerFormatPng);
-            if (source) source = ApplyImageEffects(source);
-
             if (source && SUCCEEDED(EncodeAndSaveImage(source, newPath, GUID_ContainerFormatPng))) {
-                LoadImageFromFile(newPath); // Load new png
+                LoadImageFromFile(newPath);
             }
             else {
                 MessageBoxW(m_ctx.hWnd, L"Failed to save as PNG.", L"Save Error", MB_ICONERROR);
@@ -397,12 +283,6 @@ void ViewerApp::SaveImage() {
     ComPtr<IWICBitmapSource> source = GetSaveSource(containerFormat);
     if (!source) {
         MessageBoxW(m_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
-        return;
-    }
-
-    source = ApplyImageEffects(source);
-    if (!source) {
-        MessageBoxW(m_ctx.hWnd, L"Could not apply effects to image for saving.", L"Save Error", MB_ICONERROR);
         return;
     }
 
@@ -441,7 +321,6 @@ void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& co
     }
 
     source = ApplyCropAndTransform(source);
-
     if (m_ctx.isGrayscale) {
         ComPtr<IWICFormatConverter> grayConverter;
         if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
@@ -449,12 +328,6 @@ void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& co
                 source = grayConverter;
             }
         }
-    }
-
-    source = ApplyImageEffects(source);
-    if (!source) {
-        MessageBoxW(m_ctx.hWnd, L"Could not apply effects to image for resizing.", L"Resize Error", MB_ICONERROR);
-        return;
     }
 
     ComPtr<IWICBitmapScaler> scaler;

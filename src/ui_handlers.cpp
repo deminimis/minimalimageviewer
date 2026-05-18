@@ -87,10 +87,11 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
         SetCursor(LoadCursor(nullptr, m_ctx.isCropMode ? IDC_CROSS : IDC_ARROW));
     }
     else if (isKey(Act_Exit)) {
-        if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending || m_ctx.isSelectingOcrRect || m_ctx.isEyedropperActive) {
-            m_ctx.isCropMode = false; m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false;
-            m_ctx.isSelectingOcrRect = false; m_ctx.isDraggingOcrRect = false; m_ctx.isEyedropperActive = false;
-            m_ctx.ocrRectWindow = { 0 }; ApplyEffectsToView(); FitImageToWindow();
+        if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending || m_ctx.isEyedropperActive) {
+            m_ctx.isCropMode = false;
+            m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false;
+            m_ctx.isEyedropperActive = false;
+            ApplyEffectsToView(); FitImageToWindow();
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             if (GetCapture() == m_ctx.hWnd) ReleaseCapture();
             InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
@@ -101,11 +102,12 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
     }
     else {
         switch (wParam) {
-        case VK_ESCAPE: 
-            if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending || m_ctx.isSelectingOcrRect || m_ctx.isEyedropperActive) {
-                m_ctx.isCropMode = false; m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false;
-                m_ctx.isSelectingOcrRect = false; m_ctx.isDraggingOcrRect = false; m_ctx.isEyedropperActive = false;
-                m_ctx.ocrRectWindow = { 0 }; ApplyEffectsToView(); FitImageToWindow();
+        case VK_ESCAPE:
+            if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending || m_ctx.isEyedropperActive) {
+                m_ctx.isCropMode = false;
+                m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false;
+                m_ctx.isEyedropperActive = false;
+                ApplyEffectsToView(); FitImageToWindow();
                 SetCursor(LoadCursor(nullptr, IDC_ARROW));
                 if (GetCapture() == m_ctx.hWnd) ReleaseCapture();
                 InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
@@ -130,9 +132,6 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
             } break;
         case 'I': m_ctx.isOsdVisible = !m_ctx.isOsdVisible;
             InvalidateRect(m_ctx.hWnd, nullptr, FALSE); break;
-        case 'Q': PerformOcr(); break;
-        case 'W': m_ctx.isSelectingOcrRect = true; m_ctx.isDraggingOcrRect = false; m_ctx.isCropMode = false;
-            m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false; m_ctx.isEyedropperActive = false; SetCursor(LoadCursor(nullptr, IDC_CROSS)); break;
         case VK_SPACE:
             // Gif playback controls
             if (m_ctx.animationFrameConverters.size() > 1) {
@@ -212,7 +211,6 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hEditMenu, MF_STRING | (m_ctx.isGrayscale ? MF_CHECKED : MF_UNCHECKED), IDM_GRAYSCALE, L"Grayscale");
     addAction(hEditMenu, IDM_CROP, Act_Crop, L"Crop");
     AppendMenuW(hEditMenu, MF_STRING, IDM_RESIZE, L"Resize Image...");
-    AppendMenuW(hEditMenu, MF_STRING, IDM_BRIGHTNESS_CONTRAST, L"Image Effects...");
     AppendMenuW(hEditMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hEditMenu, MF_STRING | (m_ctx.isEyedropperActive ? MF_CHECKED : MF_UNCHECKED), IDM_EYEDROPPER, L"Pick Color");
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hEditMenu, L"Edit");
@@ -228,8 +226,6 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     addAction(hViewMenu, IDM_FULLSCREEN, Act_Fullscreen, L"Full Screen");
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hViewMenu, L"View");
 
-    AppendMenuW(hMenu, MF_STRING, IDM_OCR, L"Copy Text (OCR)\tQ");
-    AppendMenuW(hMenu, MF_STRING, IDM_OCR_AREA, L"Copy Text from Area\tW");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_SAVE, L"Save\tCtrl+S");
     AppendMenuW(hMenu, MF_STRING, IDM_SAVE_AS, L"Save As\tCtrl+Shift+S");
@@ -299,7 +295,6 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
         break;
     }
     case IDM_RESIZE:        ResizeImageAction(); break;
-    case IDM_BRIGHTNESS_CONTRAST: OpenBrightnessContrastDialog(); break;
     case IDM_EYEDROPPER:
         m_ctx.isEyedropperActive = !m_ctx.isEyedropperActive;
         m_ctx.didCopyColor = false;
@@ -307,16 +302,6 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
         if (m_ctx.isEyedropperActive) SetCapture(m_ctx.hWnd);
         else ReleaseCapture();
         InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-        break;
-    case IDM_OCR:           PerformOcr(); break;
-    case IDM_OCR_AREA:
-        m_ctx.isSelectingOcrRect = true;
-        m_ctx.isDraggingOcrRect = false;
-        m_ctx.isCropMode = false;
-        m_ctx.isSelectingCropRect = false;
-        m_ctx.isCropPending = false;
-        m_ctx.isEyedropperActive = false;
-        SetCursor(LoadCursor(nullptr, IDC_CROSS));
         break;
     case IDM_SAVE:          SaveImage(); break;
     case IDM_SAVE_AS:       SaveImageAs(); break;
@@ -428,40 +413,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             FinalizeImageLoad(false, -1);
         }
         break;
-    case WM_APP_OCR_DONE_TEXT:
-        m_ctx.ocrMessage = L"Text copied to clipboard.";
-        m_ctx.isOcrMessageVisible = true;
-        m_ctx.ocrMessageStartTime = GetTickCount64();
-        SetTimer(m_ctx.hWnd, OCR_MESSAGE_TIMER_ID, 16, nullptr);
-        SetCursor(LoadCursor(nullptr, IDC_ARROW));
-        break;
-    case WM_APP_OCR_DONE_AREA:
-        m_ctx.ocrMessage = L"Text from selected area copied.";
-        m_ctx.isOcrMessageVisible = true;
-        m_ctx.ocrMessageStartTime = GetTickCount64();
-        SetTimer(m_ctx.hWnd, OCR_MESSAGE_TIMER_ID, 16, nullptr);
-        SetCursor(LoadCursor(nullptr, IDC_ARROW));
-        break;
-    case WM_APP_OCR_DONE_NOTEXT:
-        m_ctx.ocrMessage = (lParam == 1) ? L"No text found in selected area." : L"No text found on image.";
-        m_ctx.isOcrMessageVisible = true;
-        m_ctx.ocrMessageStartTime = GetTickCount64();
-        SetTimer(m_ctx.hWnd, OCR_MESSAGE_TIMER_ID, 16, nullptr);
-        SetCursor(LoadCursor(nullptr, IDC_ARROW));
-        break;
-    case WM_APP_OCR_FAILED: {
-        SetCursor(LoadCursor(nullptr, IDC_ARROW));
-        std::wstring errorMsg = L"An unknown error occurred during OCR.";
-        switch (lParam) {
-        case 1: errorMsg = L"OCR failed (hresult_error)."; break;
-        case 2: errorMsg = L"An unknown error occurred during OCR."; break;
-        case 3: errorMsg = L"Could not open clipboard."; break;
-        case 4: errorMsg = L"Invalid selection area."; break;
-        case 5: errorMsg = L"OCR engine not available."; break;
-        }
-        MessageBoxW(m_ctx.hWnd, errorMsg.c_str(), L"OCR Error", MB_OK | MB_ICONERROR);
-        break;
-    }
+
     case WM_TIMER:
         if (wParam == ANIMATION_TIMER_ID) {
             CriticalSectionLock lock(m_ctx.wicMutex);
@@ -473,22 +425,10 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
 
                 UpdateWindowTitle();
                 InvalidateRect(hWnd, nullptr, FALSE);
-
                 if (currentDelay != nextDelay) {
                     KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
                     SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, nextDelay, nullptr);
                 }
-            }
-        }
-        else if (wParam == OCR_MESSAGE_TIMER_ID) {
-            ULONGLONG elapsedTime = GetTickCount64() - m_ctx.ocrMessageStartTime;
-            if (elapsedTime > 1000) {
-                m_ctx.isOcrMessageVisible = false;
-                KillTimer(m_ctx.hWnd, OCR_MESSAGE_TIMER_ID);
-                InvalidateRect(hWnd, nullptr, FALSE);
-            }
-            else {
-                InvalidateRect(hWnd, nullptr, FALSE);
             }
         }
         else if (wParam == LOADING_TIMER_ID) {
@@ -620,15 +560,11 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
         FitImageToWindow();
         break;
     case WM_RBUTTONUP: {
-        if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending || m_ctx.isSelectingOcrRect) {
+        if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending) {
             bool wasCropActive = m_ctx.isCropActive;
             m_ctx.isCropMode = false;
             m_ctx.isSelectingCropRect = false;
             m_ctx.isCropPending = false;
-            m_ctx.isSelectingOcrRect = false;
-            m_ctx.isDraggingOcrRect = false;
-            m_ctx.ocrRectWindow = { 0 };
-
             if (wasCropActive) {
                 m_ctx.isCropActive = false;
                 ApplyEffectsToView();
@@ -662,16 +598,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
-        if (m_ctx.isSelectingOcrRect) {
-            m_ctx.isDraggingOcrRect = true;
-            m_ctx.ocrStartPoint = pt;
-            m_ctx.ocrRectWindow = D2D1::RectF(
-                static_cast<float>(pt.x), static_cast<float>(pt.y),
-                static_cast<float>(pt.x), static_cast<float>(pt.y)
-            );
-            SetCapture(hWnd);
-        }
-        else if (m_ctx.isCropMode) {
+        if (m_ctx.isCropMode) {
             m_ctx.isCropPending = false;
             m_ctx.isSelectingCropRect = true;
             m_ctx.cropStartPoint = pt;
@@ -693,35 +620,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
         break;
     }
     case WM_LBUTTONUP:
-        if (m_ctx.isSelectingOcrRect) {
-            m_ctx.isSelectingOcrRect = false;
-            m_ctx.isDraggingOcrRect = false;
-            SetCursor(LoadCursor(nullptr, IDC_ARROW));
-            ReleaseCapture();
-
-            float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-            ConvertWindowToImagePoint(m_ctx.ocrStartPoint, x1, y1);
-            POINT endPoint = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            ConvertWindowToImagePoint(endPoint, x2, y2);
-
-            D2D1_RECT_F ocrRectLocal = D2D1::RectF(std::min(x1, x2), std::min(y1, y2), std::max(x1, x2), std::max(y1, y2));
-
-            UINT imgWidth = 0, imgHeight = 0;
-            GetCurrentImageSize(&imgWidth, &imgHeight);
-
-            ocrRectLocal.left = std::max(0.0f, ocrRectLocal.left);
-            ocrRectLocal.top = std::max(0.0f, ocrRectLocal.top);
-            ocrRectLocal.right = std::min(static_cast<float>(imgWidth), ocrRectLocal.right);
-            ocrRectLocal.bottom = std::min(static_cast<float>(imgHeight), ocrRectLocal.bottom);
-
-            m_ctx.ocrRectWindow = { 0 };
-            InvalidateRect(hWnd, nullptr, FALSE);
-
-            if (ocrRectLocal.left < ocrRectLocal.right && ocrRectLocal.top < ocrRectLocal.bottom) {
-                PerformOcrArea(ocrRectLocal);
-            }
-        }
-        else if (m_ctx.isSelectingCropRect) {
+        if (m_ctx.isSelectingCropRect) {
             m_ctx.isSelectingCropRect = false;
             m_ctx.isCropMode = false;
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
@@ -763,12 +662,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             InvalidateRect(hWnd, nullptr, FALSE);
             break;
         }
-        if (m_ctx.isDraggingOcrRect) {
-            m_ctx.ocrRectWindow.right = static_cast<float>(pt.x);
-            m_ctx.ocrRectWindow.bottom = static_cast<float>(pt.y);
-            InvalidateRect(hWnd, nullptr, FALSE);
-        }
-        else if (m_ctx.isSelectingCropRect) {
+        if (m_ctx.isSelectingCropRect) {
             m_ctx.cropRectWindow.right = static_cast<float>(pt.x);
             m_ctx.cropRectWindow.bottom = static_cast<float>(pt.y);
             InvalidateRect(hWnd, nullptr, FALSE);
@@ -787,7 +681,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
                 SetCursor(LoadCursor(nullptr, IDC_CROSS));
                 return TRUE;
             }
-            if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending || m_ctx.isSelectingOcrRect) {
+            if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending) {
                 SetCursor(LoadCursor(nullptr, IDC_CROSS));
                 return TRUE;
             }

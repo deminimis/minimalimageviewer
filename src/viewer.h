@@ -38,9 +38,6 @@
 using Microsoft::WRL::ComPtr;
 #include "resource.h"
 
-#include <winrt/Windows.Foundation.h>
-#include <winrt/Windows.Media.Ocr.h>
-
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "comdlg32.lib")
@@ -60,16 +57,11 @@ using Microsoft::WRL::ComPtr;
 
 constexpr UINT WM_APP_IMAGE_LOADED = (WM_APP + 1);
 constexpr UINT WM_APP_IMAGE_LOAD_FAILED = (WM_APP + 2);
-constexpr UINT WM_APP_OCR_DONE_TEXT = (WM_APP + 3);
-constexpr UINT WM_APP_OCR_DONE_AREA = (WM_APP + 4);
-constexpr UINT WM_APP_OCR_DONE_NOTEXT = (WM_APP + 5);
-constexpr UINT WM_APP_OCR_FAILED = (WM_APP + 6);
 constexpr UINT WM_APP_IMAGE_READY = (WM_APP + 7);
 constexpr UINT WM_APP_DIR_READY = (WM_APP + 8);
 constexpr UINT WM_APP_HQ_READY = (WM_APP + 9);
 
 constexpr UINT ANIMATION_TIMER_ID = 1;
-constexpr UINT OCR_MESSAGE_TIMER_ID = 2;
 constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 constexpr UINT LOADING_TIMER_ID = 4;
 constexpr UINT HQ_RENDER_TIMER_ID = 5;
@@ -250,11 +242,6 @@ struct AppContext {
     D2D1_RECT_F cropRectLocal = { 0 };
     bool isCropActive = false;
 
-    bool isSelectingOcrRect = false;
-    bool isDraggingOcrRect = false;
-    POINT ocrStartPoint = { 0 };
-    D2D1_RECT_F ocrRectWindow = { 0 };
-
     bool isEyedropperActive = false;
     POINT currentMousePos = { 0 };
     COLORREF hoveredColor = 0;
@@ -264,19 +251,6 @@ struct AppContext {
 
     bool isFading = false;
     ULONGLONG fadeStartTime = 0;
-
-    bool isOcrMessageVisible = false;
-    std::wstring ocrMessage;
-    ULONGLONG ocrMessageStartTime = 0;
-    ComPtr<ID2D1SolidColorBrush> ocrMessageBrush;
-    ComPtr<ID2D1SolidColorBrush> ocrMessageBgBrush;
-
-    float brightness = 0.0f;
-    float contrast = 1.0f;
-    float saturation = 1.0f;
-    float savedBrightness = 0.0f;
-    float savedContrast = 1.0f;
-    float savedSaturation = 1.0f;
 
     bool isAutoRefresh = false;
     bool smoothScaling = true;
@@ -339,7 +313,6 @@ public:
     void SaveImage();
     void SaveImageAs();
     void ResizeImageAction();
-    ComPtr<IWICBitmapSource> ApplyImageEffects(ComPtr<IWICBitmapSource> inSource);
     void ApplyEffectsToView();
     void CommitCrop();
     void UpdateViewToCurrentFrame();
@@ -353,9 +326,6 @@ public:
     void OpenKeybindingsDialog();
     std::wstring GetHotkeyString(WORD hk);
     void OpenZoomDialog();
-    void OpenBrightnessContrastDialog();
-    void PerformOcr();
-    void PerformOcrArea(D2D1_RECT_F ocrRectLocal);
     void Render();
     void CreateDeviceResources();
     void DiscardDeviceResources();
@@ -371,10 +341,8 @@ public:
     void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop);
     void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop);
     HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder);
-
     // Dialog Callbacks
     static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
-    static INT_PTR CALLBACK BrightnessContrastDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
     static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
     static INT_PTR CALLBACK ZoomDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
     static LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -396,7 +364,6 @@ private:
     // Drawing Helpers
     void DrawOsdOverlay(ID2D1DeviceContext* renderTarget);
     void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget);
-    void DrawOcrMessageOverlay(ID2D1DeviceContext* renderTarget);
 
     // Edit Helpers
     HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::wstring& filePath, const GUID& containerFormat);
