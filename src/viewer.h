@@ -235,13 +235,6 @@ struct AppContext {
     D2D1_RECT_F cropRectLocal = { 0 };
     bool isCropActive = false;
 
-    bool isEyedropperActive = false;
-    POINT currentMousePos = { 0 };
-    COLORREF hoveredColor = 0;
-    std::wstring colorStringRgb;
-    std::wstring colorStringHex;
-    bool didCopyColor = false;
-
     bool isFading = false;
     ULONGLONG fadeStartTime = 0;
 
@@ -289,8 +282,6 @@ public:
     void SetZoomLevel(float zoom);
     void ToggleFullScreen();
     void UpdateWindowTitle();
-    void UpdateEyedropperColor(POINT pt);
-    void HandleEyedropperClick();
     void OpenFileAction();
     void LoadImageFromFile(const std::wstring& filePath, bool startAtEnd = false);
     void FinalizeImageLoad(bool success, int foundIndex);
@@ -353,7 +344,6 @@ private:
 
     // Drawing Helpers
     void DrawOsdOverlay(ID2D1DeviceContext* renderTarget);
-    void DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget);
 
     // Edit Helpers
     HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::wstring& filePath, const GUID& containerFormat);

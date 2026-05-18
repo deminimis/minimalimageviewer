@@ -39,7 +39,6 @@
 #define IDC_EDIT_ZOOM               2028
 #define IDC_HOTKEY_CTRL             2025
 #define IDM_REFRESH                 1051 
-#define IDM_EYEDROPPER              1052
 
 #define IDD_RESIZE_DIALOG           201
 #define IDC_EDIT_WIDTH              2001

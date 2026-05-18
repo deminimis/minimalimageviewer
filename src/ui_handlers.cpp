@@ -83,10 +83,9 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
         SetCursor(LoadCursor(nullptr, m_ctx.isCropMode ? IDC_CROSS : IDC_ARROW));
     }
     else if (isKey(Act_Exit)) {
-        if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending || m_ctx.isEyedropperActive) {
+        if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending) {
             m_ctx.isCropMode = false;
             m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false;
-            m_ctx.isEyedropperActive = false;
             ApplyEffectsToView(); FitImageToWindow();
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             if (GetCapture() == m_ctx.hWnd) ReleaseCapture();
@@ -99,10 +98,9 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
     else {
         switch (wParam) {
         case VK_ESCAPE:
-            if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending || m_ctx.isEyedropperActive) {
+            if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending) {
                 m_ctx.isCropMode = false;
                 m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false;
-                m_ctx.isEyedropperActive = false;
                 ApplyEffectsToView(); FitImageToWindow();
                 SetCursor(LoadCursor(nullptr, IDC_ARROW));
                 if (GetCapture() == m_ctx.hWnd) ReleaseCapture();
@@ -206,8 +204,6 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     addAction(hEditMenu, IDM_FLIP, Act_Flip, L"Flip");
     addAction(hEditMenu, IDM_CROP, Act_Crop, L"Crop");
     AppendMenuW(hEditMenu, MF_STRING, IDM_RESIZE, L"Resize Image...");
-    AppendMenuW(hEditMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hEditMenu, MF_STRING | (m_ctx.isEyedropperActive ? MF_CHECKED : MF_UNCHECKED), IDM_EYEDROPPER, L"Pick Color");
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hEditMenu, L"Edit");
 
     HMENU hViewMenu = CreatePopupMenu();
@@ -287,14 +283,6 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
         break;
     }
     case IDM_RESIZE:        ResizeImageAction(); break;
-    case IDM_EYEDROPPER:
-        m_ctx.isEyedropperActive = !m_ctx.isEyedropperActive;
-        m_ctx.didCopyColor = false;
-        SetCursor(LoadCursor(nullptr, m_ctx.isEyedropperActive ? IDC_CROSS : IDC_ARROW));
-        if (m_ctx.isEyedropperActive) SetCapture(m_ctx.hWnd);
-        else ReleaseCapture();
-        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-        break;
     case IDM_SAVE:          SaveImage(); break;
     case IDM_SAVE_AS:       SaveImageAs(); break;
     case IDM_OPEN_LOCATION: OpenFileLocationAction(); break;
@@ -352,20 +340,6 @@ LRESULT CALLBACK ViewerApp::StaticWndProc(HWND hWnd, UINT message, WPARAM wParam
 LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
     static POINT dragStart = {};
     switch (message) {
-    case WM_KILLFOCUS:
-        if (m_ctx.isEyedropperActive) {
-            m_ctx.isEyedropperActive = false;
-            ReleaseCapture();
-            InvalidateRect(hWnd, nullptr, FALSE);
-        }
-        break;
-    case WM_SYSKEYDOWN:
-        if (m_ctx.isEyedropperActive) {
-            m_ctx.isEyedropperActive = false;
-            ReleaseCapture();
-            InvalidateRect(hWnd, nullptr, FALSE);
-        }
-        return DefWindowProc(hWnd, message, wParam, lParam);
     case WM_APP_IMAGE_READY:
         OnImageReady(wParam != 0, (int)lParam);
         break;
@@ -498,14 +472,6 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
         break;
     case WM_LBUTTONDOWN: {
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
-        if (m_ctx.isEyedropperActive) {
-            HandleEyedropperClick();
-            m_ctx.isEyedropperActive = false;
-            ReleaseCapture();
-            SetCursor(LoadCursor(nullptr, IDC_ARROW));
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
         if (m_ctx.isCropMode) {
             m_ctx.isCropPending = false;
             m_ctx.isSelectingCropRect = true;
@@ -564,12 +530,6 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
         break;
     case WM_MOUSEMOVE: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        if (m_ctx.isEyedropperActive) {
-            m_ctx.currentMousePos = pt;
-            UpdateEyedropperColor(pt);
-            InvalidateRect(hWnd, nullptr, FALSE);
-            break;
-        }
         if (m_ctx.isSelectingCropRect) {
             m_ctx.cropRectWindow.right = static_cast<float>(pt.x);
             m_ctx.cropRectWindow.bottom = static_cast<float>(pt.y);
@@ -585,10 +545,6 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
     }
     case WM_SETCURSOR: {
         if (LOWORD(lParam) == HTCLIENT) {
-            if (m_ctx.isEyedropperActive) {
-                SetCursor(LoadCursor(nullptr, IDC_CROSS));
-                return TRUE;
-            }
             if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending) {
                 SetCursor(LoadCursor(nullptr, IDC_CROSS));
                 return TRUE;

@@ -186,65 +186,6 @@ void ViewerApp::DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), m_ctx.textBrush.Get());
 }
 
-void ViewerApp::DrawEyedropperOverlay(ID2D1DeviceContext* renderTarget) {
-    if (m_ctx.colorStringRgb.empty() && !m_ctx.didCopyColor) return;
-
-    std::wstring text;
-    if (m_ctx.didCopyColor) {
-        text = L"Copied " + m_ctx.colorStringHex + L"!";
-    }
-    else {
-        text = m_ctx.colorStringRgb + L"\n" + m_ctx.colorStringHex;
-    }
-
-    D2D1_SIZE_F rtSize = renderTarget->GetSize();
-    float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
-    float padding = 10.0f * dpiScale;
-    float offset = 20.0f * dpiScale;
-
-    renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
-
-    ComPtr<IDWriteTextLayout> textLayout;
-    if (FAILED(m_ctx.writeFactory->CreateTextLayout(
-        text.c_str(),
-        static_cast<UINT32>(text.length()),
-        m_ctx.textFormat.Get(),
-        rtSize.width,
-        rtSize.height,
-        &textLayout
-    ))) return;
-
-    DWRITE_TEXT_METRICS metrics;
-    textLayout->GetMetrics(&metrics);
-
-    float bgWidth = metrics.widthIncludingTrailingWhitespace + padding * 2;
-    float bgHeight = metrics.height + padding * 2;
-    D2D1_POINT_2F mousePos = { (float)m_ctx.currentMousePos.x, (float)m_ctx.currentMousePos.y };
-    float bgX = mousePos.x + offset;
-    float bgY = mousePos.y + offset;
-
-    if (bgX + bgWidth > rtSize.width) {
-        bgX = mousePos.x - offset - bgWidth;
-    }
-    if (bgY + bgHeight > rtSize.height) {
-        bgY = mousePos.y - offset - bgHeight;
-    }
-    bgX = std::max(padding, bgX);
-    bgY = std::max(padding, bgY);
-
-    D2D1_RECT_F bgRect = D2D1::RectF(bgX, bgY, bgX + bgWidth, bgY + bgHeight);
-
-    ComPtr<ID2D1SolidColorBrush> bgBrush;
-    renderTarget->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.7f), &bgBrush);
-    if (bgBrush) {
-        renderTarget->FillRectangle(bgRect, bgBrush.Get());
-    }
-
-    D2D1_RECT_F textRect = D2D1::RectF(bgX + padding, bgY + padding, bgX + bgWidth - padding, bgY + bgHeight - padding);
-    m_ctx.textBrush->SetColor(D2D1::ColorF(D2D1::ColorF::White));
-    renderTarget->DrawTextLayout(D2D1::Point2F(textRect.left, textRect.top), textLayout.Get(), m_ctx.textBrush.Get());
-}
-
 void ViewerApp::Render() {
     CreateDeviceResources();
     if (!m_ctx.renderTarget) return;
@@ -459,11 +400,7 @@ void ViewerApp::Render() {
             DrawOsdOverlay(m_ctx.renderTarget.Get());
         }
 
-        if (m_ctx.isEyedropperActive) {
-            DrawEyedropperOverlay(m_ctx.renderTarget.Get());
-        }
-
-        if(m_ctx.isSelectingCropRect&& m_ctx.cropRectBrush) {
+        if (m_ctx.isSelectingCropRect && m_ctx.cropRectBrush) {
             m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
             D2D1_RECT_F rect = m_ctx.cropRectWindow;
             if (rect.left > rect.right) std::swap(rect.left, rect.right);
