@@ -171,15 +171,6 @@ ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
 
     source = ApplyCropAndTransform(source);
 
-    if (m_ctx.isGrayscale) {
-        ComPtr<IWICFormatConverter> grayConverter;
-        if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
-            if (SUCCEEDED(grayConverter->Initialize(source.Get(), GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                source = grayConverter;
-            }
-        }
-    }
-
     WICPixelFormatGUID sourcePixelFormat{};
     if (FAILED(source->GetPixelFormat(&sourcePixelFormat))) return nullptr;
 
@@ -243,7 +234,7 @@ void ViewerApp::SaveImage() {
     }
 
     const std::wstring& originalPath = m_ctx.imageFiles[m_ctx.currentImageIndex];
-    if (m_ctx.rotationAngle == 0 && !m_ctx.isFlippedHorizontal && !m_ctx.isCropActive && !m_ctx.isGrayscale) {
+    if (m_ctx.rotationAngle == 0 && !m_ctx.isFlippedHorizontal && !m_ctx.isCropActive) {
         MessageBoxW(m_ctx.hWnd, L"No changes to save.", L"Save", MB_OK | MB_ICONINFORMATION);
         return;
     }
@@ -321,14 +312,6 @@ void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& co
     }
 
     source = ApplyCropAndTransform(source);
-    if (m_ctx.isGrayscale) {
-        ComPtr<IWICFormatConverter> grayConverter;
-        if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&grayConverter))) {
-            if (SUCCEEDED(grayConverter->Initialize(source.Get(), GUID_WICPixelFormat8bppGray, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                source = grayConverter;
-            }
-        }
-    }
 
     ComPtr<IWICBitmapScaler> scaler;
     if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapScaler(&scaler))) {

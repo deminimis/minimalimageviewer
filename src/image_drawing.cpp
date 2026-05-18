@@ -70,8 +70,6 @@ void ViewerApp::CreateDeviceResources() {
         m_ctx.renderTarget->CreateBitmapFromDxgiSurface(backBuffer.Get(), &bmpProps, &targetBmp);
         m_ctx.renderTarget->SetTarget(targetBmp.Get());
 
-        m_ctx.renderTarget->CreateEffect(CLSID_D2D1ColorMatrix, &m_ctx.colorMatrixEffect);
-
         hr = S_OK;
         if (SUCCEEDED(hr)) { hr = m_ctx.renderTarget->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White), &m_ctx.textBrush); }
         if (SUCCEEDED(hr)) {
@@ -128,9 +126,6 @@ void ViewerApp::CreateDeviceResources() {
 void ViewerApp::DiscardDeviceResources() {
     CriticalSectionLock lock(m_ctx.wicMutex);
     m_ctx.renderTarget = nullptr;
-    m_ctx.swapChain = nullptr;
-    m_ctx.colorMatrixEffect = nullptr;
-    m_ctx.d2dBitmap = nullptr;
     m_ctx.textBrush = nullptr;
     m_ctx.textFormat = nullptr;
     m_ctx.checkerboardBrush = nullptr;
@@ -392,29 +387,6 @@ void ViewerApp::Render() {
                 if (SUCCEEDED(m_ctx.renderTarget->QueryInterface(IID_PPV_ARGS(&dc5)))) {
                     dc5->DrawSvgDocument(m_ctx.svgDocument.Get());
                 }
-            }
-            else if (m_ctx.isGrayscale && m_ctx.colorMatrixEffect) {
-                m_ctx.colorMatrixEffect->SetInput(0, bitmapToDraw.Get());
-
-                // Pure Grayscale Matrix calculation
-                D2D1_MATRIX_5X4_F matrix = D2D1::Matrix5x4F(
-                    0.299f, 0.299f, 0.299f, 0.0f,
-                    0.587f, 0.587f, 0.587f, 0.0f,
-                    0.114f, 0.114f, 0.114f, 0.0f,
-                    0.0f, 0.0f, 0.0f, opacity,
-                    0.0f, 0.0f, 0.0f, 0.0f
-                );
-                m_ctx.colorMatrixEffect->SetValue(D2D1_COLORMATRIX_PROP_COLOR_MATRIX, matrix);
-
-                bool isIntegerZoom = (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f);
-                D2D1_INTERPOLATION_MODE interpModeD2D = (!m_ctx.smoothScaling || isIntegerZoom) ?
-                    D2D1_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_INTERPOLATION_MODE_LINEAR;
-                m_ctx.renderTarget->DrawImage(
-                    m_ctx.colorMatrixEffect.Get(),
-                    nullptr,
-                    nullptr,
-                    interpModeD2D
-                );
             }
             else {
                 bool isIntegerZoom = (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f);

@@ -208,7 +208,6 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     addAction(hEditMenu, IDM_ROTATE_CW, Act_RotateCW, L"Rotate Clockwise");
     addAction(hEditMenu, IDM_ROTATE_CCW, Act_RotateCCW, L"Rotate Counter-Clockwise");
     addAction(hEditMenu, IDM_FLIP, Act_Flip, L"Flip");
-    AppendMenuW(hEditMenu, MF_STRING | (m_ctx.isGrayscale ? MF_CHECKED : MF_UNCHECKED), IDM_GRAYSCALE, L"Grayscale");
     addAction(hEditMenu, IDM_CROP, Act_Crop, L"Crop");
     AppendMenuW(hEditMenu, MF_STRING, IDM_RESIZE, L"Resize Image...");
     AppendMenuW(hEditMenu, MF_SEPARATOR, 0, nullptr);
@@ -274,10 +273,7 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     case IDM_EXIT:          PostQuitMessage(0); break;
     case IDM_ROTATE_CW:     RotateImage(true); break;
     case IDM_ROTATE_CCW:    RotateImage(false); break;
-    case IDM_FLIP:          FlipImage(); break;
-    case IDM_GRAYSCALE:
-        m_ctx.isGrayscale = !m_ctx.isGrayscale;
-        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+    case IDM_FLIP:          FlipImage();
         break;
     case IDM_CROP: {
         bool wasCropActive = m_ctx.isCropActive;

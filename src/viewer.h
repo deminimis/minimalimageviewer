@@ -142,7 +142,6 @@ struct AppContext {
     ComPtr<IDWriteFactory> writeFactory = nullptr;
     ComPtr<ID2D1DeviceContext> renderTarget = nullptr;
     ComPtr<IDXGISwapChain1> swapChain = nullptr;
-    ComPtr<ID2D1Effect> colorMatrixEffect = nullptr;
     ComPtr<ID2D1Bitmap> d2dBitmap = nullptr;
     int pendingNavIndex = -1;
     ComPtr<IWICFormatConverter> wicConverter = nullptr;
@@ -224,7 +223,6 @@ struct AppContext {
     bool isOsdVisible = false;
 
     bool isFlippedHorizontal = false;
-    bool isGrayscale = false;
 
     ComPtr<ID2D1SolidColorBrush> cropRectBrush;
     ComPtr<ID2D1SolidColorBrush> fadeBrush;
