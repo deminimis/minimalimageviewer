@@ -354,12 +354,6 @@ void ViewerApp::Render() {
         bool isSvgToDraw = (m_ctx.isSvg && m_ctx.svgDocument);
         if (isSvgToDraw) hasImage = true;
 
-        bool isHq = false;
-        if (!m_ctx.isAnimated && !m_ctx.isSvg && m_ctx.d2dBitmapHq && abs(m_ctx.hqZoomFactor - m_ctx.zoomFactor) < 0.01f) {
-            bitmapToDraw = m_ctx.d2dBitmapHq;
-            isHq = true;
-        }
-
         if ((bitmapToDraw || isSvgToDraw) && !IsIconic(m_ctx.hWnd)) {
             D2D1_SIZE_F bmpSize;
             if (isSvgToDraw) {
@@ -373,15 +367,8 @@ void ViewerApp::Render() {
             D2D1_POINT_2F bmpCenter = D2D1::Point2F(bmpSize.width / 2.f, bmpSize.height / 2.f);
             D2D1_POINT_2F windowCenter = D2D1::Point2F(rtSize.width / 2.f, rtSize.height / 2.f);
 
-            float scaleX, scaleY;
-            if (isHq) {
-                scaleX = m_ctx.isFlippedHorizontal ? -1.0f : 1.0f;
-                scaleY = 1.0f;
-            }
-            else {
-                scaleX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
-                scaleY = m_ctx.zoomFactor;
-            }
+            float scaleX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
+            float scaleY = m_ctx.zoomFactor;
 
             m_ctx.renderTarget->SetTransform(
                 D2D1::Matrix3x2F::Rotation(static_cast<float>(m_ctx.rotationAngle), bmpCenter) *
@@ -576,27 +563,6 @@ void ViewerApp::Render() {
     }
 }
 
-void ViewerApp::TriggerHqRender() {
-    m_ctx.d2dBitmapHq = nullptr;
-
-    // Increment the sequence ID and kill pending timers after crosing 1x. 
-    m_ctx.hqRenderSequenceId++;
-    KillTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID);
-    m_ctx.isHqPending = false;
-
-    if (!m_ctx.smoothScaling) return; // Skip HQ rendering if smooth scaling disabled.
-
-    // WIC scaling above 1x causes memory spikes, use Direct2d
-    if (m_ctx.zoomFactor >= 1.0f) {
-        return;
-    }
-
-    if (!m_ctx.isAnimated && m_ctx.wicConverter) {
-        m_ctx.isHqPending = true;
-        SetTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID, 200, nullptr);
-    }
-}
-
 void ViewerApp::FitImageToWindow() {
     UINT imgWidth, imgHeight;
     if (!GetCurrentImageSize(&imgWidth, &imgHeight)) return;
@@ -615,12 +581,10 @@ void ViewerApp::FitImageToWindow() {
     }
 
     if (imageWidth <= 0 || imageHeight <= 0) return;
-
     m_ctx.zoomFactor = std::min(clientWidth / imageWidth, clientHeight / imageHeight);
     m_ctx.offsetX = 0.0f;
     m_ctx.offsetY = 0.0f;
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-    TriggerHqRender();
 }
 
 void ViewerApp::ZoomImage(float factor, POINT pt) {
@@ -646,7 +610,6 @@ void ViewerApp::ZoomImage(float factor, POINT pt) {
     m_ctx.zoomFactor = newZoomFactor;
 
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-    TriggerHqRender();
 }
 
 void ViewerApp::RotateImage(bool clockwise) {

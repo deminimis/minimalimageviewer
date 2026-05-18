@@ -59,12 +59,10 @@ constexpr UINT WM_APP_IMAGE_LOADED = (WM_APP + 1);
 constexpr UINT WM_APP_IMAGE_LOAD_FAILED = (WM_APP + 2);
 constexpr UINT WM_APP_IMAGE_READY = (WM_APP + 7);
 constexpr UINT WM_APP_DIR_READY = (WM_APP + 8);
-constexpr UINT WM_APP_HQ_READY = (WM_APP + 9);
 
 constexpr UINT ANIMATION_TIMER_ID = 1;
 constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 constexpr UINT LOADING_TIMER_ID = 4;
-constexpr UINT HQ_RENDER_TIMER_ID = 5;
 constexpr UINT NAV_DEBOUNCE_TIMER_ID = 6;
 constexpr UINT KEYBINDING_TIMER_ID = 7;
 
@@ -146,9 +144,6 @@ struct AppContext {
     ComPtr<IDXGISwapChain1> swapChain = nullptr;
     ComPtr<ID2D1Effect> colorMatrixEffect = nullptr;
     ComPtr<ID2D1Bitmap> d2dBitmap = nullptr;
-    ComPtr<ID2D1Bitmap> d2dBitmapHq = nullptr;
-    float hqZoomFactor = 1.0f;
-    bool isHqPending = false;
     int pendingNavIndex = -1;
     ComPtr<IWICFormatConverter> wicConverter = nullptr;
     ComPtr<IWICFormatConverter> wicConverterOriginal = nullptr;
@@ -263,8 +258,6 @@ struct AppContext {
     // Thread Management
     std::atomic<int> activeBackgroundThreads{ 0 };
     std::atomic<bool> isShuttingDown{ false };
-    std::atomic<int> hqRenderSequenceId{ 0 };
-    std::atomic<bool> isHqTaskRunning{ false };
 
     template <typename Func>
     void RunBackgroundTask(Func&& task) {
@@ -296,7 +289,6 @@ public:
     void CenterImage(bool resetZoom);
     void SetActualSize();
     void SetZoomLevel(float zoom);
-    void TriggerHqRender();
     void ToggleFullScreen();
     void UpdateWindowTitle();
     void UpdateEyedropperColor(POINT pt);

@@ -64,9 +64,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         
         // Keep current image resources alive for flicker-free loading    
         m_ctx.undoStack.clear();
-        m_ctx.isHqPending = false;
-        ++m_ctx.hqRenderSequenceId;
-        
+
         m_ctx.stagedFrames.clear();
         m_ctx.stagedDelays.clear();
         m_ctx.stagedWidth = 0;
@@ -452,7 +450,6 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         // Clear the old image state before displaying new 
         KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
         m_ctx.d2dBitmap = nullptr;
-        m_ctx.d2dBitmapHq = nullptr;
         m_ctx.animationD2DBitmaps.clear();
         m_ctx.animationFrameConverters.clear();
         m_ctx.animationFrameDelays.clear();
@@ -631,8 +628,6 @@ void ViewerApp::FinalizeImageLoad(bool success, int foundIndex) {
     {
         CriticalSectionLock lock(m_ctx.wicMutex);
         m_ctx.d2dBitmap = nullptr;
-        m_ctx.d2dBitmapHq = nullptr;
-        m_ctx.isHqPending = false;
         m_ctx.animationD2DBitmaps.clear();
         m_ctx.wicConverter = nullptr;
         m_ctx.wicConverterOriginal = nullptr;

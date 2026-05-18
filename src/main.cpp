@@ -12,7 +12,6 @@ void ViewerApp::CenterImage(bool resetZoom) {
     m_ctx.offsetX = 0.0f;
     m_ctx.offsetY = 0.0f;
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-    TriggerHqRender();
 }
 
 void ViewerApp::SetActualSize() {
@@ -20,7 +19,6 @@ void ViewerApp::SetActualSize() {
     m_ctx.offsetX = 0.0f;
     m_ctx.offsetY = 0.0f;
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-    TriggerHqRender();
 }
 
 void ViewerApp::SetZoomLevel(float zoom) {
@@ -28,7 +26,6 @@ void ViewerApp::SetZoomLevel(float zoom) {
     m_ctx.offsetX = 0.0f;
     m_ctx.offsetY = 0.0f;
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-    TriggerHqRender();
 }
 
 void ViewerApp::UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor) {
@@ -161,14 +158,6 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     m_ctx.isShuttingDown = true;
     CleanupLoadingThread();
-
-    // Drain message queue 
-    while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
-        if (msg.message == WM_APP_HQ_READY) {
-            IWICBitmap* pBitmap = reinterpret_cast<IWICBitmap*>(msg.wParam);
-            if (pBitmap) pBitmap->Release();
-        }
-    }
 
     while (m_ctx.activeBackgroundThreads > 0) {
         Sleep(10);

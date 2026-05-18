@@ -383,25 +383,6 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
     case WM_APP_IMAGE_LOADED:
         FinalizeImageLoad(true, static_cast<int>(wParam));
         break;
-    case WM_APP_HQ_READY: {
-        IWICBitmap* pBitmap = reinterpret_cast<IWICBitmap*>(wParam);
-        if (pBitmap) {
-            float bitmapZoom = static_cast<float>(lParam) / 10000.0f;
-            if (abs(bitmapZoom - m_ctx.zoomFactor) < 0.01f) {
-                CriticalSectionLock lock(m_ctx.wicMutex);
-                if (m_ctx.renderTarget) {
-                    ComPtr<ID2D1Bitmap> d2dBitmapHqTemp;
-                    if (SUCCEEDED(m_ctx.renderTarget->CreateBitmapFromWicBitmap(pBitmap, nullptr, &d2dBitmapHqTemp))) {
-                        m_ctx.d2dBitmapHq = d2dBitmapHqTemp;
-                        m_ctx.hqZoomFactor = bitmapZoom;
-                        InvalidateRect(hWnd, nullptr, FALSE);
-                    }
-                }
-            }
-            pBitmap->Release();
-        }
-        break;
-    }
     case WM_APP_IMAGE_LOAD_FAILED:
         KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
         if (lParam != 0) {
@@ -435,71 +416,6 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             KillTimer(m_ctx.hWnd, LOADING_TIMER_ID);
             if (m_ctx.isLoading) {
                 InvalidateRect(hWnd, nullptr, FALSE);
-            }
-        }
-        else if (wParam == HQ_RENDER_TIMER_ID) {
-            if (m_ctx.isHqTaskRunning) {
-                // Delay background hq_render
-                SetTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID, 100, nullptr);
-                return 0; 
-            }
-
-            KillTimer(m_ctx.hWnd, HQ_RENDER_TIMER_ID);
-            if (m_ctx.isHqPending && m_ctx.wicConverter && !m_ctx.isAnimated) {
-                m_ctx.isHqPending = false;
-                float targetZoom = m_ctx.zoomFactor;
-
-                // Abort if target zoom > 1x
-                if (targetZoom >= 1.0f) return 0; 
-
-                ComPtr<IWICFormatConverter> source = m_ctx.wicConverter;
-                int currentSeq = ++m_ctx.hqRenderSequenceId;
-
-                m_ctx.isHqTaskRunning = true;
-                m_ctx.RunBackgroundTask([this, source, targetZoom, currentSeq]() {
-                    struct HqTaskState {
-                        AppContext* ctx;
-                        ~HqTaskState() { ctx->isHqTaskRunning = false; }
-                    } taskState{ &m_ctx };
-
-                    if (currentSeq != m_ctx.hqRenderSequenceId) return;
-
-                    if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
-
-                    { 
-                        ComPtr<IWICImagingFactory> localFactory;
-
-                        if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory)))) {
-                            UINT w, h;
-                            if (SUCCEEDED(source->GetSize(&w, &h))) {
-                                if (currentSeq != m_ctx.hqRenderSequenceId) { return; }
-
-                                UINT newW = static_cast<UINT>(std::max(1.0f, w * targetZoom));
-                                UINT newH = static_cast<UINT>(std::max(1.0f, h * targetZoom));
-                                ComPtr<IWICBitmapScaler> scaler;
-                                if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
-                                    if (SUCCEEDED(scaler->Initialize(source.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
-                                        if (currentSeq != m_ctx.hqRenderSequenceId) { return; }
-
-                                        ComPtr<IWICBitmap> hqBitmap;
-                                        if (SUCCEEDED(localFactory->CreateBitmapFromSource(scaler.Get(), WICBitmapCacheOnLoad, &hqBitmap))) {
-                                            if (currentSeq != m_ctx.hqRenderSequenceId) { return; }
-
-                                            IWICBitmap* pRawBitmap = hqBitmap.Get();
-                                            pRawBitmap->AddRef();
-
-                                            if (!PostMessage(m_ctx.hWnd, WM_APP_HQ_READY, (WPARAM)pRawBitmap, (LPARAM)(targetZoom * 10000.0f))) {
-                                                pRawBitmap->Release();
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } 
-
-                    CoUninitialize();
-                    });
             }
         }
         else if (wParam == NAV_DEBOUNCE_TIMER_ID) {

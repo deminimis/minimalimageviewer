@@ -77,7 +77,6 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             bool newSmoothScaling = (IsDlgButtonChecked(hDlg, IDC_CHECK_SMOOTH_SCALING) == BST_CHECKED);
             if (newSmoothScaling != ctx.smoothScaling) {
                 ctx.smoothScaling = newSmoothScaling;
-                pApp->TriggerHqRender();
             }
 
             ctx.enableFadeAnimation = (IsDlgButtonChecked(hDlg, IDC_CHECK_FADE_ANIMATION) == BST_CHECKED);
