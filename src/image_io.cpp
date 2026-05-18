@@ -251,14 +251,8 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     // Convert the image to 32bpp PBGRA
                     if (SUCCEEDED(finalConverter->Initialize(sourceToCache.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
 
-                        // Decode base bitmap into memory
-                        ComPtr<IWICBitmap> cachedBitmap;
-                        localFactory->CreateBitmapFromSource(finalConverter.Get(), WICBitmapCacheOnLoad, &cachedBitmap);
-
-                        // Wrap the cached bitmap for D2D compatibility
-                        ComPtr<IWICFormatConverter> d2dConverter;
-                        localFactory->CreateFormatConverter(&d2dConverter);
-                        d2dConverter->Initialize(cachedBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+                        // D2D decodes straight to gpu vram
+                        ComPtr<IWICFormatConverter> d2dConverter = finalConverter;
 
                         UINT exifOrientation = 1;
                         ComPtr<IWICMetadataQueryReader> metadataReader;
@@ -790,92 +784,4 @@ void ViewerApp::CleanupPreloadingThreads() {
 void ViewerApp::StartPreloading() {
     CleanupPreloadingThreads();
     m_ctx.cancelPreloading = false;
-
-    if (m_ctx.imageFiles.size() < 2 || m_ctx.currentImageIndex < 0) return;
-
-    int nextIdx = (m_ctx.currentImageIndex + 1) % static_cast<int>(m_ctx.imageFiles.size());
-    int prevIdx = (m_ctx.currentImageIndex - 1 + static_cast<int>(m_ctx.imageFiles.size())) % static_cast<int>(m_ctx.imageFiles.size());
-
-    std::wstring nextPath = m_ctx.imageFiles[nextIdx];
-    std::wstring prevPath = m_ctx.imageFiles[prevIdx];
-
-    auto preloadTask = [this](std::wstring path, ComPtr<IWICFormatConverter>* pConverter, GUID* pFormat, UINT* pOrientation, std::wstring* pPath) {
-        // Skip GIFs and TIFFs to preserve animation frame extraction during a normal load
-        const wchar_t* ext = PathFindExtensionW(path.c_str());
-        if (ext && (_wcsicmp(ext, L".gif") == 0 || _wcsicmp(ext, L".tiff") == 0 || _wcsicmp(ext, L".tif") == 0)) return;
-        if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
-
-        { 
-            ComPtr<IWICImagingFactory> factory;
-            if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
-                ComPtr<IWICBitmapDecoder> decoder;
-            if (SUCCEEDED(factory->CreateDecoderFromFilename(path.c_str(), NULL, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder))) {
-                ComPtr<IWICBitmapSource> sourceToPreload;
-                ComPtr<IWICBitmapSource> thumbnail;
-
-                // Grab exif thumbnail 
-                if (SUCCEEDED(decoder->GetThumbnail(&thumbnail))) {
-                    sourceToPreload = thumbnail;
-                }
-                else {
-                    // Fallback if no thumbnail 
-                    ComPtr<IWICBitmapFrameDecode> frame;
-                    if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
-                        sourceToPreload = frame;
-                    }
-                }
-
-                if (sourceToPreload) {
-                    ComPtr<IWICFormatConverter> converter;
-                    if (SUCCEEDED(factory->CreateFormatConverter(&converter))) {
-                        if (SUCCEEDED(converter->Initialize(sourceToPreload.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                            // Force immediate decode into RAM
-                            ComPtr<IWICBitmap> memBmp;
-                            if (SUCCEEDED(factory->CreateBitmapFromSource(converter.Get(), WICBitmapCacheOnLoad, &memBmp))) {
-                                ComPtr<IWICFormatConverter> finalConverter;
-                                if (SUCCEEDED(factory->CreateFormatConverter(&finalConverter))) {
-                                    if (SUCCEEDED(finalConverter->Initialize(memBmp.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                                        UINT orientation = 1;
-                                        // We need the full frame specifically to read EXIF, even if we preloaded the thumbnail
-                                        ComPtr<IWICBitmapFrameDecode> metaFrame;
-                                        if (SUCCEEDED(decoder->GetFrame(0, &metaFrame))) {
-                                            ComPtr<IWICMetadataQueryReader> metadataReader;
-                                            if (SUCCEEDED(metaFrame->GetMetadataQueryReader(&metadataReader))) {
-                                                PROPVARIANT propValue;
-                                                PropVariantInit(&propValue);
-                                                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &propValue)) && propValue.vt == VT_UI2) {
-                                                    orientation = propValue.uiVal;
-                                                }
-                                                PropVariantClear(&propValue);
-                                            }
-                                        }
-
-                                        CriticalSectionLock lock(m_ctx.preloadMutex);
-                                        if (!m_ctx.cancelPreloading) {
-                                            *pConverter = finalConverter;
-                                            if (pFormat) decoder->GetContainerFormat(pFormat);
-                                            if (pOrientation) *pOrientation = orientation;
-                                            if (pPath) *pPath = path;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            }
-        } 
-        CoUninitialize();
-        };
-
-    m_ctx.RunBackgroundTask([this, preloadTask, nextPath]() {
-        preloadTask(nextPath, std::addressof(m_ctx.preloadedNextConverter), &m_ctx.preloadedNextFormat, &m_ctx.preloadedNextOrientation, &m_ctx.preloadedNextPath);
-        });
-
-    if (nextIdx != prevIdx) {
-        m_ctx.RunBackgroundTask([this, preloadTask, prevPath]() {
-            preloadTask(prevPath, std::addressof(m_ctx.preloadedPrevConverter), &m_ctx.preloadedPrevFormat, &m_ctx.preloadedPrevOrientation, &m_ctx.preloadedPrevPath);
-            });
-    }
 }
