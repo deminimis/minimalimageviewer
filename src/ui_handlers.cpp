@@ -391,6 +391,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
                 m_ctx.pendingNavIndex = -1;
             }
         }
+        
         else if (wParam == AUTO_REFRESH_TIMER_ID) {
             if (m_ctx.isAutoRefresh && !m_ctx.isLoading && !m_ctx.imageFiles.empty() && m_ctx.currentImageIndex >= 0) {
                 const std::wstring& currentFile = m_ctx.imageFiles[m_ctx.currentImageIndex];

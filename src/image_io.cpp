@@ -93,33 +93,27 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             return;
         }
 
+        // Read entire file to avoid locking
+        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+        if (hFile == INVALID_HANDLE_VALUE) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return; }
+
+        LARGE_INTEGER size;
+        if (!GetFileSizeEx(hFile, &size) || size.HighPart != 0 || size.LowPart == 0 || size.LowPart > 1024 * 1024 * 1024) { // Cap at 1GB for safety
+            CloseHandle(hFile); PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return;
+        }
+
+        std::vector<BYTE> rawData(size.LowPart);
+        DWORD bytesRead;
+        if (!ReadFile(hFile, rawData.data(), size.LowPart, &bytesRead, NULL) || bytesRead != size.LowPart) {
+            CloseHandle(hFile); PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return;
+        }
+        CloseHandle(hFile); // instant unlock
+
         const wchar_t* ext = PathFindExtensionW(filePath.c_str());
         if (ext && _wcsicmp(ext, L".svg") == 0) {
-            HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-            if (hFile != INVALID_HANDLE_VALUE) {
-                LARGE_INTEGER size;
-                // Cap the max SVG size to 256 MB to prevent memory exhaustion.
-                if (GetFileSizeEx(hFile, &size) && size.HighPart == 0 && size.LowPart > 0 && size.LowPart <= 256 * 1024 * 1024) {
-                    std::vector<BYTE> data(size.LowPart);
-                    DWORD bytesRead;
-                    // Verify ReadFile 
-                    if (ReadFile(hFile, data.data(), size.LowPart, &bytesRead, NULL) && bytesRead == size.LowPart) {
-                        CriticalSectionLock lock(m_ctx.wicMutex);
-                        m_ctx.stagedSvgData = std::move(data);
-                        PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
-                    }
-                    else {
-                        PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
-                    }
-                }
-                else {
-                    PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
-                }
-                CloseHandle(hFile);
-            }
-            else {
-                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
-            }
+            CriticalSectionLock lock(m_ctx.wicMutex);
+            m_ctx.stagedSvgData = std::move(rawData);
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
             CoUninitialize();
             return;
         }
@@ -127,7 +121,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         ComPtr<IWICFormatConverter> preloadedConverter;
         GUID containerFormat = {};
         UINT exifOrientation = 1;
-
         {
             CriticalSectionLock lock(m_ctx.preloadMutex);
             if (filePath == m_ctx.preloadedNextPath && m_ctx.preloadedNextConverter) {
@@ -163,16 +156,15 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         }
 
         ComPtr<IWICImagingFactory> localFactory;
-        HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
-            CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
-        if (FAILED(hr)) {
-            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
-            CoUninitialize();
-            return;
-        }
+        HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
+        if (FAILED(hr)) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return; }
+
+        ComPtr<IWICStream> stream;
+        localFactory->CreateStream(&stream);
+        stream->InitializeFromMemory(rawData.data(), static_cast<DWORD>(rawData.size()));
 
         ComPtr<IWICBitmapDecoder> decoder;
-        hr = CreateDecoderFromStream_FullFileRead(localFactory.Get(), filePath.c_str(), &decoder, mySeqId);
+        hr = localFactory->CreateDecoderFromStream(stream.Get(), NULL, WICDecodeMetadataCacheOnLoad, &decoder);
 
         if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
 
@@ -195,22 +187,84 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                 UINT frameWidth = 0, frameHeight = 0;
                 frame->GetSize(&frameWidth, &frameHeight);
 
-                ComPtr<IWICFormatConverter> converter;
-                if (SUCCEEDED(localFactory->CreateFormatConverter(&converter))) {
-                    if (SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                UINT maxDim = 3840; // 4K max base to save RAM
+                ComPtr<IWICBitmapSource> sourceToCache = frame;
+                bool downscaled = false;
+                float ratio = 1.0f;
 
-                        // Decode into memory so WIC drops file lock, then avoid double-buffering manually
+                if (frameWidth > maxDim || frameHeight > maxDim) {
+                    downscaled = true;
+                    ratio = std::min(static_cast<float>(maxDim) / frameWidth, static_cast<float>(maxDim) / frameHeight);
+                    UINT newW = static_cast<UINT>(frameWidth * ratio);
+                    UINT newH = static_cast<UINT>(frameHeight * ratio);
+
+                    bool nativeScaled = false;
+                    ComPtr<IWICBitmapSourceTransform> sourceTransform;
+
+                    // Native codec rapid downscaling 
+                    if (SUCCEEDED(frame.As(&sourceTransform))) {
+                        UINT actualWidth = newW, actualHeight = newH;
+                        if (SUCCEEDED(sourceTransform->GetClosestSize(&actualWidth, &actualHeight))) {
+                            // Only proceed if the codec actually gave us an optimized size smaller than the original
+                            if (actualWidth < frameWidth && actualHeight < frameHeight) {
+                                WICPixelFormatGUID closestFormat = GUID_WICPixelFormat32bppPBGRA;
+                                if (SUCCEEDED(sourceTransform->GetClosestPixelFormat(&closestFormat))) {
+                                    ComPtr<IWICBitmap> fastBitmap;
+                                    // Allocate only the memory needed for the 4K frame
+                                    if (SUCCEEDED(localFactory->CreateBitmap(actualWidth, actualHeight, closestFormat, WICBitmapCacheOnLoad, &fastBitmap))) {
+                                        WICRect rc = { 0, 0, (INT)actualWidth, (INT)actualHeight };
+                                        ComPtr<IWICBitmapLock> lock;
+                                        if (SUCCEEDED(fastBitmap->Lock(&rc, WICBitmapLockWrite, &lock))) {
+                                            UINT cbStride = 0, cbBufferSize = 0;
+                                            BYTE* pbBuffer = nullptr;
+                                            lock->GetStride(&cbStride);
+                                            lock->GetDataPointer(&cbBufferSize, &pbBuffer);
+
+                                            // Only decode the pixels needed for the smaller size
+                                            if (SUCCEEDED(sourceTransform->CopyPixels(nullptr, actualWidth, actualHeight, &closestFormat, WICBitmapTransformRotate0, cbStride, cbBufferSize, pbBuffer))) {
+                                                sourceToCache = fastBitmap;
+                                                nativeScaled = true;
+                                                // Adjust ratio to match exact size 
+                                                ratio = std::min(static_cast<float>(actualWidth) / frameWidth, static_cast<float>(actualHeight) / frameHeight);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Fallback to CPU scaler 
+                    if (!nativeScaled) {
+                        ComPtr<IWICBitmapScaler> scaler;
+                        if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
+                            // Scale directly from raw frame before conversion
+                            if (SUCCEEDED(scaler->Initialize(frame.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
+                                sourceToCache = scaler;
+                            }
+                        }
+                    }
+                }
+
+                ComPtr<IWICFormatConverter> finalConverter;
+                if (SUCCEEDED(localFactory->CreateFormatConverter(&finalConverter))) {
+                    // Convert the image to 32bpp PBGRA
+                    if (SUCCEEDED(finalConverter->Initialize(sourceToCache.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+
+                        // Decode base bitmap into memory
                         ComPtr<IWICBitmap> cachedBitmap;
-                        localFactory->CreateBitmapFromSource(converter.Get(), WICBitmapCacheOnLoad, &cachedBitmap);
+                        localFactory->CreateBitmapFromSource(finalConverter.Get(), WICBitmapCacheOnLoad, &cachedBitmap);
 
-                        ComPtr<IWICFormatConverter> finalConverter;
-                        localFactory->CreateFormatConverter(&finalConverter);
-                        finalConverter->Initialize(cachedBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+                        // Wrap the cached bitmap for D2D compatibility
+                        ComPtr<IWICFormatConverter> d2dConverter;
+                        localFactory->CreateFormatConverter(&d2dConverter);
+                        d2dConverter->Initialize(cachedBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
 
                         UINT exifOrientation = 1;
                         ComPtr<IWICMetadataQueryReader> metadataReader;
                         if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
-                            PROPVARIANT propValue; PropVariantInit(&propValue);
+                            PROPVARIANT propValue;
+                            PropVariantInit(&propValue);
                             if (SUCCEEDED(metadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &propValue)) && propValue.vt == VT_UI2) {
                                 exifOrientation = propValue.uiVal;
                             }
@@ -218,11 +272,15 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                         }
 
                         CriticalSectionLock lock(m_ctx.wicMutex);
-                        m_ctx.stagedStaticConverter = finalConverter;
+                        m_ctx.stagedStaticConverter = d2dConverter;
+                        m_ctx.stagedRawFileData = std::move(rawData); // Transfer memory ownership to context
+                        m_ctx.stagedWicStream = stream; // Keep stream alive
                         m_ctx.stagedWidth = frameWidth;
                         m_ctx.stagedHeight = frameHeight;
                         m_ctx.originalContainerFormat = containerFormat;
                         m_ctx.stagedOrientation = exifOrientation;
+                        m_ctx.isDownscaled = downscaled;
+                        m_ctx.downscaleRatio = ratio;
 
                         PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
                         CoUninitialize();
@@ -261,7 +319,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             UINT frameWidth = 0, frameHeight = 0;
             frame->GetSize(&frameWidth, &frameHeight);
 
-            // Fallback if global dimensions aren't found in metadata
+            // Fallback if dimensions arent found
             if (canvasWidth == 0 || canvasHeight == 0) {
                 canvasWidth = frameWidth;
                 canvasHeight = frameHeight;
@@ -494,6 +552,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         // Clear the old image state before displaying new
         KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
         m_ctx.d2dBitmap = nullptr;
+        m_ctx.highResImageSource = nullptr;
         m_ctx.animationD2DBitmaps.clear();
         m_ctx.animationFrameConverters.clear();
         m_ctx.animationFrameDelays.clear();
@@ -509,7 +568,12 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         if (m_ctx.stagedStaticConverter) {
             m_ctx.wicConverter = m_ctx.stagedStaticConverter;
             m_ctx.wicConverterOriginal = m_ctx.stagedStaticConverter;
+            m_ctx.rawFileData = std::move(m_ctx.stagedRawFileData);
+            m_ctx.wicStream = m_ctx.stagedWicStream;
+            m_ctx.originalWidth = m_ctx.stagedWidth;
+            m_ctx.originalHeight = m_ctx.stagedHeight;
             m_ctx.stagedStaticConverter = nullptr;
+            m_ctx.stagedWicStream = nullptr;
             m_ctx.isAnimated = false;
         }
         else if (!m_ctx.stagedSvgData.empty()) {

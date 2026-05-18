@@ -59,13 +59,13 @@ constexpr UINT WM_APP_IMAGE_LOADED = (WM_APP + 1);
 constexpr UINT WM_APP_IMAGE_LOAD_FAILED = (WM_APP + 2);
 constexpr UINT WM_APP_IMAGE_READY = (WM_APP + 7);
 constexpr UINT WM_APP_DIR_READY = (WM_APP + 8);
+constexpr UINT WM_APP_HIGH_RES_READY = (WM_APP + 9);
 
 constexpr UINT ANIMATION_TIMER_ID = 1;
 constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 constexpr UINT LOADING_TIMER_ID = 4;
 constexpr UINT NAV_DEBOUNCE_TIMER_ID = 6;
 constexpr UINT KEYBINDING_TIMER_ID = 7;
-
 class CriticalSectionLock {
 public:
     CriticalSectionLock(CRITICAL_SECTION& cs) : m_cs(cs) {
@@ -147,8 +147,11 @@ struct AppContext {
     int pendingNavIndex = -1;
     ComPtr<IWICFormatConverter> wicConverter = nullptr;
     ComPtr<IWICFormatConverter> wicConverterOriginal = nullptr;
-    ComPtr<IWICBitmapSource> highResSource = nullptr;
-    ComPtr<IWICBitmapSource> stagedHighResSource = nullptr;
+    std::vector<BYTE> rawFileData;
+    std::vector<BYTE> stagedRawFileData;
+    ComPtr<IWICStream> wicStream;
+    ComPtr<IWICStream> stagedWicStream;
+    ComPtr<ID2D1ImageSourceFromWic> highResImageSource = nullptr;
     UINT originalWidth = 0;
     UINT originalHeight = 0;
     bool isDownscaled = false;

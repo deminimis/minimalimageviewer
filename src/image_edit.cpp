@@ -45,6 +45,7 @@ void ViewerApp::CommitCrop() {
 
                         m_ctx.undoStack.push_back(m_ctx.wicConverterOriginal);
                         m_ctx.wicConverterOriginal = converter;
+                        m_ctx.isDownscaled = false; // Edits destroy high-res alignment
 
                         if (m_ctx.isAnimated) {
                             m_ctx.isAnimated = false;

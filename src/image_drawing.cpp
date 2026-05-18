@@ -14,6 +14,11 @@ bool ViewerApp::GetCurrentImageSize(UINT* width, UINT* height) {
     else if (m_ctx.isAnimated && !m_ctx.animationFrameConverters.empty()) {
         return SUCCEEDED(m_ctx.animationFrameConverters[0]->GetSize(width, height));
     }
+    else if (m_ctx.isDownscaled) {
+        *width = m_ctx.originalWidth;
+        *height = m_ctx.originalHeight;
+        return true;
+    }
     else if (m_ctx.wicConverter) {
         return SUCCEEDED(m_ctx.wicConverter->GetSize(width, height));
     }
@@ -133,6 +138,7 @@ void ViewerApp::DiscardDeviceResources() {
     m_ctx.fadeBrush = nullptr;
     m_ctx.animationD2DBitmaps.clear();
     m_ctx.svgDocument = nullptr;
+    m_ctx.highResImageSource = nullptr;
 }
 
 void ViewerApp::DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
@@ -264,7 +270,11 @@ void ViewerApp::Render() {
 
                     ComPtr<IWICBitmapSource> source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
                     ComPtr<ID2D1Bitmap> d2dFrameBitmap;
-                    if (SUCCEEDED(m_ctx.renderTarget->CreateBitmapFromWicBitmap(source.Get(), nullptr, &d2dFrameBitmap))) {
+                    D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
+                        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                        96.0f, 96.0f
+                    );
+                    if (SUCCEEDED(m_ctx.renderTarget->CreateBitmapFromWicBitmap(source.Get(), &props, &d2dFrameBitmap))) {
                         m_ctx.animationD2DBitmaps[m_ctx.currentAnimationFrame] = d2dFrameBitmap;
                     }
                 }
@@ -276,9 +286,13 @@ void ViewerApp::Render() {
             CriticalSectionLock lock(m_ctx.wicMutex);
             if (!m_ctx.d2dBitmap && m_ctx.wicConverter) {
                 ComPtr<IWICBitmapSource> source = m_ctx.wicConverter;
+                D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
+                    D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                    96.0f, 96.0f
+                );
                 m_ctx.renderTarget->CreateBitmapFromWicBitmap(
                     source.Get(),
-                    nullptr,
+                    &props,
                     &m_ctx.d2dBitmap
                 );
                 m_ctx.animationD2DBitmaps.clear();
@@ -303,12 +317,19 @@ void ViewerApp::Render() {
             D2D1_POINT_2F bmpCenter = D2D1::Point2F(bmpSize.width / 2.f, bmpSize.height / 2.f);
             D2D1_POINT_2F windowCenter = D2D1::Point2F(rtSize.width / 2.f, rtSize.height / 2.f);
 
-            float scaleX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
-            float scaleY = m_ctx.zoomFactor;
+            // Calculate ratio individually to prevent integer truncation scaling offsets
+            float ratioX = m_ctx.isDownscaled ? (bmpSize.width / static_cast<float>(m_ctx.originalWidth)) : 1.0f;
+            float ratioY = m_ctx.isDownscaled ? (bmpSize.height / static_cast<float>(m_ctx.originalHeight)) : 1.0f;
+
+            float nativeScaleX = m_ctx.isDownscaled ? (1.0f / ratioX) : 1.0f;
+            float nativeScaleY = m_ctx.isDownscaled ? (1.0f / ratioY) : 1.0f;
+
+            float scaleX = (m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor) * nativeScaleX;
+            float scaleY = m_ctx.zoomFactor * nativeScaleY;
 
             m_ctx.renderTarget->SetTransform(
-                D2D1::Matrix3x2F::Rotation(static_cast<float>(m_ctx.rotationAngle), bmpCenter) *
-                D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter) *
+                D2D1::Matrix3x2F::Rotation(static_cast<float>(m_ctx.rotationAngle), bmpCenter)*
+                D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter)*
                 D2D1::Matrix3x2F::Translation(windowCenter.x - bmpCenter.x + m_ctx.offsetX, windowCenter.y - bmpCenter.y + m_ctx.offsetY)
             );
             float opacity = 1.0f;
@@ -333,10 +354,61 @@ void ViewerApp::Render() {
                 bool isIntegerZoom = (m_ctx.zoomFactor > 1.01f && std::abs(m_ctx.zoomFactor - std::round(m_ctx.zoomFactor)) < 0.001f);
                 D2D1_BITMAP_INTERPOLATION_MODE interpModeBmp = (!m_ctx.smoothScaling || isIntegerZoom) ?
                     D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR : D2D1_BITMAP_INTERPOLATION_MODE_LINEAR;
+
+                // Draw base bitmap 
                 m_ctx.renderTarget->DrawBitmap(
                     bitmapToDraw.Get(), nullptr, opacity,
                     interpModeBmp
                 );
+
+                // Hardware-Accelerated Deep Zoom
+                bool useHighRes = m_ctx.isDownscaled && m_ctx.zoomFactor > m_ctx.downscaleRatio && !m_ctx.rawFileData.empty() && !m_ctx.isFading;
+                if (useHighRes) {
+                    ComPtr<ID2D1DeviceContext5> dc5;
+                    if (SUCCEEDED(m_ctx.renderTarget->QueryInterface(IID_PPV_ARGS(&dc5)))) {
+
+                        // Natively initialize virtualized image source on demand
+                        if (!m_ctx.highResImageSource) {
+                            ComPtr<IWICBitmapDecoder> decoder;
+                            if (SUCCEEDED(m_ctx.wicFactory->CreateDecoderFromStream(m_ctx.wicStream.Get(), NULL, WICDecodeMetadataCacheOnLoad, &decoder))) {
+                                ComPtr<IWICBitmapFrameDecode> frame;
+                                if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
+                                    ComPtr<IWICFormatConverter> converter;
+                                    if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
+                                        if (SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                                            dc5->CreateImageSourceFromWic(
+                                                converter.Get(),
+                                                D2D1_IMAGE_SOURCE_LOADING_OPTIONS_NONE,
+                                                D2D1_ALPHA_MODE_PREMULTIPLIED,
+                                                &m_ctx.highResImageSource
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Draw natively 
+                        if (m_ctx.highResImageSource) {
+                            D2D1::Matrix3x2F currentTransform;
+                            dc5->GetTransform(&currentTransform);
+
+                            // Scale massive image source down to match the coordinate space of base bitmap
+                            dc5->SetTransform(D2D1::Matrix3x2F::Scale(ratioX, ratioY, D2D1::Point2F(0, 0)) * currentTransform);
+
+                            dc5->DrawImage(
+                                m_ctx.highResImageSource.Get(),
+                                nullptr,
+                                nullptr,
+                                D2D1_INTERPOLATION_MODE_LINEAR,
+                                D2D1_COMPOSITE_MODE_SOURCE_OVER
+                            );
+
+                            // Restore original transform
+                            dc5->SetTransform(currentTransform);
+                        }
+                    }
+                }
             }
 
             if ((m_ctx.isSelectingCropRect || m_ctx.isCropPending) && m_ctx.fadeBrush) {
