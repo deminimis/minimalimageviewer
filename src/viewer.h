@@ -182,6 +182,8 @@ struct AppContext {
     bool isSortAscending = true;
     DefaultZoomMode defaultZoomMode = DefaultZoomMode::Fit;
 
+    HACCEL hAccelTable = nullptr;
+
     // Loading State
     std::atomic<bool> isLoading{ false };
     std::atomic<int> loadSequenceId{ 0 };
@@ -349,8 +351,8 @@ public:
 private:
     // UI Handlers
     void OnPaint(HWND hWnd);
-    bool CheckHotkey(WORD hk, WPARAM wParam);
-    void OnKeyDown(WPARAM wParam);
+    void HandleCommand(WORD cmd);
+    void UpdateAcceleratorTable();
     void OnContextMenu(HWND hWnd, POINT pt);
 
     // Drawing Helpers

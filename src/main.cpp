@@ -153,10 +153,14 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     // Flush  working set to drop idle RAM 
     SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
 
+    UpdateAcceleratorTable();
+
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        if (!m_ctx.hAccelTable || !TranslateAcceleratorW(m_ctx.hWnd, m_ctx.hAccelTable, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
     }
 
     m_ctx.isShuttingDown = true;
@@ -169,6 +173,11 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     if (m_ctx.darkBrush) {
         DeleteObject(m_ctx.darkBrush);
         m_ctx.darkBrush = nullptr;
+    }
+
+    if (m_ctx.hAccelTable) {
+        DestroyAcceleratorTable(m_ctx.hAccelTable);
+        m_ctx.hAccelTable = nullptr;
     }
 
     m_ctx.wicConverter = nullptr;

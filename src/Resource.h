@@ -39,6 +39,13 @@
 #define IDC_EDIT_ZOOM               2028
 #define IDC_HOTKEY_CTRL             2025
 #define IDM_REFRESH                 1051 
+#define IDM_UNDO                    1060
+#define IDM_CENTER_IMAGE            1061
+#define IDM_COMMIT_CROP             1062
+#define IDM_TOGGLE_OSD              1063
+#define IDM_PLAY_PAUSE              1064
+#define IDM_RESUME_ANIM             1065
+#define IDM_CUSTOM_ZOOM             1066
 
 #define IDD_RESIZE_DIALOG           201
 #define IDC_EDIT_WIDTH              2001

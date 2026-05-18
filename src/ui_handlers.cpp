@@ -21,23 +21,19 @@ void ViewerApp::OnPaint(HWND hWnd) {
     EndPaint(hWnd, &ps);
 }
 
-bool ViewerApp::CheckHotkey(WORD hk, WPARAM wParam) {
-    if (!hk || LOBYTE(hk) != wParam) return false;
-    BYTE mods = HIBYTE(hk);
-    bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    bool alt = (GetKeyState(VK_MENU) & 0x8000) != 0;
-    return (ctrl == ((mods & HOTKEYF_CONTROL) != 0) &&
-        shift == ((mods & HOTKEYF_SHIFT) != 0) &&
-        alt == ((mods & HOTKEYF_ALT) != 0));
-}
-
-void ViewerApp::OnKeyDown(WPARAM wParam) {
-    bool ctrlPressed = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-    bool shiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-    auto isKey = [&](ActionID act) { return CheckHotkey(m_ctx.hotkeys[act], wParam); };
-
-    if (isKey(Act_Next)) {
+void ViewerApp::HandleCommand(WORD cmd) {
+    switch (cmd) {
+    case IDM_OPEN:          OpenFileAction(); break;
+    case IDM_REFRESH:
+        if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
+            std::wstring currentFile = m_ctx.imageFiles[m_ctx.currentImageIndex];
+            m_ctx.imageFiles.clear(); // force rescan 
+            LoadImageFromFile(currentFile);
+        }
+        break;
+    case IDM_COPY:          HandleCopy(); break;
+    case IDM_PASTE:         HandlePaste(); break;
+    case IDM_NEXT_IMG:
         if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex + 1) % static_cast<int>(size);
@@ -46,8 +42,8 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
             SetWindowTextW(m_ctx.hWnd, title.c_str());
             LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], false);
         }
-    }
-    else if (isKey(Act_Prev)) {
+        break;
+    case IDM_PREV_IMG:
         if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
@@ -56,37 +52,37 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
             SetWindowTextW(m_ctx.hWnd, title.c_str());
             LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], true);
         }
-    }
-    else if (isKey(Act_ZoomIn)) {
+        break;
+    case IDM_ZOOM_IN: {
         RECT cr; GetClientRect(m_ctx.hWnd, &cr);
         POINT centerPt = { (cr.right - cr.left) / 2, (cr.bottom - cr.top) / 2 };
         ZoomImage(1.25f, centerPt);
+        break;
     }
-    else if (isKey(Act_ZoomOut)) {
+    case IDM_ZOOM_OUT: {
         RECT cr; GetClientRect(m_ctx.hWnd, &cr);
         POINT centerPt = { (cr.right - cr.left) / 2, (cr.bottom - cr.top) / 2 };
         ZoomImage(0.8f, centerPt);
+        break;
     }
-    else if (isKey(Act_Fit)) { FitImageToWindow(); }
-    else if (isKey(Act_Actual)) { SetActualSize(); }
-    else if (isKey(Act_CustomZoom)) { OpenZoomDialog(); }
-    else if (isKey(Act_Fullscreen)) { ToggleFullScreen(); }
-    else if (isKey(Act_RotateCW)) { RotateImage(true); }
-    else if (isKey(Act_RotateCCW)) { RotateImage(false); }
-    else if (isKey(Act_Flip)) { FlipImage(); }
-    else if (isKey(Act_Crop)) {
-        bool wasCropActive = m_ctx.isCropActive;
-        m_ctx.isCropMode = !m_ctx.isCropMode;
-        m_ctx.isCropActive = false; m_ctx.isCropPending = false; m_ctx.isSelectingCropRect = false;
-        if (wasCropActive) { ApplyEffectsToView(); FitImageToWindow(); }
-        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-        SetCursor(LoadCursor(nullptr, m_ctx.isCropMode ? IDC_CROSS : IDC_ARROW));
-    }
-    else if (isKey(Act_Exit)) {
+    case IDM_ACTUAL_SIZE:   SetActualSize(); break;
+    case IDM_ZOOM_200:      SetZoomLevel(2.0f); break;
+    case IDM_ZOOM_300:      SetZoomLevel(3.0f); break;
+    case IDM_FIT_TO_WINDOW: FitImageToWindow(); break;
+    case IDM_FULLSCREEN:    ToggleFullScreen(); break;
+    case IDM_DELETE_IMG:    DeleteCurrentImage(); break;
+    case IDM_EXIT:
         if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending) {
+            bool wasCropActive = m_ctx.isCropActive;
             m_ctx.isCropMode = false;
             m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false;
-            ApplyEffectsToView(); FitImageToWindow();
+            if (wasCropActive) {
+                m_ctx.isCropActive = false;
+                ApplyEffectsToView(); FitImageToWindow();
+            }
+            else {
+                InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+            }
             SetCursor(LoadCursor(nullptr, IDC_ARROW));
             if (GetCapture() == m_ctx.hWnd) ReleaseCapture();
             InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
@@ -94,71 +90,91 @@ void ViewerApp::OnKeyDown(WPARAM wParam) {
         else {
             PostQuitMessage(0);
         }
+        break;
+    case IDM_ROTATE_CW:     RotateImage(true); break;
+    case IDM_ROTATE_CCW:    RotateImage(false); break;
+    case IDM_FLIP:          FlipImage(); break;
+    case IDM_CROP: {
+        bool wasCropActive = m_ctx.isCropActive;
+        m_ctx.isCropMode = !m_ctx.isCropMode;
+        m_ctx.isCropActive = false; m_ctx.isCropPending = false; m_ctx.isSelectingCropRect = false;
+        if (wasCropActive) { ApplyEffectsToView(); FitImageToWindow(); }
+        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+        SetCursor(LoadCursor(nullptr, m_ctx.isCropMode ? IDC_CROSS : IDC_ARROW));
+        break;
     }
-    else {
-        switch (wParam) {
-        case VK_ESCAPE:
-            if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending) {
-                m_ctx.isCropMode = false;
-                m_ctx.isSelectingCropRect = false; m_ctx.isCropPending = false;
-                ApplyEffectsToView(); FitImageToWindow();
-                SetCursor(LoadCursor(nullptr, IDC_ARROW));
-                if (GetCapture() == m_ctx.hWnd) ReleaseCapture();
-                InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-            } break;
-        case VK_DELETE: DeleteCurrentImage(); break;
-        case 'O': if (ctrlPressed) OpenFileAction(); break;
-        case 'Z':
-            if (ctrlPressed && !m_ctx.undoStack.empty()) {
-                CriticalSectionLock lock(m_ctx.wicMutex);
-                m_ctx.wicConverterOriginal = m_ctx.undoStack.back();
-                m_ctx.undoStack.pop_back(); m_ctx.isCropActive = false; m_ctx.cropRectLocal = { 0 };
-                ApplyEffectsToView(); FitImageToWindow(); InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-            } break;
-        case 'S': if (ctrlPressed && (GetKeyState(VK_SHIFT) & 0x8000)) SaveImageAs(); else if (ctrlPressed) SaveImage(); break;
-        case 'C': if (ctrlPressed) HandleCopy(); break;
-        case 'V': if (ctrlPressed) HandlePaste(); break;
-        case '0': if (ctrlPressed) CenterImage(true); break;
-        case VK_RETURN:
-            if (m_ctx.isCropPending) {
-                m_ctx.isCropActive = true; m_ctx.isCropPending = false; m_ctx.isCropMode = false;
-                CommitCrop(); ApplyEffectsToView(); FitImageToWindow(); InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-            } break;
-        case 'I': m_ctx.isOsdVisible = !m_ctx.isOsdVisible;
-            InvalidateRect(m_ctx.hWnd, nullptr, FALSE); break;
-        case VK_SPACE:
-            // Gif playback controls
-            if (m_ctx.animationFrameConverters.size() > 1) {
-                if (shiftPressed) {
-                    // Shift+Space: Resume playback 
-                    if (!m_ctx.isAnimated) {
-                        m_ctx.isAnimated = true;
-                        UINT delay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
-                        SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, delay > 0 ? delay : 100, nullptr);
-                    }
-                }
-                else {
-                    if (m_ctx.isAnimated) {
-                        // Pause 
-                        m_ctx.isAnimated = false;
-                        KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
-                    }
-                    else {
-                        // Advance one frame and loop
-                        m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameConverters.size();
-                        UpdateViewToCurrentFrame();
-                    }
-                }
-            }
-            break;
-        case VK_F5:
-            if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
-                std::wstring currentFile = m_ctx.imageFiles[m_ctx.currentImageIndex];
-                m_ctx.imageFiles.clear(); // Clear cache to force directory rescan
-                LoadImageFromFile(currentFile);
-            }
-            break;
+    case IDM_RESIZE:        ResizeImageAction(); break;
+    case IDM_SAVE:          SaveImage(); break;
+    case IDM_SAVE_AS:       SaveImageAs(); break;
+    case IDM_OPEN_LOCATION: OpenFileLocationAction(); break;
+    case IDM_PROPERTIES:    ShowImageProperties(); break;
+    case IDM_PREFERENCES:   OpenPreferencesDialog(); break;
+    case IDM_KEYBINDINGS:   OpenKeybindingsDialog(); break;
+    case IDM_CUSTOM_ZOOM:   OpenZoomDialog(); break;
+
+        // Hardcoded fallbacks 
+    case IDM_UNDO:
+        if (!m_ctx.undoStack.empty()) {
+            CriticalSectionLock lock(m_ctx.wicMutex);
+            m_ctx.wicConverterOriginal = m_ctx.undoStack.back();
+            m_ctx.undoStack.pop_back(); m_ctx.isCropActive = false; m_ctx.cropRectLocal = { 0 };
+            ApplyEffectsToView(); FitImageToWindow(); InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
         }
+        break;
+    case IDM_CENTER_IMAGE:  CenterImage(true); break;
+    case IDM_COMMIT_CROP:
+        if (m_ctx.isCropPending) {
+            m_ctx.isCropActive = true;
+            m_ctx.isCropPending = false; m_ctx.isCropMode = false;
+            CommitCrop(); ApplyEffectsToView(); FitImageToWindow(); InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+        }
+        break;
+    case IDM_TOGGLE_OSD:
+        m_ctx.isOsdVisible = !m_ctx.isOsdVisible;
+        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+        break;
+    case IDM_PLAY_PAUSE:
+        if (m_ctx.animationFrameConverters.size() > 1) {
+            if (m_ctx.isAnimated) {
+                m_ctx.isAnimated = false;
+                KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+            }
+            else {
+                m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameConverters.size();
+                UpdateViewToCurrentFrame();
+            }
+        }
+        break;
+    case IDM_RESUME_ANIM:
+        if (m_ctx.animationFrameConverters.size() > 1 && !m_ctx.isAnimated) {
+            m_ctx.isAnimated = true;
+            UINT delay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
+            SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, delay > 0 ? delay : 100, nullptr);
+        }
+        break;
+    case IDM_SORT_BY_NAME_ASC:
+    case IDM_SORT_BY_NAME_DESC:
+    case IDM_SORT_BY_DATE_ASC:
+    case IDM_SORT_BY_DATE_DESC:
+    case IDM_SORT_BY_SIZE_ASC:
+    case IDM_SORT_BY_SIZE_DESC:
+    {
+        std::wstring currentFile;
+        if (m_ctx.currentImageIndex >= 0 && m_ctx.currentImageIndex < static_cast<int>(m_ctx.imageFiles.size())) {
+            currentFile = m_ctx.imageFiles[m_ctx.currentImageIndex];
+        }
+
+        m_ctx.isSortAscending = (cmd == IDM_SORT_BY_NAME_ASC || cmd == IDM_SORT_BY_DATE_ASC || cmd == IDM_SORT_BY_SIZE_ASC);
+        if (cmd == IDM_SORT_BY_NAME_ASC || cmd == IDM_SORT_BY_NAME_DESC) m_ctx.currentSortCriteria = SortCriteria::ByName;
+        else if (cmd == IDM_SORT_BY_DATE_ASC || cmd == IDM_SORT_BY_DATE_DESC) m_ctx.currentSortCriteria = SortCriteria::ByDateModified;
+        else m_ctx.currentSortCriteria = SortCriteria::ByFileSize;
+
+        if (!m_ctx.currentDirectory.empty()) {
+            m_ctx.imageFiles.clear();
+            LoadImageFromFile(currentFile);
+        }
+        break;
+    }
     }
 }
 
@@ -237,82 +253,8 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     int cmd = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y, 0, hWnd, nullptr);
     DestroyMenu(hMenu);
 
-    switch (cmd) {
-    case IDM_OPEN:          OpenFileAction(); break;
-    case IDM_REFRESH:       OnKeyDown(VK_F5); break;
-    case IDM_COPY:          HandleCopy(); break;
-    case IDM_PASTE:         HandlePaste(); break;
-    case IDM_NEXT_IMG:      OnKeyDown(VK_RIGHT); break;
-    case IDM_PREV_IMG:      OnKeyDown(VK_LEFT); break;
-    case IDM_ZOOM_IN: {
-        POINT clientPt = pt;
-        ScreenToClient(hWnd, &clientPt);
-        ZoomImage(1.25f, clientPt);
-        break;
-    }
-    case IDM_ZOOM_OUT: {
-        POINT clientPt = pt;
-        ScreenToClient(hWnd, &clientPt);
-        ZoomImage(0.8f, clientPt);
-        break;
-    }
-    case IDM_ACTUAL_SIZE:   SetActualSize(); break;
-    case IDM_ZOOM_200:      SetZoomLevel(2.0f); break;
-    case IDM_ZOOM_300:      SetZoomLevel(3.0f); break;
-    case IDM_FIT_TO_WINDOW: FitImageToWindow(); break;
-    case IDM_FULLSCREEN:    ToggleFullScreen(); break;
-    case IDM_DELETE_IMG:    DeleteCurrentImage(); break;
-    case IDM_EXIT:          PostQuitMessage(0); break;
-    case IDM_ROTATE_CW:     RotateImage(true); break;
-    case IDM_ROTATE_CCW:    RotateImage(false); break;
-    case IDM_FLIP:          FlipImage();
-        break;
-    case IDM_CROP: {
-        bool wasCropActive = m_ctx.isCropActive;
-        m_ctx.isCropMode = true;
-        m_ctx.isCropActive = false;
-        m_ctx.isCropPending = false;
-        m_ctx.isSelectingCropRect = false;
-
-        if (wasCropActive) {
-            ApplyEffectsToView();
-            FitImageToWindow();
-        }
-        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-        SetCursor(LoadCursor(nullptr, IDC_CROSS));
-        break;
-    }
-    case IDM_RESIZE:        ResizeImageAction(); break;
-    case IDM_SAVE:          SaveImage(); break;
-    case IDM_SAVE_AS:       SaveImageAs(); break;
-    case IDM_OPEN_LOCATION: OpenFileLocationAction(); break;
-    case IDM_PROPERTIES:    ShowImageProperties(); break;
-    case IDM_PREFERENCES:   OpenPreferencesDialog(); break;
-    case IDM_KEYBINDINGS:   OpenKeybindingsDialog(); break;
-
-    case IDM_SORT_BY_NAME_ASC:
-    case IDM_SORT_BY_NAME_DESC:
-    case IDM_SORT_BY_DATE_ASC:
-    case IDM_SORT_BY_DATE_DESC:
-    case IDM_SORT_BY_SIZE_ASC:
-    case IDM_SORT_BY_SIZE_DESC:
-    {
-        std::wstring currentFile;
-        if (m_ctx.currentImageIndex >= 0 && m_ctx.currentImageIndex < static_cast<int>(m_ctx.imageFiles.size())) {
-            currentFile = m_ctx.imageFiles[m_ctx.currentImageIndex];
-        }
-
-        m_ctx.isSortAscending = (cmd == IDM_SORT_BY_NAME_ASC || cmd == IDM_SORT_BY_DATE_ASC || cmd == IDM_SORT_BY_SIZE_ASC);
-        if (cmd == IDM_SORT_BY_NAME_ASC || cmd == IDM_SORT_BY_NAME_DESC) m_ctx.currentSortCriteria = SortCriteria::ByName;
-        else if (cmd == IDM_SORT_BY_DATE_ASC || cmd == IDM_SORT_BY_DATE_DESC) m_ctx.currentSortCriteria = SortCriteria::ByDateModified;
-        else m_ctx.currentSortCriteria = SortCriteria::ByFileSize;
-
-        if (!m_ctx.currentDirectory.empty()) {
-            m_ctx.imageFiles.clear(); // force directory rescan
-            LoadImageFromFile(currentFile);
-        }
-        break;
-    }
+    if (cmd > 0) {
+        HandleCommand(static_cast<WORD>(cmd));
     }
 }
 
@@ -428,10 +370,8 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
     case WM_PAINT:
         OnPaint(hWnd);
         break;
-    case WM_KEYDOWN:
-        OnKeyDown(wParam);
-        break;
-    case WM_KEYUP:
+    case WM_COMMAND:
+        HandleCommand(LOWORD(wParam));
         break;
     case WM_MOUSEWHEEL: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };

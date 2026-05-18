@@ -167,6 +167,7 @@ INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARA
             int idx = static_cast<int>(SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0));
             if (idx != CB_ERR) {
                 ctx.hotkeys[idx] = static_cast<WORD>(SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0));
+                pApp->UpdateAcceleratorTable(); // Rebuild dynamically
                 SetDlgItemTextW(hDlg, IDOK, L"Applied!");
                 SetTimer(hDlg, KEYBINDING_TIMER_ID, 1500, nullptr);
             }

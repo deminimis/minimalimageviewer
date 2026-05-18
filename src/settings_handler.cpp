@@ -57,3 +57,54 @@ void ViewerApp::WriteSettings(const std::wstring& path, const RECT& rect, bool f
         writeInt(L"Window", L"bottom", rect.bottom);
     }
 }
+
+void ViewerApp::UpdateAcceleratorTable() {
+    if (m_ctx.hAccelTable) {
+        DestroyAcceleratorTable(m_ctx.hAccelTable);
+        m_ctx.hAccelTable = nullptr;
+    }
+
+    std::vector<ACCEL> accels;
+    auto addAccel = [&](WORD virtKey, BYTE modifiers, WORD cmd) {
+        ACCEL a = {};
+        a.cmd = cmd;
+        a.key = virtKey;
+        a.fVirt = FVIRTKEY;
+        if (modifiers & HOTKEYF_CONTROL) a.fVirt |= FCONTROL;
+        if (modifiers & HOTKEYF_SHIFT) a.fVirt |= FSHIFT;
+        if (modifiers & HOTKEYF_ALT) a.fVirt |= FALT;
+        accels.push_back(a);
+        };
+
+    // Map configurable actions dynamically
+    WORD actionCmds[Act_Count] = {
+        IDM_NEXT_IMG, IDM_PREV_IMG, IDM_ZOOM_IN, IDM_ZOOM_OUT, IDM_FIT_TO_WINDOW,
+        IDM_ACTUAL_SIZE, IDM_FULLSCREEN, IDM_ROTATE_CW, IDM_ROTATE_CCW, IDM_FLIP,
+        IDM_CROP, IDM_CUSTOM_ZOOM, IDM_EXIT
+    };
+
+    for (int i = 0; i < Act_Count; ++i) {
+        if (m_ctx.hotkeys[i]) {
+            addAccel(LOBYTE(m_ctx.hotkeys[i]), HIBYTE(m_ctx.hotkeys[i]), actionCmds[i]);
+        }
+    }
+
+    // Fallback shortcuts
+    addAccel(VK_DELETE, 0, IDM_DELETE_IMG);
+    addAccel('O', HOTKEYF_CONTROL, IDM_OPEN);
+    addAccel('Z', HOTKEYF_CONTROL, IDM_UNDO);
+    addAccel('S', HOTKEYF_CONTROL, IDM_SAVE);
+    addAccel('S', HOTKEYF_CONTROL | HOTKEYF_SHIFT, IDM_SAVE_AS);
+    addAccel('C', HOTKEYF_CONTROL, IDM_COPY);
+    addAccel('V', HOTKEYF_CONTROL, IDM_PASTE);
+    addAccel('0', HOTKEYF_CONTROL, IDM_CENTER_IMAGE);
+    addAccel(VK_RETURN, 0, IDM_COMMIT_CROP);
+    addAccel('I', 0, IDM_TOGGLE_OSD);
+    addAccel(VK_SPACE, 0, IDM_PLAY_PAUSE);
+    addAccel(VK_SPACE, HOTKEYF_SHIFT, IDM_RESUME_ANIM);
+    addAccel(VK_F5, 0, IDM_REFRESH);
+
+    if (!accels.empty()) {
+        m_ctx.hAccelTable = CreateAcceleratorTableW(accels.data(), static_cast<int>(accels.size()));
+    }
+}
