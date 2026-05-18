@@ -188,6 +188,50 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         decoder->GetFrameCount(&frameCount);
         if (frameCount == 0) frameCount = 1;
 
+        // Fast static image loading
+        if (frameCount == 1 && containerFormat != GUID_ContainerFormatGif) {
+            ComPtr<IWICBitmapFrameDecode> frame;
+            if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
+                UINT frameWidth = 0, frameHeight = 0;
+                frame->GetSize(&frameWidth, &frameHeight);
+
+                ComPtr<IWICFormatConverter> converter;
+                if (SUCCEEDED(localFactory->CreateFormatConverter(&converter))) {
+                    if (SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+
+                        // Decode into memory so WIC drops file lock, then avoid double-buffering manually
+                        ComPtr<IWICBitmap> cachedBitmap;
+                        localFactory->CreateBitmapFromSource(converter.Get(), WICBitmapCacheOnLoad, &cachedBitmap);
+
+                        ComPtr<IWICFormatConverter> finalConverter;
+                        localFactory->CreateFormatConverter(&finalConverter);
+                        finalConverter->Initialize(cachedBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
+
+                        UINT exifOrientation = 1;
+                        ComPtr<IWICMetadataQueryReader> metadataReader;
+                        if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
+                            PROPVARIANT propValue; PropVariantInit(&propValue);
+                            if (SUCCEEDED(metadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &propValue)) && propValue.vt == VT_UI2) {
+                                exifOrientation = propValue.uiVal;
+                            }
+                            PropVariantClear(&propValue);
+                        }
+
+                        CriticalSectionLock lock(m_ctx.wicMutex);
+                        m_ctx.stagedStaticConverter = finalConverter;
+                        m_ctx.stagedWidth = frameWidth;
+                        m_ctx.stagedHeight = frameHeight;
+                        m_ctx.originalContainerFormat = containerFormat;
+                        m_ctx.stagedOrientation = exifOrientation;
+
+                        PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                        CoUninitialize();
+                        return;
+                    }
+                }
+            }
+        }
+
         std::vector<std::vector<BYTE>> allFramesPixels;
         std::vector<UINT> allFramesDelays;
         UINT canvasWidth = 0, canvasHeight = 0;
@@ -442,12 +486,12 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
     if (success) {
         CriticalSectionLock lock(m_ctx.wicMutex);
 
-        if (m_ctx.stagedFrames.empty() && m_ctx.stagedSvgData.empty()) {
+        if (!m_ctx.stagedStaticConverter && m_ctx.stagedFrames.empty() && m_ctx.stagedSvgData.empty()) {
             m_ctx.isLoading = false;
             return;
         }
 
-        // Clear the old image state before displaying new 
+        // Clear the old image state before displaying new
         KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
         m_ctx.d2dBitmap = nullptr;
         m_ctx.animationD2DBitmaps.clear();
@@ -462,14 +506,18 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         m_ctx.rotationAngle = 0;
         m_ctx.isFlippedHorizontal = false;
 
-        if (!m_ctx.stagedSvgData.empty()) {
+        if (m_ctx.stagedStaticConverter) {
+            m_ctx.wicConverter = m_ctx.stagedStaticConverter;
+            m_ctx.wicConverterOriginal = m_ctx.stagedStaticConverter;
+            m_ctx.stagedStaticConverter = nullptr;
+            m_ctx.isAnimated = false;
+        }
+        else if (!m_ctx.stagedSvgData.empty()) {
             m_ctx.svgData = std::move(m_ctx.stagedSvgData);
             m_ctx.isSvg = true;
             m_ctx.isAnimated = false;
             m_ctx.currentOrientation = 1;
             m_ctx.originalContainerFormat = GUID_NULL;
-
-            // This initializes m_ctx.svgDocument securely using the UI Thread's RT
             CreateDeviceResources();
         }
         else {
@@ -685,11 +733,25 @@ void ViewerApp::StartPreloading() {
             if (SUCCEEDED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory)))) {
                 ComPtr<IWICBitmapDecoder> decoder;
             if (SUCCEEDED(factory->CreateDecoderFromFilename(path.c_str(), NULL, GENERIC_READ, WICDecodeMetadataCacheOnLoad, &decoder))) {
-                ComPtr<IWICBitmapFrameDecode> frame;
-                if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
+                ComPtr<IWICBitmapSource> sourceToPreload;
+                ComPtr<IWICBitmapSource> thumbnail;
+
+                // Grab exif thumbnail 
+                if (SUCCEEDED(decoder->GetThumbnail(&thumbnail))) {
+                    sourceToPreload = thumbnail;
+                }
+                else {
+                    // Fallback if no thumbnail 
+                    ComPtr<IWICBitmapFrameDecode> frame;
+                    if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
+                        sourceToPreload = frame;
+                    }
+                }
+
+                if (sourceToPreload) {
                     ComPtr<IWICFormatConverter> converter;
                     if (SUCCEEDED(factory->CreateFormatConverter(&converter))) {
-                        if (SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                        if (SUCCEEDED(converter->Initialize(sourceToPreload.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                             // Force immediate decode into RAM
                             ComPtr<IWICBitmap> memBmp;
                             if (SUCCEEDED(factory->CreateBitmapFromSource(converter.Get(), WICBitmapCacheOnLoad, &memBmp))) {
@@ -697,14 +759,18 @@ void ViewerApp::StartPreloading() {
                                 if (SUCCEEDED(factory->CreateFormatConverter(&finalConverter))) {
                                     if (SUCCEEDED(finalConverter->Initialize(memBmp.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
                                         UINT orientation = 1;
-                                        ComPtr<IWICMetadataQueryReader> metadataReader;
-                                        if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
-                                            PROPVARIANT propValue;
-                                            PropVariantInit(&propValue);
-                                            if (SUCCEEDED(metadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &propValue)) && propValue.vt == VT_UI2) {
-                                                orientation = propValue.uiVal;
+                                        // We need the full frame specifically to read EXIF, even if we preloaded the thumbnail
+                                        ComPtr<IWICBitmapFrameDecode> metaFrame;
+                                        if (SUCCEEDED(decoder->GetFrame(0, &metaFrame))) {
+                                            ComPtr<IWICMetadataQueryReader> metadataReader;
+                                            if (SUCCEEDED(metaFrame->GetMetadataQueryReader(&metadataReader))) {
+                                                PROPVARIANT propValue;
+                                                PropVariantInit(&propValue);
+                                                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &propValue)) && propValue.vt == VT_UI2) {
+                                                    orientation = propValue.uiVal;
+                                                }
+                                                PropVariantClear(&propValue);
                                             }
-                                            PropVariantClear(&propValue);
                                         }
 
                                         CriticalSectionLock lock(m_ctx.preloadMutex);

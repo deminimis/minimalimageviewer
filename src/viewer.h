@@ -183,11 +183,12 @@ struct AppContext {
     bool startAtEnd = false;
 
  
-    std::vector<std::vector<BYTE>> stagedFrames; 
-    std::vector<UINT> stagedDelays;              
+    std::vector<std::vector<BYTE>> stagedFrames;
+    std::vector<UINT> stagedDelays;
     UINT stagedWidth = 0;
     UINT stagedHeight = 0;
     UINT stagedOrientation = 1;
+    ComPtr<IWICFormatConverter> stagedStaticConverter; // Fast static 
 
     std::vector<std::wstring> stagedImageFiles;
     int stagedFoundIndex = -1;
