@@ -90,6 +90,7 @@ ImageProperties ViewerApp::GetCurrentOsdProperties() {
             if (SUCCEEDED(frame->GetMetadataQueryReader(&meta))) {
                 auto getMeta = [&](const wchar_t* q) { return GetMetadataString(meta.Get(), q); };
                 pProps.dateTaken = getMeta(L"/app1/ifd/exif/{ushort=36867}");
+                pProps.orientation = getMeta(L"/app1/ifd/{ushort=274}");
                 pProps.cameraMake = getMeta(L"/app1/ifd/{ushort=271}");
                 pProps.cameraModel = getMeta(L"/app1/ifd/{ushort=272}");
                 pProps.fStop = getMeta(L"/app1/ifd/exif/{rational=33437}");
@@ -149,6 +150,7 @@ LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam,
             drawProp(L"File Path:", pProps->filePath);
             drawProp(L"Image Format:", pProps->imageFormat, true);
             drawProp(L"Dimensions:", pProps->dimensions);
+            drawProp(L"Orientation:", pProps->orientation);
             drawProp(L"Bit Depth:", pProps->bitDepth);
             drawProp(L"DPI:", pProps->dpi);
 

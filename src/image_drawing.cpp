@@ -147,7 +147,7 @@ void ViewerApp::DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
 
     std::wstring osdText;
     osdText += L"Image Format: " + props.imageFormat + L"\n";
-    osdText += L"Dimensions: " + props.dimensions + L"\n";
+    osdText += L"Dimensions: " + props.dimensions + L"   Orientation: " + props.orientation + L"\n";
     osdText += L"Bit Depth: " + props.bitDepth + L"\n";
     osdText += L"DPI: " + props.dpi + L"\n";
     osdText += L"\n";

@@ -90,6 +90,19 @@ std::wstring GetMetadataString(IWICMetadataQueryReader* pReader, const wchar_t* 
         default: val = L"Other"; break;
         }
     }
+    else if (wcscmp(query, L"/app1/ifd/{ushort=274}") == 0 && propValue.vt == VT_UI2) {
+        switch (propValue.uiVal) {
+        case 1: val = L"Normal"; break;
+        case 2: val = L"Flipped Horizontal"; break;
+        case 3: val = L"Rotated 180"; break;
+        case 4: val = L"Flipped Vertical"; break;
+        case 5: val = L"Transpose"; break;
+        case 6: val = L"Rotated 90 CW"; break;
+        case 7: val = L"Transverse"; break;
+        case 8: val = L"Rotated 90 CCW"; break;
+        default: val = L"Unknown"; break;
+        }
+    }
     else if (SUCCEEDED(PropVariantToString(propValue, buffer, 256))) {
         val = buffer;
     }

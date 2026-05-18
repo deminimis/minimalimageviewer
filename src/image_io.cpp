@@ -580,7 +580,20 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         m_ctx.stagedDelays.clear();
         m_ctx.stagedSvgData.clear();
         m_ctx.isLoading = false;
-        if (!m_ctx.isSvg) m_ctx.currentOrientation = m_ctx.stagedOrientation;
+
+        if (!m_ctx.isSvg) {
+            m_ctx.currentOrientation = m_ctx.stagedOrientation;
+            // Apply EXIF auto-rotation 
+            switch (m_ctx.currentOrientation) {
+            case 2: m_ctx.isFlippedHorizontal = true; break;
+            case 3: m_ctx.rotationAngle = 180; break;
+            case 4: m_ctx.rotationAngle = 180; m_ctx.isFlippedHorizontal = true; break;
+            case 5: m_ctx.rotationAngle = 270; m_ctx.isFlippedHorizontal = true; break;
+            case 6: m_ctx.rotationAngle = 90; break;
+            case 7: m_ctx.rotationAngle = 90; m_ctx.isFlippedHorizontal = true; break;
+            case 8: m_ctx.rotationAngle = 270; break;
+            }
+        }
 
         if (m_ctx.enableFadeAnimation) {
             m_ctx.isFading = true;

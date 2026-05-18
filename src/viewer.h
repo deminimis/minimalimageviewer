@@ -115,6 +115,7 @@ public:
     std::wstring imageFormat = L"N/A";
     std::wstring bitDepth = L"N/A";
     std::wstring dpi = L"N/A";
+    std::wstring orientation = L"N/A";
     std::wstring cameraMake = L"N/A";
     std::wstring cameraModel = L"N/A";
     std::wstring dateTaken = L"N/A";
@@ -146,6 +147,12 @@ struct AppContext {
     int pendingNavIndex = -1;
     ComPtr<IWICFormatConverter> wicConverter = nullptr;
     ComPtr<IWICFormatConverter> wicConverterOriginal = nullptr;
+    ComPtr<IWICBitmapSource> highResSource = nullptr;
+    ComPtr<IWICBitmapSource> stagedHighResSource = nullptr;
+    UINT originalWidth = 0;
+    UINT originalHeight = 0;
+    bool isDownscaled = false;
+    float downscaleRatio = 1.0f;
     std::vector<ComPtr<IWICFormatConverter>> undoStack;
     ComPtr<IDWriteTextFormat> textFormat = nullptr;
     ComPtr<ID2D1SolidColorBrush> textBrush = nullptr;
