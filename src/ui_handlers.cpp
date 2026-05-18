@@ -562,6 +562,13 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
                     });
             }
         }
+        else if (wParam == NAV_DEBOUNCE_TIMER_ID) {
+            KillTimer(m_ctx.hWnd, NAV_DEBOUNCE_TIMER_ID);
+            if (m_ctx.pendingNavIndex != -1 && m_ctx.pendingNavIndex < m_ctx.imageFiles.size()) {
+                LoadImageFromFile(m_ctx.imageFiles[m_ctx.pendingNavIndex].c_str(), m_ctx.startAtEnd);
+                m_ctx.pendingNavIndex = -1;
+            }
+        }
         else if (wParam == AUTO_REFRESH_TIMER_ID) {
             if (m_ctx.isAutoRefresh && !m_ctx.isLoading && !m_ctx.imageFiles.empty() && m_ctx.currentImageIndex >= 0) {
                 const std::wstring& currentFile = m_ctx.imageFiles[m_ctx.currentImageIndex];
@@ -849,3 +856,4 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
     }
     return 0;
 }
+
