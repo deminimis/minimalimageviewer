@@ -150,6 +150,9 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
 
+    // Flush  working set to drop idle RAM 
+    SetProcessWorkingSetSize(GetCurrentProcess(), (SIZE_T)-1, (SIZE_T)-1);
+
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
         TranslateMessage(&msg);

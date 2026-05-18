@@ -33,17 +33,16 @@ void ViewerApp::CreateDeviceResources() {
         UINT height = std::max(1L, rc.bottom - rc.top);
         D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3 };
         ComPtr<ID3D11Device> d3dDevice;
-        // Try gpu
-        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
+        // Try gpu - single threaded
+        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
         // Fallback to software emulation
         if (FAILED(hr)) {
-            hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
+            hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
         }
 
         if (FAILED(hr)) {
             return;
         }
-        D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, 0, D3D11_CREATE_DEVICE_BGRA_SUPPORT, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &d3dDevice, nullptr, nullptr);
 
         ComPtr<IDXGIDevice> dxgiDevice;
         if (d3dDevice) {
@@ -124,7 +123,9 @@ void ViewerApp::CreateDeviceResources() {
         }
     }
     else {
-        if (m_ctx.checkerboardBrush) { m_ctx.checkerboardBrush = nullptr; }
+        if (m_ctx.checkerboardBrush) {
+            m_ctx.checkerboardBrush = nullptr;
+        }
     }
 }
 
