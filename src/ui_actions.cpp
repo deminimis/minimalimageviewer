@@ -62,7 +62,7 @@ void ViewerApp::HandleDropFiles(HDROP hDrop) {
 void ViewerApp::HandleCopy() {
     if (OpenClipboard(m_ctx.hWnd)) {
         EmptyClipboard();
-        // Copy as CF_HDROP
+        // Copy as CF_HDROP (File Path Only)
         if (!m_ctx.loadingFilePath.empty() && m_ctx.loadingFilePath != L"Clipboard Image") {
             size_t size = (m_ctx.loadingFilePath.length() + 1) * sizeof(wchar_t);
             HGLOBAL hMemDrop = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + size + sizeof(wchar_t));
@@ -82,81 +82,6 @@ void ViewerApp::HandleCopy() {
                 }
                 else {
                     GlobalFree(hMemDrop);
-                }
-            }
-        }
-
-        // Copy as CF_DIB 
-        ComPtr<IWICBitmapSource> source;
-        int rotAngle = 0;
-        bool flipped = false;
-
-        {
-            CriticalSectionLock lock(m_ctx.wicMutex);
-            source = m_ctx.wicConverter;
-            rotAngle = m_ctx.rotationAngle;
-            flipped = m_ctx.isFlippedHorizontal;
-        }
-
-        if (source && m_ctx.wicFactory) {
-            // Apply rotation/flip so the clipboard matches the current view
-            if (rotAngle != 0 || flipped) {
-                ComPtr<IWICBitmapFlipRotator> rotator;
-                if (SUCCEEDED(m_ctx.wicFactory->CreateBitmapFlipRotator(&rotator))) {
-                    WICBitmapTransformOptions options = WICBitmapTransformRotate0;
-                    switch (rotAngle) {
-                    case 90:  options = WICBitmapTransformRotate90;
-                        break;
-                    case 180: options = WICBitmapTransformRotate180; break;
-                    case 270: options = WICBitmapTransformRotate270; break;
-                    }
-                    if (flipped) {
-                        options = static_cast<WICBitmapTransformOptions>(options | WICBitmapTransformFlipHorizontal);
-                    }
-                    if (SUCCEEDED(rotator->Initialize(source.Get(), options))) {
-                        source = rotator;
-                    }
-                }
-            }
-
-            // Convert to 32bpp BGRA for DIB
-            ComPtr<IWICFormatConverter> converter;
-            if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
-                if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-                    UINT width = 0, height = 0;
-                    if (SUCCEEDED(converter->GetSize(&width, &height))) {
-                        UINT stride = width * 4;
-                        UINT cbImage = stride * height;
-                        UINT cbHeader = sizeof(BITMAPINFOHEADER);
-                        UINT cbTotal = cbHeader + cbImage;
-                        HGLOBAL hMemDib = GlobalAlloc(GMEM_MOVEABLE, cbTotal);
-                        if (hMemDib) {
-                            BYTE* pData = static_cast<BYTE*>(GlobalLock(hMemDib));
-                            if (pData) {
-                                BITMAPINFOHEADER* bmi = reinterpret_cast<BITMAPINFOHEADER*>(pData);
-                                ZeroMemory(bmi, sizeof(BITMAPINFOHEADER));
-                                bmi->biSize = sizeof(BITMAPINFOHEADER);
-                                bmi->biWidth = width;
-                                bmi->biHeight = -(LONG)height;
-                                bmi->biPlanes = 1;
-                                bmi->biBitCount = 32;
-                                bmi->biCompression = BI_RGB;
-                                BYTE* pPixels = pData + cbHeader;
-                                WICRect rc = { 0, 0, (INT)width, (INT)height };
-                                if (SUCCEEDED(converter->CopyPixels(&rc, stride, cbImage, pPixels))) {
-                                    GlobalUnlock(hMemDib);
-                                    SetClipboardData(CF_DIB, hMemDib);
-                                }
-                                else {
-                                    GlobalUnlock(hMemDib);
-                                    GlobalFree(hMemDib);
-                                }
-                            }
-                            else {
-                                GlobalFree(hMemDib);
-                            }
-                        }
-                    }
                 }
             }
         }
