@@ -73,7 +73,8 @@ constexpr UINT OCR_MESSAGE_TIMER_ID = 2;
 constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 constexpr UINT LOADING_TIMER_ID = 4;
 constexpr UINT HQ_RENDER_TIMER_ID = 5;
-constexpr UINT KEYBINDING_TIMER_ID = 6;
+constexpr UINT NAV_DEBOUNCE_TIMER_ID = 6;
+constexpr UINT KEYBINDING_TIMER_ID = 7;
 
 class CriticalSectionLock {
 public:
@@ -156,6 +157,7 @@ struct AppContext {
     ComPtr<ID2D1Bitmap> d2dBitmapHq = nullptr;
     float hqZoomFactor = 1.0f;
     bool isHqPending = false;
+    int pendingNavIndex = -1;
     ComPtr<IWICFormatConverter> wicConverter = nullptr;
     ComPtr<IWICFormatConverter> wicConverterOriginal = nullptr;
     std::vector<ComPtr<IWICFormatConverter>> undoStack;
@@ -331,7 +333,6 @@ public:
     void OnImageReady(bool success, int seqId);
     void OnDirReady(int seqId);
     void CleanupLoadingThread();
-    void ClearCurrentImageDisplayState();
     void CleanupPreloadingThreads();
     void StartPreloading();
     std::vector<std::wstring> ScanDirectory(const std::wstring& directoryPath, int seqId);
