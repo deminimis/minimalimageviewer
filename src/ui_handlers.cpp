@@ -361,7 +361,20 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             prcNewWindow->bottom - prcNewWindow->top,
             SWP_NOZORDER | SWP_NOACTIVATE);
 
-        DiscardDeviceResources(); // recreate text/brush at new dpi. 
+        // Update the DPI-dependent text format instead of dropping all device resources
+        if (m_ctx.writeFactory) {
+            float dpiScale = HIWORD(wParam) / 96.0f;
+            m_ctx.textFormat = nullptr;
+
+            if (SUCCEEDED(m_ctx.writeFactory->CreateTextFormat(
+                L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL, 14.0f * dpiScale, L"en-us", &m_ctx.textFormat)))
+            {
+                m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+                m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            }
+        }
+
         InvalidateRect(hWnd, nullptr, FALSE);
         return 0;
     }
