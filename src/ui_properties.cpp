@@ -4,6 +4,7 @@
 #include <string>
 #include <stdio.h>
 #include <memory>
+#include <commctrl.h>
 
 
 
@@ -126,62 +127,84 @@ LRESULT CALLBACK ViewerApp::PropsWndProc(HWND hWnd, UINT message, WPARAM wParam,
         LPCREATESTRUCT pcs = reinterpret_cast<LPCREATESTRUCT>(lParam);
         PropsWndData* pData = reinterpret_cast<PropsWndData*>(pcs->lpCreateParams);
         SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pData));
-        break;
-    }
-    case WM_PAINT: {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hWnd, &ps);
-        PropsWndData* pData = reinterpret_cast<PropsWndData*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+
+        // Create the ListView control
+        HWND hListView = CreateWindowExW(
+            0, WC_LISTVIEWW, L"",
+            WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL,
+            0, 0, 0, 0,
+            hWnd, (HMENU)1, pcs->hInstance, nullptr
+        );
+
+        // Set extended list view styles
+        ListView_SetExtendedListViewStyle(hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER);
+
+        // Add columns
+        LVCOLUMNW lvc = { 0 };
+        lvc.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_SUBITEM;
+        lvc.cx = 150;
+        lvc.pszText = const_cast<LPWSTR>(L"Property");
+        ListView_InsertColumn(hListView, 0, &lvc);
+
+        lvc.cx = 400;
+        lvc.pszText = const_cast<LPWSTR>(L"Value");
+        ListView_InsertColumn(hListView, 1, &lvc);
+
+        // Populate data
         if (pData && pData->pProps) {
             ImageProperties* pProps = pData->pProps.get();
-            SetBkMode(hdc, TRANSPARENT);
-            HFONT hFont = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-            SelectObject(hdc, hFont);
+            int row = 0;
 
-            int y = 15;
-            int x_label = 15;
-            int x_value = 160;
-            int y_step = 20;
-            auto drawProp = [&](const wchar_t* label, const std::wstring& val, bool extraSpace = false) {
-                if (extraSpace) y += y_step / 2;
-                TextOutW(hdc, x_label, y, label, static_cast<int>(wcslen(label)));
-                TextOutW(hdc, x_value, y, val.c_str(), static_cast<int>(val.length()));
-                y += y_step;
+            auto addRow = [&](const wchar_t* prop, const std::wstring& val) {
+                if (val.empty() || val == L"N/A") return; 
+
+                LVITEMW lvi = { 0 };
+                lvi.mask = LVIF_TEXT;
+                lvi.iItem = row;
+                lvi.iSubItem = 0;
+                lvi.pszText = const_cast<LPWSTR>(prop);
+                ListView_InsertItem(hListView, &lvi);
+
+                ListView_SetItemText(hListView, row, 1, const_cast<LPWSTR>(val.c_str()));
+                row++;
                 };
 
-            drawProp(L"File Path:", pProps->filePath);
-            drawProp(L"Image Format:", pProps->imageFormat, true);
-            drawProp(L"Dimensions:", pProps->dimensions);
-            drawProp(L"Orientation:", pProps->orientation);
-            drawProp(L"Bit Depth:", pProps->bitDepth);
-            drawProp(L"DPI:", pProps->dpi);
-
-            drawProp(L"File Size:", pProps->fileSize, true);
-            drawProp(L"Attributes:", pProps->attributes);
-            drawProp(L"Created:", pProps->createdDate);
-            drawProp(L"Modified:", pProps->modifiedDate);
-            drawProp(L"Accessed:", pProps->accessedDate);
-
-            drawProp(L"Camera Make:", pProps->cameraMake, true);
-            drawProp(L"Camera Model:", pProps->cameraModel);
-            drawProp(L"Date Taken:", pProps->dateTaken);
-            drawProp(L"F-stop:", pProps->fStop);
-            drawProp(L"Exposure:", pProps->exposureTime);
-            drawProp(L"ISO:", pProps->iso);
-            drawProp(L"Focal Length:", pProps->focalLength);
-            drawProp(L"35mm Focal Length:", pProps->focalLength35mm);
-            drawProp(L"Exposure Bias:", pProps->exposureBias);
-            drawProp(L"Exposure Program:", pProps->exposureProgram);
-            drawProp(L"White Balance:", pProps->whiteBalance);
-            drawProp(L"Metering Mode:", pProps->meteringMode);
-            drawProp(L"Flash:", pProps->flash);
-            drawProp(L"Lens Model:", pProps->lensModel);
-
-            drawProp(L"Author:", pProps->author, true);
-            drawProp(L"Copyright:", pProps->copyright);
-            drawProp(L"Software:", pProps->software);
+            addRow(L"File Path", pProps->filePath);
+            addRow(L"Image Format", pProps->imageFormat);
+            addRow(L"Dimensions", pProps->dimensions);
+            addRow(L"Orientation", pProps->orientation);
+            addRow(L"Bit Depth", pProps->bitDepth);
+            addRow(L"DPI", pProps->dpi);
+            addRow(L"File Size", pProps->fileSize);
+            addRow(L"Attributes", pProps->attributes);
+            addRow(L"Created", pProps->createdDate);
+            addRow(L"Modified", pProps->modifiedDate);
+            addRow(L"Accessed", pProps->accessedDate);
+            addRow(L"Camera Make", pProps->cameraMake);
+            addRow(L"Camera Model", pProps->cameraModel);
+            addRow(L"Date Taken", pProps->dateTaken);
+            addRow(L"F-stop", pProps->fStop);
+            addRow(L"Exposure", pProps->exposureTime);
+            addRow(L"ISO", pProps->iso);
+            addRow(L"Focal Length", pProps->focalLength);
+            addRow(L"35mm Focal Length", pProps->focalLength35mm);
+            addRow(L"Exposure Bias", pProps->exposureBias);
+            addRow(L"Exposure Program", pProps->exposureProgram);
+            addRow(L"White Balance", pProps->whiteBalance);
+            addRow(L"Metering Mode", pProps->meteringMode);
+            addRow(L"Flash", pProps->flash);
+            addRow(L"Lens Model", pProps->lensModel);
+            addRow(L"Author", pProps->author);
+            addRow(L"Copyright", pProps->copyright);
+            addRow(L"Software", pProps->software);
         }
-        EndPaint(hWnd, &ps);
+        break;
+    }
+    case WM_SIZE: {
+        HWND hListView = GetDlgItem(hWnd, 1);
+        if (hListView) {
+            MoveWindow(hListView, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+        }
         break;
     }
     case WM_CLOSE:
