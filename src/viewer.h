@@ -32,7 +32,7 @@
 #include <d2d1effects.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
-#include <thread>
+#include <mutex>
 #include <atomic>
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
@@ -66,19 +66,6 @@ constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 constexpr UINT LOADING_TIMER_ID = 4;
 constexpr UINT NAV_DEBOUNCE_TIMER_ID = 6;
 constexpr UINT KEYBINDING_TIMER_ID = 7;
-class CriticalSectionLock {
-public:
-    CriticalSectionLock(CRITICAL_SECTION& cs) : m_cs(cs) {
-        EnterCriticalSection(&m_cs);
-    }
-    ~CriticalSectionLock() {
-        LeaveCriticalSection(&m_cs);
-    }
-private:
-    CriticalSectionLock(const CriticalSectionLock&) = delete;
-    CriticalSectionLock& operator=(const CriticalSectionLock&) = delete;
-    CRITICAL_SECTION& m_cs;
-};
 
 enum class BackgroundColor {
     Grey = 0,
@@ -187,7 +174,7 @@ struct AppContext {
     // Loading State
     std::atomic<bool> isLoading{ false };
     std::atomic<int> loadSequenceId{ 0 };
-    CRITICAL_SECTION wicMutex{};
+    std::recursive_mutex wicMutex{};
     ULONGLONG loadStartTime = 0;
 
     std::wstring loadingFilePath;
@@ -221,7 +208,7 @@ struct AppContext {
     UINT preloadedNextOrientation = 1;
     UINT preloadedPrevOrientation = 1;
     std::atomic<bool> cancelPreloading{ false };
-    CRITICAL_SECTION preloadMutex{};
+    std::recursive_mutex preloadMutex{};
 
     HWND hPropsWnd = nullptr;
 
@@ -266,16 +253,31 @@ struct AppContext {
     template <typename Func>
     void RunBackgroundTask(Func&& task) {
         activeBackgroundThreads++;
-        std::thread([this, t = std::forward<Func>(task)]() mutable {
-            struct Tracker {
-                AppContext* ctx;
-                ~Tracker() { ctx->activeBackgroundThreads--; }
-            } tracker{ this };
 
+        // Wrap for hutdown checks
+        auto wrapper = [this, t = std::forward<Func>(task)]() mutable {
             if (!isShuttingDown) {
                 t();
             }
-            }).detach();
+            activeBackgroundThreads--;
+            };
+
+        using WrapperType = decltype(wrapper);
+        auto* pTask = new WrapperType(std::move(wrapper));
+
+        // Callback for Thread Pool API
+        auto callback = [](PTP_CALLBACK_INSTANCE, PVOID context) {
+            auto* pFunc = static_cast<WrapperType*>(context);
+            (*pFunc)();
+            delete pFunc;
+            };
+
+        // Windows Thread Pool
+        if (!TrySubmitThreadpoolCallback(callback, pTask, nullptr)) {
+            // Fallback 
+            delete pTask;
+            activeBackgroundThreads--;
+        }
     }
 };
 

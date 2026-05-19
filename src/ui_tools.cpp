@@ -17,7 +17,7 @@ void ViewerApp::UpdateWindowTitle() {
 
 void ViewerApp::UpdateViewToCurrentFrame() {
     {
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         if (m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
             m_ctx.wicConverterOriginal = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
         }

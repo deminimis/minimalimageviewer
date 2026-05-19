@@ -22,7 +22,7 @@ HRESULT ViewerApp::EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std
 }
 
 void ViewerApp::CommitCrop() {
-    CriticalSectionLock lock(m_ctx.wicMutex);
+   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
     if (!m_ctx.isCropActive || !m_ctx.wicConverterOriginal) {
         m_ctx.isCropActive = false;
         return;
@@ -65,7 +65,7 @@ void ViewerApp::CommitCrop() {
 void ViewerApp::ApplyEffectsToView() {
     ComPtr<IWICBitmapSource> source;
     {
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         if (!m_ctx.wicConverterOriginal) {
             m_ctx.wicConverter = nullptr;
             return;
@@ -112,7 +112,7 @@ void ViewerApp::ApplyEffectsToView() {
     ComPtr<IWICFormatConverter> converter;
     if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
         if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             m_ctx.wicConverter = converter;
             m_ctx.d2dBitmap = nullptr;
             m_ctx.animationD2DBitmaps.clear();
@@ -157,7 +157,7 @@ ComPtr<IWICBitmapSource> ViewerApp::ApplyCropAndTransform(ComPtr<IWICBitmapSourc
 }
 
 ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
-    CriticalSectionLock lock(m_ctx.wicMutex);
+   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
     ComPtr<IWICBitmapSource> source;
 
     if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
@@ -263,7 +263,7 @@ void ViewerApp::SaveImage() {
 
     GUID containerFormat{};
     {
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         containerFormat = m_ctx.originalContainerFormat;
     }
 
@@ -299,7 +299,7 @@ void ViewerApp::SaveImage() {
 void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& containerFormat, UINT newWidth, UINT newHeight) {
     ComPtr<IWICBitmapSource> source;
     {
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
             source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
         }
@@ -440,7 +440,7 @@ void ViewerApp::ResizeImageAction() {
 
         GUID originalFormat = GUID_NULL;
         {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             originalFormat = m_ctx.originalContainerFormat;
         }
 

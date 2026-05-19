@@ -61,7 +61,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
     m_ctx.startAtEnd = startAtEnd;
 
     {
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         
         // Keep current image resources alive for flicker-free loading    
         m_ctx.undoStack.clear();
@@ -112,7 +112,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
 
         const wchar_t* ext = PathFindExtensionW(filePath.c_str());
         if (ext && _wcsicmp(ext, L".svg") == 0) {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             m_ctx.stagedSvgData = std::move(rawData);
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
             CoUninitialize();
@@ -123,7 +123,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         GUID containerFormat = {};
         UINT exifOrientation = 1;
         {
-            CriticalSectionLock lock(m_ctx.preloadMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.preloadMutex);
             if (filePath == m_ctx.preloadedNextPath && m_ctx.preloadedNextConverter) {
                 preloadedConverter = m_ctx.preloadedNextConverter;
                 containerFormat = m_ctx.preloadedNextFormat;
@@ -141,7 +141,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             if (SUCCEEDED(preloadedConverter->GetSize(&width, &height))) {
                 std::vector<BYTE> pixels(width * height * 4);
                 if (SUCCEEDED(preloadedConverter->CopyPixels(nullptr, width * 4, static_cast<UINT>(pixels.size()), pixels.data()))) {
-                    CriticalSectionLock lock(m_ctx.wicMutex);
+                   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
                     m_ctx.stagedFrames.push_back(std::move(pixels));
                     m_ctx.stagedDelays.push_back(100);
                     m_ctx.stagedWidth = width;
@@ -266,7 +266,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                             PropVariantClear(&propValue);
                         }
 
-                        CriticalSectionLock lock(m_ctx.wicMutex);
+                       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
                         m_ctx.stagedStaticConverter = d2dConverter;
                         m_ctx.stagedRawFileData = std::move(rawData); // Transfer memory ownership to context
                         m_ctx.stagedWicStream = stream; // Keep stream alive
@@ -439,7 +439,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         }
 
         {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             m_ctx.stagedFrames = std::move(allFramesPixels);
             m_ctx.stagedDelays = std::move(allFramesDelays);
 
@@ -533,7 +533,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
     if (m_ctx.loadSequenceId != seqId) return;
 
     if (success) {
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
 
         if (!m_ctx.stagedStaticConverter && m_ctx.stagedFrames.empty() && m_ctx.stagedSvgData.empty()) {
             m_ctx.isLoading = false;
@@ -678,7 +678,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         // Start background folder scan ONLY AFTER image is ready to display
         bool needsScan = false;
         {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             needsScan = m_ctx.imageFiles.empty();
         }
 
@@ -701,7 +701,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
                 foundIndex = (it != newFiles.end()) ? static_cast<int>(std::distance(newFiles.begin(), it)) : -1;
 
                 {
-                    CriticalSectionLock lock(m_ctx.wicMutex);
+                   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
                     m_ctx.stagedImageFiles = std::move(newFiles);
                     m_ctx.stagedFoundIndex = foundIndex;
                 }
@@ -716,7 +716,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
     }
     else {
         m_ctx.isLoading = false;
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         m_ctx.wicConverter = nullptr;
         m_ctx.wicConverterOriginal = nullptr;
         m_ctx.undoStack.clear();
@@ -729,7 +729,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
 void ViewerApp::OnDirReady(int seqId) {
     if (m_ctx.loadSequenceId != seqId) return;
     {
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         m_ctx.imageFiles = std::move(m_ctx.stagedImageFiles);
         m_ctx.currentImageIndex = m_ctx.stagedFoundIndex;
     }
@@ -742,7 +742,7 @@ void ViewerApp::FinalizeImageLoad(bool success, int foundIndex) {
     KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
 
     {
-        CriticalSectionLock lock(m_ctx.wicMutex);
+       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         m_ctx.d2dBitmap = nullptr;
         m_ctx.animationD2DBitmaps.clear();
         m_ctx.wicConverter = nullptr;
@@ -771,7 +771,7 @@ void ViewerApp::CleanupLoadingThread() {
 
 void ViewerApp::CleanupPreloadingThreads() {
     m_ctx.cancelPreloading = true;
-    CriticalSectionLock lock(m_ctx.preloadMutex);
+   std::lock_guard<std::recursive_mutex> lock(m_ctx.preloadMutex);
     m_ctx.preloadedNextConverter = nullptr;
     m_ctx.preloadedPrevConverter = nullptr;
     m_ctx.preloadedNextPath.clear();

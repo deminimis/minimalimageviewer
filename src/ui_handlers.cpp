@@ -115,7 +115,7 @@ void ViewerApp::HandleCommand(WORD cmd) {
         // Hardcoded fallbacks 
     case IDM_UNDO:
         if (!m_ctx.undoStack.empty()) {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             m_ctx.wicConverterOriginal = m_ctx.undoStack.back();
             m_ctx.undoStack.pop_back(); m_ctx.isCropActive = false; m_ctx.cropRectLocal = { 0 };
             ApplyEffectsToView(); FitImageToWindow(); InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
@@ -305,7 +305,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
 
     case WM_TIMER:
         if (wParam == ANIMATION_TIMER_ID) {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             if (m_ctx.isAnimated && !m_ctx.animationFrameDelays.empty()) {
 
                 UINT currentDelay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];

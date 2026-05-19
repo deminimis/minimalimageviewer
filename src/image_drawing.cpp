@@ -4,7 +4,7 @@
 
 
 bool ViewerApp::GetCurrentImageSize(UINT* width, UINT* height) {
-    CriticalSectionLock lock(m_ctx.wicMutex);
+   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
     if (m_ctx.isSvg && m_ctx.svgDocument) {
         D2D1_SIZE_F size = m_ctx.svgDocument->GetViewportSize();
         *width = static_cast<UINT>(size.width);
@@ -130,7 +130,7 @@ void ViewerApp::CreateDeviceResources() {
 }
 
 void ViewerApp::DiscardDeviceResources() {
-    CriticalSectionLock lock(m_ctx.wicMutex);
+   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
     m_ctx.renderTarget = nullptr;
     m_ctx.textBrush = nullptr;
     m_ctx.textFormat = nullptr;
@@ -251,7 +251,7 @@ void ViewerApp::Render() {
         bool hasImage = false;
 
         if (m_ctx.isAnimated) {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             if (m_ctx.animationD2DBitmaps.size() != m_ctx.animationFrameConverters.size()) {
                 m_ctx.animationD2DBitmaps.assign(m_ctx.animationFrameConverters.size(), nullptr);
                 m_ctx.d2dBitmap = nullptr;
@@ -284,7 +284,7 @@ void ViewerApp::Render() {
             hasImage = (bitmapToDraw != nullptr);
         }
         else if (!m_ctx.isSvg) {
-            CriticalSectionLock lock(m_ctx.wicMutex);
+           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             if (!m_ctx.d2dBitmap && m_ctx.wicConverter) {
                 ComPtr<IWICBitmapSource> source = m_ctx.wicConverter;
                 D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(

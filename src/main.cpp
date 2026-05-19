@@ -65,29 +65,20 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
-    InitializeCriticalSection(&m_ctx.wicMutex);
-    InitializeCriticalSection(&m_ctx.preloadMutex);
-
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&m_ctx.wicFactory)))) {
         MessageBoxW(nullptr, L"Failed to create WIC Imaging Factory.", L"Error", MB_OK | MB_ICONERROR);
-        DeleteCriticalSection(&m_ctx.wicMutex);
-        DeleteCriticalSection(&m_ctx.preloadMutex);
         CoUninitialize();
         return 1;
     }
 
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), (void**)&m_ctx.d2dFactory))) {
         MessageBoxW(nullptr, L"Failed to create Direct2D Factory.", L"Error", MB_OK | MB_ICONERROR);
-        DeleteCriticalSection(&m_ctx.wicMutex);
-        DeleteCriticalSection(&m_ctx.preloadMutex);
         CoUninitialize();
         return 1;
     }
 
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_ctx.writeFactory.GetAddressOf())))) {
         MessageBoxW(nullptr, L"Failed to create DirectWrite Factory.", L"Error", MB_OK | MB_ICONERROR);
-        DeleteCriticalSection(&m_ctx.wicMutex);
-        DeleteCriticalSection(&m_ctx.preloadMutex);
         CoUninitialize();
         return 1;
     }
@@ -122,11 +113,8 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
         x, y, w, h,
         nullptr, nullptr, hInstance, this
     );
-
     if (!m_ctx.hWnd) {
         MessageBoxW(nullptr, L"Failed to create window.", L"Error", MB_OK | MB_ICONERROR);
-        DeleteCriticalSection(&m_ctx.wicMutex);
-        DeleteCriticalSection(&m_ctx.preloadMutex);
         CoUninitialize();
         return 1;
     }
@@ -202,11 +190,9 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     m_ctx.d2dFactory = nullptr;
     m_ctx.wicFactory = nullptr;
 
-    DeleteCriticalSection(&m_ctx.wicMutex);
-    DeleteCriticalSection(&m_ctx.preloadMutex);
     CoUninitialize();
     return static_cast<int>(msg.wParam);
-}
+    }
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE, _In_ LPWSTR lpCmdLine, _In_ int nCmdShow) {
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);

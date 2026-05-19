@@ -32,7 +32,7 @@ void ViewerApp::DeleteCurrentImage() {
         if (m_ctx.imageFiles.empty()) {
             m_ctx.currentImageIndex = -1;
             {
-                CriticalSectionLock lock(m_ctx.wicMutex);
+               std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
                 m_ctx.wicConverter = nullptr;
                 m_ctx.wicConverterOriginal = nullptr;
                 m_ctx.undoStack.clear();
@@ -104,7 +104,7 @@ void ViewerApp::HandlePaste() {
         else if (IsClipboardFormatAvailable(CF_BITMAP) || IsClipboardFormatAvailable(CF_DIB)) {
             HBITMAP hBitmap = static_cast<HBITMAP>(GetClipboardData(CF_BITMAP));
             if (hBitmap) {
-                CriticalSectionLock lock(m_ctx.wicMutex);
+               std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
                 ComPtr<IWICBitmap> wicBitmap;
                 HRESULT hr = m_ctx.wicFactory->CreateBitmapFromHBITMAP(hBitmap, NULL, WICBitmapUseAlpha, &wicBitmap);
 
