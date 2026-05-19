@@ -9,19 +9,13 @@
 
 
 static std::wstring FormatFileTime(const FILETIME& ft) {
-    SYSTEMTIME stUTC = {}, stLocal = {};
-    if (!FileTimeToSystemTime(&ft, &stUTC)) {
-        return L"N/A";
-    }
-    if (!SystemTimeToTzSpecificLocalTime(nullptr, &stUTC, &stLocal)) {
-        return L"N/A";
-    }
+    wchar_t szDateTime[256];
+    DWORD flags = FDTF_DEFAULT;
 
-    wchar_t szDate[256], szTime[256], szDateTime[512];
-    GetDateFormatW(LOCALE_USER_DEFAULT, 0, &stLocal, nullptr, szDate, 256);
-    GetTimeFormatW(LOCALE_USER_DEFAULT, 0, &stLocal, nullptr, szTime, 256);
-    swprintf_s(szDateTime, 512, L"%s  %s", szDate, szTime);
-    return szDateTime;
+    if (SHFormatDateTimeW(&ft, &flags, szDateTime, ARRAYSIZE(szDateTime)) > 0) {
+        return szDateTime;
+    }
+    return L"N/A";
 }
 
 static std::wstring FormatFileSize(const LARGE_INTEGER& fileSize) {
@@ -67,7 +61,7 @@ ImageProperties ViewerApp::GetCurrentOsdProperties() {
     if (SUCCEEDED(CreateDecoderFromFile(pProps.filePath.c_str(), &decoder))) {
         GUID fmt;
         if (SUCCEEDED(decoder->GetContainerFormat(&fmt))) {
-            pProps.imageFormat = GetContainerFormatName(fmt) + (m_ctx.isAnimated ? L" (Animated)" : L"");
+            pProps.imageFormat = GetContainerFormatName(fmt, m_ctx.wicFactory.Get()) + (m_ctx.isAnimated ? L" (Animated)" : L"");
         }
         ComPtr<IWICBitmapFrameDecode> frame;
         if (SUCCEEDED(decoder->GetFrame(0, &frame))) {

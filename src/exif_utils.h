@@ -5,5 +5,5 @@
 #include <propkey.h>
 
 std::wstring GetPropertyString(IPropertyStore* pStore, REFPROPERTYKEY key);
-std::wstring GetContainerFormatName(const GUID& guid);
+std::wstring GetContainerFormatName(const GUID& guid, IWICImagingFactory* wicFactory);
 std::wstring GetBitDepth(IWICBitmapFrameDecode* pFrame, IWICImagingFactory* wicFactory);

@@ -39,12 +39,9 @@ void ViewerApp::CommitCrop() {
         rc.Height = static_cast<INT>(ceil(m_ctx.cropRectLocal.bottom)) - rc.Y;
         if (rc.Width > 0 && rc.Height > 0) {
             if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
-                ComPtr<IWICFormatConverter> converter;
-                if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
-                    if (SUCCEEDED(converter->Initialize(clipper.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-
-                        m_ctx.undoStack.push_back(m_ctx.wicConverterOriginal);
-                        m_ctx.wicConverterOriginal = converter;
+                if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), clipper.Get())) {
+                    m_ctx.undoStack.push_back(m_ctx.wicConverterOriginal);
+                    m_ctx.wicConverterOriginal = converter;
                         m_ctx.isDownscaled = false; // Edits destroy high-res alignment
 
                         if (m_ctx.isAnimated) {
@@ -54,7 +51,7 @@ void ViewerApp::CommitCrop() {
                             KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
                         }
                     }
-                }
+                
             }
         }
     }
@@ -109,14 +106,11 @@ void ViewerApp::ApplyEffectsToView() {
         }
     }
 
-    ComPtr<IWICFormatConverter> converter;
-    if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
-        if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
-           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-            m_ctx.wicConverter = converter;
-            m_ctx.d2dBitmap = nullptr;
-            m_ctx.animationD2DBitmaps.clear();
-        }
+    if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), source.Get())) {
+        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+        m_ctx.wicConverter = converter;
+        m_ctx.d2dBitmap = nullptr;
+        m_ctx.animationD2DBitmaps.clear();
     }
 }
 
@@ -176,11 +170,8 @@ ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
     if (FAILED(source->GetPixelFormat(&sourcePixelFormat))) return nullptr;
 
     if (targetFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
-        ComPtr<IWICFormatConverter> converter;
-        if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
-            if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
-                source = converter;
-            }
+        if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapPaletteTypeMedianCut)) {
+            source = converter;
         }
     }
     return source;
@@ -332,11 +323,8 @@ void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& co
     WICPixelFormatGUID sourcePixelFormat{};
     if (SUCCEEDED(source->GetPixelFormat(&sourcePixelFormat))) {
         if (containerFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
-            ComPtr<IWICFormatConverter> converter;
-            if (SUCCEEDED(m_ctx.wicFactory->CreateFormatConverter(&converter))) {
-                if (SUCCEEDED(converter->Initialize(source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeMedianCut))) {
-                    source = converter;
-                }
+            if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapPaletteTypeMedianCut)) {
+                source = converter;
             }
         }
     }

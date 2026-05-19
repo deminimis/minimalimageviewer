@@ -27,16 +27,27 @@ std::wstring GetPropertyString(IPropertyStore* pStore, REFPROPERTYKEY key) {
     return val;
 }
 
-std::wstring GetContainerFormatName(const GUID& guid) {
-    if (guid == GUID_ContainerFormatPng) return L"PNG";
-    if (guid == GUID_ContainerFormatJpeg) return L"JPEG";
-    if (guid == GUID_ContainerFormatBmp) return L"BMP";
-    if (guid == GUID_ContainerFormatGif) return L"GIF";
-    if (guid == GUID_ContainerFormatTiff) return L"TIFF";
-    if (guid == GUID_ContainerFormatIco) return L"ICO";
-    if (guid == GUID_ContainerFormatWmp) return L"HD Photo / JPEG XR";
-    if (guid == GUID_ContainerFormatDds) return L"DDS";
-    if (guid == GUID_ContainerFormatHeif) return L"HEIF";
+std::wstring GetContainerFormatName(const GUID& guid, IWICImagingFactory* wicFactory) {
+    if (!wicFactory) return L"Unknown";
+
+    ComPtr<IWICComponentInfo> componentInfo;
+    if (FAILED(wicFactory->CreateComponentInfo(guid, &componentInfo))) {
+        return L"Unknown";
+    }
+
+    UINT cchActual = 0;
+    // Get buffer length
+    if (FAILED(componentInfo->GetFriendlyName(0, nullptr, &cchActual)) || cchActual == 0) {
+        return L"Unknown";
+    }
+
+    // Fetch name
+    std::wstring name(cchActual, L'\0');
+    if (SUCCEEDED(componentInfo->GetFriendlyName(cchActual, name.data(), &cchActual))) {
+        name.resize(cchActual > 0 ? cchActual - 1 : 0); 
+        return name;
+    }
+
     return L"Unknown";
 }
 

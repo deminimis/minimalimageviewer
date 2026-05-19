@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <shlwapi.h> 
 #include <filesystem>
+#include <propkey.h>
 
 
 
@@ -131,7 +132,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             if (SUCCEEDED(preloadedConverter->GetSize(&width, &height))) {
                 std::vector<BYTE> pixels(width * height * 4);
                 if (SUCCEEDED(preloadedConverter->CopyPixels(nullptr, width * 4, static_cast<UINT>(pixels.size()), pixels.data()))) {
-                   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+                    std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
                     m_ctx.stagedFrames.push_back(std::move(pixels));
                     m_ctx.stagedDelays.push_back(100);
                     m_ctx.stagedWidth = width;
@@ -144,6 +145,17 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     return;
                 }
             }
+        }
+
+        // Fetch EXIF Orientation natively via IPropertyStore
+        ComPtr<IPropertyStore> pStore;
+        if (SUCCEEDED(SHGetPropertyStoreFromParsingName(filePath.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&pStore)))) {
+            PROPVARIANT propValue;
+            PropVariantInit(&propValue);
+            if (SUCCEEDED(pStore->GetValue(PKEY_Photo_Orientation, &propValue)) && propValue.vt == VT_UI2) {
+                exifOrientation = propValue.uiVal;
+            }
+            PropVariantClear(&propValue);
         }
 
         ComPtr<IWICImagingFactory> localFactory;
@@ -237,40 +249,25 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     }
                 }
 
-                ComPtr<IWICFormatConverter> finalConverter;
-                if (SUCCEEDED(localFactory->CreateFormatConverter(&finalConverter))) {
-                    // Convert the image to 32bpp PBGRA
-                    if (SUCCEEDED(finalConverter->Initialize(sourceToCache.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+                if (ComPtr<IWICFormatConverter> finalConverter = ConvertToFormat(localFactory.Get(), sourceToCache.Get())) {
+                    // D2D decodes straight to gpu vram
+                    ComPtr<IWICFormatConverter> d2dConverter = finalConverter;
 
-                        // D2D decodes straight to gpu vram
-                        ComPtr<IWICFormatConverter> d2dConverter = finalConverter;
+                    std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+                    m_ctx.stagedStaticConverter = d2dConverter;
+                    m_ctx.stagedRawFileData = std::move(rawData); // Transfer memory ownership to context
+                    m_ctx.stagedWicStream = stream;
+                    // Keep stream alive
+                    m_ctx.stagedWidth = frameWidth;
+                    m_ctx.stagedHeight = frameHeight;
+                    m_ctx.originalContainerFormat = containerFormat;
+                    m_ctx.stagedOrientation = exifOrientation;
+                    m_ctx.isDownscaled = downscaled;
+                    m_ctx.downscaleRatio = ratio;
 
-                        UINT exifOrientation = 1;
-                        ComPtr<IWICMetadataQueryReader> metadataReader;
-                        if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
-                            PROPVARIANT propValue;
-                            PropVariantInit(&propValue);
-                            if (SUCCEEDED(metadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &propValue)) && propValue.vt == VT_UI2) {
-                                exifOrientation = propValue.uiVal;
-                            }
-                            PropVariantClear(&propValue);
-                        }
-
-                       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-                        m_ctx.stagedStaticConverter = d2dConverter;
-                        m_ctx.stagedRawFileData = std::move(rawData); // Transfer memory ownership to context
-                        m_ctx.stagedWicStream = stream; // Keep stream alive
-                        m_ctx.stagedWidth = frameWidth;
-                        m_ctx.stagedHeight = frameHeight;
-                        m_ctx.originalContainerFormat = containerFormat;
-                        m_ctx.stagedOrientation = exifOrientation;
-                        m_ctx.isDownscaled = downscaled;
-                        m_ctx.downscaleRatio = ratio;
-
-                        PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
-                        CoUninitialize();
-                        return;
-                    }
+                    PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                    CoUninitialize();
+                    return;
                 }
             }
         }
@@ -335,12 +332,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     if (propValue.vt == VT_UI2) top = propValue.uiVal;
                     PropVariantClear(&propValue);
                 }
-                if (i == 0) {
-                    if (SUCCEEDED(metadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &propValue))) {
-                        if (propValue.vt == VT_UI2) exifOrientation = propValue.uiVal;
-                        PropVariantClear(&propValue);
-                    }
-                }
             }
             if (delay < 20) delay = 100;
 
@@ -358,49 +349,44 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                 previousCompositeBuffer = compositeBuffer;
             }
 
-            ComPtr<IWICFormatConverter> converter;
-            if (SUCCEEDED(localFactory->CreateFormatConverter(&converter))) {
-                if (SUCCEEDED(converter->Initialize(frame.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom))) {
+            if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(localFactory.Get(), frame.Get())) {
+                UINT frameStride = frameWidth * 4;
+                UINT frameSize = frameStride * frameHeight;
+                std::vector<BYTE> framePixels(frameSize);
 
-                    UINT frameStride = frameWidth * 4;
-                    UINT frameSize = frameStride * frameHeight;
-                    std::vector<BYTE> framePixels(frameSize);
+                if (SUCCEEDED(converter->CopyPixels(nullptr, frameStride, frameSize, framePixels.data()))) {
+                    for (UINT y = 0; y < frameHeight; ++y) {
+                        if (top + y >= canvasHeight) break;
+                        BYTE* destRow = compositeBuffer.data() + (top + y) * canvasStride + (left * 4);
+                        BYTE* srcRow = framePixels.data() + y * frameStride;
 
-                    if (SUCCEEDED(converter->CopyPixels(nullptr, frameStride, frameSize, framePixels.data()))) {
-                        for (UINT y = 0; y < frameHeight; ++y) {
-                            if (top + y >= canvasHeight) break;
+                        for (UINT x = 0; x < frameWidth; ++x) {
+                            if (left + x >= canvasWidth) break;
+                            UINT dp = x * 4;
+                            UINT sp = x * 4;
 
-                            BYTE* destRow = compositeBuffer.data() + (top + y) * canvasStride + (left * 4);
-                            BYTE* srcRow = framePixels.data() + y * frameStride;
-
-                            for (UINT x = 0; x < frameWidth; ++x) {
-                                if (left + x >= canvasWidth) break;
-                                UINT dp = x * 4;
-                                UINT sp = x * 4;
-
-                                BYTE alpha = srcRow[sp + 3];
-                                if (alpha == 255) {
-                                    destRow[dp] = srcRow[sp];
-                                    destRow[dp + 1] = srcRow[sp + 1];
-                                    destRow[dp + 2] = srcRow[sp + 2];
-                                    destRow[dp + 3] = 255;
-                                }
-                                else if (alpha > 0) {
-                                    BYTE invAlpha = 255 - alpha;
-                                    destRow[dp] = srcRow[sp] + (destRow[dp] * invAlpha) / 255;
-                                    destRow[dp + 1] = srcRow[sp + 1] + (destRow[dp + 1] * invAlpha) / 255;
-                                    destRow[dp + 2] = srcRow[sp + 2] + (destRow[dp + 2] * invAlpha) / 255;
-                                    destRow[dp + 3] = alpha + (destRow[dp + 3] * invAlpha) / 255;
-                                }
+                            BYTE alpha = srcRow[sp + 3];
+                            if (alpha == 255) {
+                                destRow[dp] = srcRow[sp];
+                                destRow[dp + 1] = srcRow[sp + 1];
+                                destRow[dp + 2] = srcRow[sp + 2];
+                                destRow[dp + 3] = 255;
+                            }
+                            else if (alpha > 0) {
+                                BYTE invAlpha = 255 - alpha;
+                                destRow[dp] = srcRow[sp] + (destRow[dp] * invAlpha) / 255;
+                                destRow[dp + 1] = srcRow[sp + 1] + (destRow[dp + 1] * invAlpha) / 255;
+                                destRow[dp + 2] = srcRow[sp + 2] + (destRow[dp + 2] * invAlpha) / 255;
+                                destRow[dp + 3] = alpha + (destRow[dp + 3] * invAlpha) / 255;
                             }
                         }
-
-                        allFramesPixels.push_back(compositeBuffer);
                     }
-                }
-            }
 
-            // Apply disposal method for the NEXT frame
+                    allFramesPixels.push_back(compositeBuffer);
+                }
+            } 
+
+            // Apply disposal method for next frame
             if (disposal == 2) {
                 for (UINT y = 0; y < frameHeight; ++y) {
                     if (top + y >= canvasHeight) break;
@@ -429,7 +415,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         }
 
         {
-           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+            std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             m_ctx.stagedFrames = std::move(allFramesPixels);
             m_ctx.stagedDelays = std::move(allFramesDelays);
 
@@ -597,10 +583,9 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
                     &memoryBitmap
                 );
                 if (SUCCEEDED(hr)) {
-                    ComPtr<IWICFormatConverter> converter;
-                    m_ctx.wicFactory->CreateFormatConverter(&converter);
-                    converter->Initialize(memoryBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
-                    m_ctx.animationFrameConverters.push_back(converter);
+                    if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), memoryBitmap.Get())) {
+                        m_ctx.animationFrameConverters.push_back(converter);
+                    }
                 }
             }
 

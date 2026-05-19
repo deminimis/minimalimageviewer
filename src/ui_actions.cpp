@@ -109,40 +109,35 @@ void ViewerApp::HandlePaste() {
                 HRESULT hr = m_ctx.wicFactory->CreateBitmapFromHBITMAP(hBitmap, NULL, WICBitmapUseAlpha, &wicBitmap);
 
                 if (SUCCEEDED(hr)) {
-                    ComPtr<IWICFormatConverter> converter;
-                    hr = m_ctx.wicFactory->CreateFormatConverter(&converter);
+                    if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), wicBitmap.Get())) {
+                        // reset state for new pasted image
+                        m_ctx.wicConverter = converter;
+                        m_ctx.wicConverterOriginal = converter;
+                        m_ctx.d2dBitmap = nullptr;
+                        m_ctx.animationD2DBitmaps.clear();
+                        m_ctx.animationFrameConverters.clear();
+                        m_ctx.animationFrameDelays.clear();
+                        m_ctx.isAnimated = false;
+                        // clear file context
+                        m_ctx.imageFiles.clear();
+                        m_ctx.currentImageIndex = -1;
+                        m_ctx.currentDirectory = L"";
+                        m_ctx.loadingFilePath = L"Clipboard Image";
+                        m_ctx.originalContainerFormat = GUID_ContainerFormatPng;
 
-                    if (SUCCEEDED(hr)) {
-                        hr = converter->Initialize(wicBitmap.Get(), GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, nullptr, 0.f, WICBitmapPaletteTypeCustom);
-                        if (SUCCEEDED(hr)) {
-                            // reset state for new pasted image
-                            m_ctx.wicConverter = converter;
-                            m_ctx.wicConverterOriginal = converter;
-                            m_ctx.d2dBitmap = nullptr;
-                            m_ctx.animationD2DBitmaps.clear();
-                            m_ctx.animationFrameConverters.clear();
-                            m_ctx.animationFrameDelays.clear();
-                            m_ctx.isAnimated = false;
-                            // clear file context
-                            m_ctx.imageFiles.clear();
-                            m_ctx.currentImageIndex = -1;
-                            m_ctx.currentDirectory = L"";
-                            m_ctx.loadingFilePath = L"Clipboard Image";
-                            m_ctx.originalContainerFormat = GUID_ContainerFormatPng;
+                        m_ctx.zoomFactor = 1.0f;
+                        m_ctx.offsetX = 0;
+                        m_ctx.offsetY = 0;
 
-                            m_ctx.zoomFactor = 1.0f;
-                            m_ctx.offsetX = 0;
-                            m_ctx.offsetY = 0;
-
-                            // stop animations
-                            KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
-                            SetWindowTextW(m_ctx.hWnd, L"Clipboard Image");
-                            InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-                        }
+                        // stop animations
+                        KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+                        SetWindowTextW(m_ctx.hWnd, L"Clipboard Image");
+                        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
                     }
                 }
             }
-        }
+        } 
+
         CloseClipboard();
     }
 }

@@ -361,6 +361,21 @@ private:
     void DrawOsdOverlay(ID2D1DeviceContext* renderTarget);
 
     // Edit Helpers
+    inline ComPtr<IWICFormatConverter> ConvertToFormat(
+        IWICImagingFactory* pFactory,
+        IWICBitmapSource* pSource,
+        REFWICPixelFormatGUID format = GUID_WICPixelFormat32bppPBGRA,
+        WICBitmapPaletteType palette = WICBitmapPaletteTypeCustom)
+    {
+        ComPtr<IWICFormatConverter> pConverter;
+        if (SUCCEEDED(pFactory->CreateFormatConverter(&pConverter))) {
+            if (SUCCEEDED(pConverter->Initialize(pSource, format, WICBitmapDitherTypeNone, nullptr, 0.f, palette))) {
+                return pConverter;
+            }
+        }
+        return nullptr;
+    }
+
     HRESULT EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std::wstring& filePath, const GUID& containerFormat);
     ComPtr<IWICBitmapSource> GetSaveSource(const GUID& targetFormat);
     void SaveImageWithResize(const std::wstring& filePath, const GUID& containerFormat, UINT newWidth, UINT newHeight);
