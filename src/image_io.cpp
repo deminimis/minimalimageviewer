@@ -199,12 +199,46 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                 UINT frameWidth = 0, frameHeight = 0;
                 frame->GetSize(&frameWidth, &frameHeight);
 
-                UINT maxDim = 3840; // 4K max base to save RAM
+                UINT maxDim = 3840; // 4K max base 
                 ComPtr<IWICBitmapSource> sourceToCache = frame;
                 bool downscaled = false;
                 float ratio = 1.0f;
+                bool loadedPreview = false;
 
-                if (frameWidth > maxDim || frameHeight > maxDim) {
+                // Extract the embedded preview for raw/tiff
+                ComPtr<IWICBitmapSource> preview;
+                if (SUCCEEDED(decoder->GetPreview(&preview))) {
+                    UINT previewW = 0, previewH = 0;
+                    if (SUCCEEDED(preview->GetSize(&previewW, &previewH)) && previewW > 0 && previewH > 0) {
+                        sourceToCache = preview;
+                        loadedPreview = true;
+
+                        if (previewW < frameWidth || previewH < frameHeight) {
+                            downscaled = true;
+                            // Deep zoom when past preview's resolution
+                            ratio = std::min(static_cast<float>(previewW) / frameWidth, static_cast<float>(previewH) / frameHeight);
+                        }
+
+                        // Prevent memory spikes for massive previews
+                        if (previewW > maxDim || previewH > maxDim) {
+                            float prevRatio = std::min(static_cast<float>(maxDim) / previewW, static_cast<float>(maxDim) / previewH);
+                            UINT newW = static_cast<UINT>(previewW * prevRatio);
+                            UINT newH = static_cast<UINT>(previewH * prevRatio);
+
+                            ComPtr<IWICBitmapScaler> scaler;
+                            if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
+                                if (SUCCEEDED(scaler->Initialize(preview.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
+                                    sourceToCache = scaler;
+                                    downscaled = true;
+                                    ratio = std::min(static_cast<float>(newW) / frameWidth, static_cast<float>(newH) / frameHeight);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Standard load if no preview 
+                if (!loadedPreview && (frameWidth > maxDim || frameHeight > maxDim)) {
                     downscaled = true;
                     ratio = std::min(static_cast<float>(maxDim) / frameWidth, static_cast<float>(maxDim) / frameHeight);
                     UINT newW = static_cast<UINT>(frameWidth * ratio);
@@ -216,12 +250,11 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     if (SUCCEEDED(frame.As(&sourceTransform))) {
                         UINT actualWidth = newW, actualHeight = newH;
                         if (SUCCEEDED(sourceTransform->GetClosestSize(&actualWidth, &actualHeight))) {
-                            // Only proceed if the codec actually gave us an optimized size smaller than the original
+                            // Only proceed if codec smaller than original
                             if (actualWidth < frameWidth && actualHeight < frameHeight) {
                                 WICPixelFormatGUID closestFormat = GUID_WICPixelFormat32bppPBGRA;
                                 if (SUCCEEDED(sourceTransform->GetClosestPixelFormat(&closestFormat))) {
                                     ComPtr<IWICBitmap> fastBitmap;
-                                    // Allocate only the memory needed for the 4K frame
                                     if (SUCCEEDED(localFactory->CreateBitmap(actualWidth, actualHeight, closestFormat, WICBitmapCacheOnLoad, &fastBitmap))) {
                                         WICRect rc = { 0, 0, (INT)actualWidth, (INT)actualHeight };
                                         ComPtr<IWICBitmapLock> lock;
@@ -231,11 +264,9 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                                             lock->GetStride(&cbStride);
                                             lock->GetDataPointer(&cbBufferSize, &pbBuffer);
 
-                                            // Only decode the pixels needed for the smaller size
                                             if (SUCCEEDED(sourceTransform->CopyPixels(nullptr, actualWidth, actualHeight, &closestFormat, WICBitmapTransformRotate0, cbStride, cbBufferSize, pbBuffer))) {
                                                 sourceToCache = fastBitmap;
                                                 nativeScaled = true;
-                                                // Adjust ratio to match exact size 
                                                 ratio = std::min(static_cast<float>(actualWidth) / frameWidth, static_cast<float>(actualHeight) / frameHeight);
                                             }
                                         }
@@ -264,7 +295,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     m_ctx.stagedStaticConverter = d2dConverter;
                     m_ctx.stagedRawFileData = std::move(rawData); // Transfer memory ownership to context
                     m_ctx.stagedWicStream = stream;
-                    // Keep stream alive
                     m_ctx.stagedWidth = frameWidth;
                     m_ctx.stagedHeight = frameHeight;
                     m_ctx.originalContainerFormat = containerFormat;
