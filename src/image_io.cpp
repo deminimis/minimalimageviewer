@@ -7,17 +7,7 @@
 
 
 static bool IsImageFile(const wchar_t* filePath) {
-    const wchar_t* ext = PathFindExtensionW(filePath);
-    if (!ext) return false;
-    static const wchar_t* validExts[] = {
-        L".jpg", L".jpeg", L".png", L".bmp", L".gif", L".tiff", L".tif",
-        L".ico", L".webp", L".heic", L".heif", L".avif", L".cr2", L".cr3",
-        L".nef", L".dng", L".arw", L".orf", L".rw2", L".svg"
-    };
-    for (const auto& validExt : validExts) {
-        if (_wcsicmp(ext, validExt) == 0) return true;
-    }
-    return false;
+    return PathMatchSpecW(filePath, L"*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;*.svg") == TRUE;
 }
 
 bool ViewerApp::IsSequenceValid(int seqId) {
