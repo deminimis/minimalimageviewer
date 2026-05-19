@@ -42,13 +42,8 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     PathAppendW(exePath, L"minimal_image_viewer_settings.ini");
     m_ctx.settingsPath = exePath;
 
-    RECT startupRect;
-    ReadSettings(m_ctx.settingsPath, startupRect, m_ctx.startFullScreen, m_ctx.enforceSingleInstance, m_ctx.alwaysOnTop);
-
+    ReadSettings(m_ctx.settingsPath, m_ctx.windowPlacement, m_ctx.startFullScreen, m_ctx.enforceSingleInstance, m_ctx.alwaysOnTop);
     float sysDpiScale = GetDpiForSystem() / 96.0f;
-    if (IsRectEmpty(&startupRect)) {
-        startupRect = { CW_USEDEFAULT, CW_USEDEFAULT, static_cast<LONG>(800 * sysDpiScale), static_cast<LONG>(600 * sysDpiScale) };
-    }
 
     if (m_ctx.enforceSingleInstance) {
         HWND existingWnd = FindWindowW(L"MinimalImageViewer", nullptr);
@@ -108,14 +103,23 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     RegisterClassExW(&wcex);
 
     DWORD exStyle = (m_ctx.alwaysOnTop) ? WS_EX_TOPMOST : 0;
+    int x = CW_USEDEFAULT, y = CW_USEDEFAULT;
+    int w = static_cast<int>(800 * sysDpiScale);
+    int h = static_cast<int>(600 * sysDpiScale);
+
+    if (m_ctx.windowPlacement.rcNormalPosition.left != CW_USEDEFAULT) {
+        x = m_ctx.windowPlacement.rcNormalPosition.left;
+        y = m_ctx.windowPlacement.rcNormalPosition.top;
+        w = m_ctx.windowPlacement.rcNormalPosition.right - m_ctx.windowPlacement.rcNormalPosition.left;
+        h = m_ctx.windowPlacement.rcNormalPosition.bottom - m_ctx.windowPlacement.rcNormalPosition.top;
+    }
+
     m_ctx.hWnd = CreateWindowExW(
         exStyle,
         wcex.lpszClassName,
         L"Minimal Image Viewer",
         WS_OVERLAPPEDWINDOW,
-        startupRect.left, startupRect.top,
-        (startupRect.left == CW_USEDEFAULT) ? static_cast<int>(800 * sysDpiScale) : (startupRect.right - startupRect.left),
-        (startupRect.top == CW_USEDEFAULT) ? static_cast<int>(600 * sysDpiScale) : (startupRect.bottom - startupRect.top),
+        x, y, w, h,
         nullptr, nullptr, hInstance, this
     );
 
@@ -130,15 +134,20 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     DragAcceptFiles(m_ctx.hWnd, TRUE);
     UpdateTitleBarTheme(m_ctx.hWnd, m_ctx.bgColor);
 
-    m_ctx.isInitialized = true; 
+    m_ctx.isInitialized = true;
+
+    if (m_ctx.windowPlacement.rcNormalPosition.left != CW_USEDEFAULT) {
+        SetWindowPlacement(m_ctx.hWnd, &m_ctx.windowPlacement);
+    }
 
     if (m_ctx.startFullScreen) {
         ToggleFullScreen();
     }
+    else if (m_ctx.windowPlacement.rcNormalPosition.left == CW_USEDEFAULT) {
+        ShowWindow(m_ctx.hWnd, nCmdShow);
+    }
 
     Render();
-
-    ShowWindow(m_ctx.hWnd, nCmdShow);
     UpdateWindow(m_ctx.hWnd);
 
     if (lpCmdLine && *lpCmdLine) {

@@ -3,7 +3,7 @@
 
 
 
-void ViewerApp::ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop) {
+void ViewerApp::ReadSettings(const std::wstring& path, WINDOWPLACEMENT& wp, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop) {
     auto getInt = [&](LPCWSTR sec, LPCWSTR key, int def) { return GetPrivateProfileIntW(sec, key, def, path.c_str()); };
     fullscreen = getInt(L"Settings", L"StartFullScreen", 0) == 1;
     singleInstance = getInt(L"Settings", L"EnforceSingleInstance", 1) == 1;
@@ -18,21 +18,26 @@ void ViewerApp::ReadSettings(const std::wstring& path, RECT& rect, bool& fullscr
     int zoomChoice = getInt(L"Settings", L"DefaultZoomMode", 0);
     m_ctx.defaultZoomMode = static_cast<DefaultZoomMode>((zoomChoice < 0 || zoomChoice > 1) ? 0 : zoomChoice);
 
-    rect.left = getInt(L"Window", L"left", CW_USEDEFAULT);
-    rect.top = getInt(L"Window", L"top", CW_USEDEFAULT);
-    rect.right = getInt(L"Window", L"right", CW_USEDEFAULT);
-    rect.bottom = getInt(L"Window", L"bottom", CW_USEDEFAULT);
-    if (rect.left == CW_USEDEFAULT || rect.top == CW_USEDEFAULT || rect.right == CW_USEDEFAULT || rect.bottom == CW_USEDEFAULT) SetRectEmpty(&rect);
+    wp.length = sizeof(WINDOWPLACEMENT);
+    wp.flags = getInt(L"Window", L"flags", 0);
+    wp.showCmd = getInt(L"Window", L"showCmd", SW_SHOWNORMAL);
+    wp.ptMinPosition.x = getInt(L"Window", L"minX", -1);
+    wp.ptMinPosition.y = getInt(L"Window", L"minY", -1);
+    wp.ptMaxPosition.x = getInt(L"Window", L"maxX", -1);
+    wp.ptMaxPosition.y = getInt(L"Window", L"maxY", -1);
+    wp.rcNormalPosition.left = getInt(L"Window", L"normLeft", CW_USEDEFAULT);
+    wp.rcNormalPosition.top = getInt(L"Window", L"normTop", CW_USEDEFAULT);
+    wp.rcNormalPosition.right = getInt(L"Window", L"normRight", CW_USEDEFAULT);
+    wp.rcNormalPosition.bottom = getInt(L"Window", L"normBottom", CW_USEDEFAULT);
 
     const wchar_t* keyNames[Act_Count] = { L"Next", L"Prev", L"ZoomIn", L"ZoomOut", L"Fit", L"Actual", L"Fullscreen", L"RotateCW", L"RotateCCW", L"Flip", L"Crop", L"CustomZoom", L"Exit" };
     const WORD defaultKeys[Act_Count] = { VK_RIGHT, VK_LEFT, MAKEWORD(VK_ADD, HOTKEYF_CONTROL), MAKEWORD(VK_SUBTRACT, HOTKEYF_CONTROL), MAKEWORD('0', HOTKEYF_CONTROL), MAKEWORD(VK_MULTIPLY, HOTKEYF_CONTROL), VK_F11, VK_UP, VK_DOWN, 'F', 'C', MAKEWORD('Z', HOTKEYF_CONTROL | HOTKEYF_SHIFT), VK_ESCAPE };
-
     for (int i = 0; i < Act_Count; ++i) {
         m_ctx.hotkeys[i] = getInt(L"Keys", keyNames[i], defaultKeys[i]);
     }
 }
 
-void ViewerApp::WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop) {
+void ViewerApp::WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& wp, bool fullscreen, bool singleInstance, bool alwaysOnTop) {
     auto writeInt = [&](LPCWSTR section, LPCWSTR key, int val) {
         WritePrivateProfileStringW(section, key, std::to_wstring(val).c_str(), path.c_str());
         };
@@ -51,10 +56,17 @@ void ViewerApp::WriteSettings(const std::wstring& path, const RECT& rect, bool f
         writeInt(L"Keys", keyNames[i], m_ctx.hotkeys[i]);
     }
 
-    if (!IsRectEmpty(&rect) && !IsIconic(m_ctx.hWnd) && !IsZoomed(m_ctx.hWnd)) {
-        writeInt(L"Window", L"top", rect.top);
-        writeInt(L"Window", L"right", rect.right);
-        writeInt(L"Window", L"bottom", rect.bottom);
+    if (!IsIconic(m_ctx.hWnd) && wp.rcNormalPosition.left != CW_USEDEFAULT) {
+        writeInt(L"Window", L"flags", wp.flags);
+        writeInt(L"Window", L"showCmd", wp.showCmd);
+        writeInt(L"Window", L"minX", wp.ptMinPosition.x);
+        writeInt(L"Window", L"minY", wp.ptMinPosition.y);
+        writeInt(L"Window", L"maxX", wp.ptMaxPosition.x);
+        writeInt(L"Window", L"maxY", wp.ptMaxPosition.y);
+        writeInt(L"Window", L"normLeft", wp.rcNormalPosition.left);
+        writeInt(L"Window", L"normTop", wp.rcNormalPosition.top);
+        writeInt(L"Window", L"normRight", wp.rcNormalPosition.right);
+        writeInt(L"Window", L"normBottom", wp.rcNormalPosition.bottom);
     }
 }
 

@@ -543,9 +543,10 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             DestroyWindow(m_ctx.hPropsWnd);
         }
         if (!m_ctx.isFullScreen) {
-            GetWindowRect(m_ctx.hWnd, &m_ctx.savedRect);
+            m_ctx.windowPlacement.length = sizeof(WINDOWPLACEMENT);
+            GetWindowPlacement(m_ctx.hWnd, &m_ctx.windowPlacement);
         }
-        WriteSettings(m_ctx.settingsPath, m_ctx.savedRect, m_ctx.startFullScreen, m_ctx.enforceSingleInstance, m_ctx.alwaysOnTop);
+        WriteSettings(m_ctx.settingsPath, m_ctx.windowPlacement, m_ctx.startFullScreen, m_ctx.enforceSingleInstance, m_ctx.alwaysOnTop);
         CleanupLoadingThread();
         DiscardDeviceResources();
         PostQuitMessage(0);

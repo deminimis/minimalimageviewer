@@ -169,7 +169,7 @@ struct AppContext {
     float offsetY = 0.0f;
     bool isFullScreen = false;
     LONG savedStyle = 0;
-    RECT savedRect = { 0 };
+    WINDOWPLACEMENT windowPlacement = { sizeof(WINDOWPLACEMENT) };
     std::wstring currentFilePathOverride;
     UINT currentOrientation = 1;
     bool startFullScreen = false;
@@ -332,8 +332,8 @@ public:
     void ConvertWindowToImagePoint(POINT pt, float& localX, float& localY);
     void ConvertImageToWindowPoint(float localX, float localY, POINT& pt);
     void UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor);
-    void ReadSettings(const std::wstring& path, RECT& rect, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop);
-    void WriteSettings(const std::wstring& path, const RECT& rect, bool fullscreen, bool singleInstance, bool alwaysOnTop);
+    void ReadSettings(const std::wstring& path, WINDOWPLACEMENT& wp, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop);
+    void WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& wp, bool fullscreen, bool singleInstance, bool alwaysOnTop);
     HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder);
     // Dialog Callbacks
     static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
