@@ -163,8 +163,11 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     m_ctx.isShuttingDown = true;
     CleanupLoadingThread();
 
-    while (m_ctx.activeBackgroundThreads > 0) {
+    // Allow up to 1.5 seconds for background threads to cleanly exit
+    int timeoutMs = 1500;
+    while (m_ctx.activeBackgroundThreads > 0 && timeoutMs > 0) {
         Sleep(10);
+        timeoutMs -= 10;
     }
 
     m_ctx.wicConverter = nullptr;
