@@ -75,6 +75,9 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
 
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
     m_ctx.RunBackgroundTask([this, filePath, mySeqId]() {
+        // Abort obsolete tasks on thread wake up
+        if (!IsSequenceValid(mySeqId)) return;
+
         if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
             if (IsSequenceValid(mySeqId)) {
                 PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
@@ -82,6 +85,9 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             return;
         }
         wil::unique_couninitialize_call cleanupCOM; // Automatically uninitializes COM on exit
+
+        // Check before touching the disk
+        if (!IsSequenceValid(mySeqId)) return;
 
         // Read entire file to avoid locking
         wil::unique_hfile hFile(CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL));
@@ -92,13 +98,20 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); return;
         }
 
+        // Check before large memory allocation and blocking read
+        if (!IsSequenceValid(mySeqId)) return;
+
         std::vector<BYTE> rawData(size.LowPart);
         DWORD bytesRead;
         if (!ReadFile(hFile.get(), rawData.data(), size.LowPart, &bytesRead, NULL) || bytesRead != size.LowPart) {
-            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); return;
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+            return;
         }
         hFile.reset();
         // instant unlock
+
+        // Final check 
+        if (!IsSequenceValid(mySeqId)) return;
 
         const wchar_t* ext = PathFindExtensionW(filePath.c_str());
         if (ext && _wcsicmp(ext, L".svg") == 0) {
@@ -637,6 +650,9 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
             std::wstring currentFilePath = m_ctx.loadingFilePath;
             int currentSeqId = seqId;
             m_ctx.RunBackgroundTask([this, currentFilePath, currentSeqId]() {
+                // Abort if user navigated away while queued 
+                if (!IsSequenceValid(currentSeqId)) return;
+
                 wchar_t folder[MAX_PATH] = { 0 };
                 wcscpy_s(folder, MAX_PATH, currentFilePath.c_str());
                 PathRemoveFileSpecW(folder);
