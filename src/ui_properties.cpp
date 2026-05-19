@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <memory>
 #include <commctrl.h>
+#include <format>
 
 
 
@@ -22,10 +23,8 @@ static std::wstring FormatFileSize(const LARGE_INTEGER& fileSize) {
     wchar_t szSize[64];
     StrFormatByteSizeW(fileSize.QuadPart, szSize, ARRAYSIZE(szSize));
 
-    wchar_t buffer[256];
     if (fileSize.QuadPart >= 1024) {
-        swprintf_s(buffer, ARRAYSIZE(buffer), L"%s (%llu Bytes)", szSize, fileSize.QuadPart);
-        return buffer;
+        return std::format(L"{} ({} Bytes)", szSize, fileSize.QuadPart);
     }
     return szSize;
 }
@@ -39,7 +38,7 @@ ImageProperties ViewerApp::GetCurrentOsdProperties() {
 
     pProps.filePath = m_ctx.imageFiles[m_ctx.currentImageIndex];
     UINT w = 0, h = 0;
-    if (GetCurrentImageSize(&w, &h)) pProps.dimensions = std::to_wstring(w) + L" x " + std::to_wstring(h) + L" pixels";
+    if (GetCurrentImageSize(&w, &h)) pProps.dimensions = std::format(L"{} x {} pixels", w, h);
 
     WIN32_FILE_ATTRIBUTE_DATA fad = {};
     if (GetFileAttributesExW(pProps.filePath.c_str(), GetFileExInfoStandard, &fad)) {
@@ -59,40 +58,40 @@ ImageProperties ViewerApp::GetCurrentOsdProperties() {
 
     ComPtr<IWICBitmapDecoder> decoder;
     if (SUCCEEDED(CreateDecoderFromFile(pProps.filePath.c_str(), &decoder))) {
-        GUID fmt;
-        if (SUCCEEDED(decoder->GetContainerFormat(&fmt))) {
-            pProps.imageFormat = GetContainerFormatName(fmt, m_ctx.wicFactory.Get()) + (m_ctx.isAnimated ? L" (Animated)" : L"");
-        }
         ComPtr<IWICBitmapFrameDecode> frame;
         if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
             pProps.bitDepth = GetBitDepth(frame.Get(), m_ctx.wicFactory.Get());
             double dpiX, dpiY;
-            if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) pProps.dpi = std::to_wstring(static_cast<int>(dpiX + 0.5)) + L" x " + std::to_wstring(static_cast<int>(dpiY + 0.5)) + L" DPI";
-            ComPtr<IPropertyStore> pStore;
-            if (SUCCEEDED(SHGetPropertyStoreFromParsingName(pProps.filePath.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&pStore)))) {
-                auto getProp = [&](REFPROPERTYKEY key) { return GetPropertyString(pStore.Get(), key); };
-
-                pProps.dateTaken = getProp(PKEY_Photo_DateTaken);
-                pProps.orientation = getProp(PKEY_Photo_Orientation);
-                pProps.cameraMake = getProp(PKEY_Photo_CameraManufacturer);
-                pProps.cameraModel = getProp(PKEY_Photo_CameraModel);
-                pProps.fStop = getProp(PKEY_Photo_FNumber);
-                pProps.exposureTime = getProp(PKEY_Photo_ExposureTime);
-                pProps.iso = getProp(PKEY_Photo_ISOSpeed);
-                pProps.software = getProp(PKEY_SoftwareUsed);
-                pProps.focalLength = getProp(PKEY_Photo_FocalLength);
-                pProps.focalLength35mm = getProp(PKEY_Photo_FocalLengthInFilm);
-                pProps.exposureBias = getProp(PKEY_Photo_ExposureBias);
-                pProps.meteringMode = getProp(PKEY_Photo_MeteringMode);
-                pProps.flash = getProp(PKEY_Photo_Flash);
-                pProps.exposureProgram = getProp(PKEY_Photo_ExposureProgram);
-                pProps.whiteBalance = getProp(PKEY_Photo_WhiteBalance);
-                pProps.author = getProp(PKEY_Author);
-                pProps.copyright = getProp(PKEY_Copyright);
-                pProps.lensModel = getProp(PKEY_Photo_LensModel);
+            if (SUCCEEDED(frame->GetResolution(&dpiX, &dpiY))) {
+                pProps.dpi = std::format(L"{} x {} DPI", static_cast<int>(dpiX + 0.5), static_cast<int>(dpiY + 0.5));
             }
         }
     }
+
+    ComPtr<IPropertyStore> pStore;
+    if (SUCCEEDED(SHGetPropertyStoreFromParsingName(pProps.filePath.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&pStore)))) {
+        auto getProp = [&](REFPROPERTYKEY key) { return GetPropertyString(pStore.Get(), key); };
+
+        pProps.dateTaken = getProp(PKEY_Photo_DateTaken);
+        pProps.orientation = getProp(PKEY_Photo_Orientation);
+        pProps.cameraMake = getProp(PKEY_Photo_CameraManufacturer);
+        pProps.cameraModel = getProp(PKEY_Photo_CameraModel);
+        pProps.fStop = getProp(PKEY_Photo_FNumber);
+        pProps.exposureTime = getProp(PKEY_Photo_ExposureTime);
+        pProps.iso = getProp(PKEY_Photo_ISOSpeed);
+        pProps.software = getProp(PKEY_SoftwareUsed);
+        pProps.focalLength = getProp(PKEY_Photo_FocalLength);
+        pProps.focalLength35mm = getProp(PKEY_Photo_FocalLengthInFilm);
+        pProps.exposureBias = getProp(PKEY_Photo_ExposureBias);
+        pProps.meteringMode = getProp(PKEY_Photo_MeteringMode);
+        pProps.flash = getProp(PKEY_Photo_Flash);
+        pProps.exposureProgram = getProp(PKEY_Photo_ExposureProgram);
+        pProps.whiteBalance = getProp(PKEY_Photo_WhiteBalance);
+        pProps.author = getProp(PKEY_Author);
+        pProps.copyright = getProp(PKEY_Copyright);
+        pProps.lensModel = getProp(PKEY_Photo_LensModel);
+    }
+
     return pProps;
 }
 

@@ -1,16 +1,16 @@
 #include "viewer.h"
 #include <stdio.h>
-
-
+#include <format>
 
 void ViewerApp::UpdateWindowTitle() {
     if (m_ctx.loadingFilePath.empty()) {
         SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer");
         return;
     }
+
     std::wstring title = m_ctx.loadingFilePath;
     if (m_ctx.animationFrameConverters.size() > 1) {
-        title += L" (Frame " + std::to_wstring(m_ctx.currentAnimationFrame + 1) + L"/" + std::to_wstring(m_ctx.animationFrameConverters.size()) + L")";
+        title = std::format(L"{} (Frame {}/{})", m_ctx.loadingFilePath, m_ctx.currentAnimationFrame + 1, m_ctx.animationFrameConverters.size());
     }
     SetWindowTextW(m_ctx.hWnd, title.c_str());
 }

@@ -1,5 +1,6 @@
 #include "viewer.h"
 #include <d2d1helper.h>
+#include <numbers>
 
 
 
@@ -630,7 +631,7 @@ void ViewerApp::ConvertWindowToImagePoint(POINT pt, float& localX, float& localY
     float scaledX = translatedX / scaleX;
     float scaledY = translatedY / scaleY;
 
-    double rad = -m_ctx.rotationAngle * 3.1415926535 / 180.0;
+    double rad = -m_ctx.rotationAngle * std::numbers::pi / 180.0;
     float cosTheta = static_cast<float>(cos(rad));
     float sinTheta = static_cast<float>(sin(rad));
 
@@ -661,7 +662,7 @@ void ViewerApp::ConvertImageToWindowPoint(float localX, float localY, POINT& pt)
     float unrotatedX = localX - imgWidth / 2.0f;
     float unrotatedY = localY - imgHeight / 2.0f;
 
-    double rad = m_ctx.rotationAngle * 3.1415926535 / 180.0;
+    double rad = m_ctx.rotationAngle * std::numbers::pi / 180.0;
     float cosTheta = static_cast<float>(cos(rad));
     float sinTheta = static_cast<float>(sin(rad));
     float scaledX = unrotatedX * cosTheta - unrotatedY * sinTheta;

@@ -1,5 +1,6 @@
 #include "viewer.h"
 #include <objidl.h>
+#include <format>
 
 
 
@@ -449,7 +450,8 @@ void ViewerApp::ResizeImageAction() {
             PathRemoveExtensionW(originalFileName);
             PathStripPathW(originalFileName);
 
-            swprintf_s(szFile, MAX_PATH, L"%s_resized.%s", originalFileName, defaultExt);
+            std::wstring formattedName = std::format(L"{}_resized.{}", originalFileName, defaultExt);
+            wcscpy_s(szFile, MAX_PATH, formattedName.c_str());
         }
 
         OPENFILENAMEW ofn = { sizeof(ofn) };

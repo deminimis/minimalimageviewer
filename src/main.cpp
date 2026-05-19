@@ -63,23 +63,23 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
         }
     }
 
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED))) {
+        return 1;
+    }
+    wil::unique_couninitialize_call cleanupCOM;
 
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&m_ctx.wicFactory)))) {
         MessageBoxW(nullptr, L"Failed to create WIC Imaging Factory.", L"Error", MB_OK | MB_ICONERROR);
-        CoUninitialize();
         return 1;
     }
 
     if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, __uuidof(ID2D1Factory1), (void**)&m_ctx.d2dFactory))) {
         MessageBoxW(nullptr, L"Failed to create Direct2D Factory.", L"Error", MB_OK | MB_ICONERROR);
-        CoUninitialize();
         return 1;
     }
 
     if (FAILED(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(m_ctx.writeFactory.GetAddressOf())))) {
         MessageBoxW(nullptr, L"Failed to create DirectWrite Factory.", L"Error", MB_OK | MB_ICONERROR);
-        CoUninitialize();
         return 1;
     }
 
@@ -180,7 +180,6 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     m_ctx.d2dFactory = nullptr;
     m_ctx.wicFactory = nullptr;
 
-    CoUninitialize();
     return static_cast<int>(msg.wParam);
     }
 

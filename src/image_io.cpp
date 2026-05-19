@@ -50,13 +50,11 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
     SetTimer(m_ctx.hWnd, LOADING_TIMER_ID, 700, nullptr);
     m_ctx.loadingFilePath = filePath;
     m_ctx.startAtEnd = startAtEnd;
-
     {
-       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-        
+        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+
         // Keep current image resources alive for flicker-free loading    
         m_ctx.undoStack.clear();
-
         m_ctx.stagedFrames.clear();
         m_ctx.stagedDelays.clear();
         m_ctx.stagedWidth = 0;
@@ -65,7 +63,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         m_ctx.stagedSvgData.clear();
     }
     m_ctx.currentFilePathOverride.clear();
-
     // Check if directory changed
     wchar_t folder[MAX_PATH] = { 0 };
     wcscpy_s(folder, MAX_PATH, filePath.c_str());
@@ -84,29 +81,30 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             }
             return;
         }
+        wil::unique_couninitialize_call cleanupCOM; // Automatically uninitializes COM on exit
 
         // Read entire file to avoid locking
         wil::unique_hfile hFile(CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL));
-        if (!hFile) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return; }
+        if (!hFile) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); return; }
 
         LARGE_INTEGER size;
         if (!GetFileSizeEx(hFile.get(), &size) || size.HighPart != 0 || size.LowPart == 0 || size.LowPart > 1024 * 1024 * 1024) { // Cap at 1GB for safety
-            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return;
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); return;
         }
 
         std::vector<BYTE> rawData(size.LowPart);
         DWORD bytesRead;
         if (!ReadFile(hFile.get(), rawData.data(), size.LowPart, &bytesRead, NULL) || bytesRead != size.LowPart) {
-            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return;
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); return;
         }
-        hFile.reset(); // instant unlock
+        hFile.reset();
+        // instant unlock
 
         const wchar_t* ext = PathFindExtensionW(filePath.c_str());
         if (ext && _wcsicmp(ext, L".svg") == 0) {
-           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+            std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             m_ctx.stagedSvgData = std::move(rawData);
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
-            CoUninitialize();
             return;
         }
 
@@ -114,7 +112,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         GUID containerFormat = {};
         UINT exifOrientation = 1;
         {
-           std::lock_guard<std::recursive_mutex> lock(m_ctx.preloadMutex);
+            std::lock_guard<std::recursive_mutex> lock(m_ctx.preloadMutex);
             if (filePath == m_ctx.preloadedNextPath && m_ctx.preloadedNextConverter) {
                 preloadedConverter = m_ctx.preloadedNextConverter;
                 containerFormat = m_ctx.preloadedNextFormat;
@@ -141,7 +139,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     m_ctx.stagedOrientation = exifOrientation;
 
                     PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
-                    CoUninitialize();
                     return;
                 }
             }
@@ -150,17 +147,17 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         // Fetch EXIF Orientation natively via IPropertyStore
         ComPtr<IPropertyStore> pStore;
         if (SUCCEEDED(SHGetPropertyStoreFromParsingName(filePath.c_str(), nullptr, GPS_DEFAULT, IID_PPV_ARGS(&pStore)))) {
-            PROPVARIANT propValue;
-            PropVariantInit(&propValue);
-            if (SUCCEEDED(pStore->GetValue(PKEY_Photo_Orientation, &propValue)) && propValue.vt == VT_UI2) {
-                exifOrientation = propValue.uiVal;
+            wil::unique_prop_variant propValue;
+            if (SUCCEEDED(pStore->GetValue(PKEY_Photo_Orientation, &propValue))) {
+                if (propValue.vt == VT_UI2) {
+                    exifOrientation = propValue.uiVal;
+                }
             }
-            PropVariantClear(&propValue);
         }
 
         ComPtr<IWICImagingFactory> localFactory;
         HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
-        if (FAILED(hr)) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return; }
+        if (FAILED(hr)) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); return; }
 
         ComPtr<IWICStream> stream;
         localFactory->CreateStream(&stream);
@@ -169,11 +166,10 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         ComPtr<IWICBitmapDecoder> decoder;
         hr = localFactory->CreateDecoderFromStream(stream.Get(), NULL, WICDecodeMetadataCacheOnLoad, &decoder);
 
-        if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
+        if (!IsSequenceValid(mySeqId)) { return; }
 
         if (FAILED(hr)) {
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
-            CoUninitialize();
             return;
         }
 
@@ -200,7 +196,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     ratio = std::min(static_cast<float>(maxDim) / frameWidth, static_cast<float>(maxDim) / frameHeight);
                     UINT newW = static_cast<UINT>(frameWidth * ratio);
                     UINT newH = static_cast<UINT>(frameHeight * ratio);
-
                     bool nativeScaled = false;
                     ComPtr<IWICBitmapSourceTransform> sourceTransform;
 
@@ -252,7 +247,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                 if (ComPtr<IWICFormatConverter> finalConverter = ConvertToFormat(localFactory.Get(), sourceToCache.Get())) {
                     // D2D decodes straight to gpu vram
                     ComPtr<IWICFormatConverter> d2dConverter = finalConverter;
-
                     std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
                     m_ctx.stagedStaticConverter = d2dConverter;
                     m_ctx.stagedRawFileData = std::move(rawData); // Transfer memory ownership to context
@@ -266,7 +260,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     m_ctx.downscaleRatio = ratio;
 
                     PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
-                    CoUninitialize();
                     return;
                 }
             }
@@ -279,15 +272,13 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         // Retrieve global logical screen descriptor 
         ComPtr<IWICMetadataQueryReader> decoderMetadata;
         if (SUCCEEDED(decoder->GetMetadataQueryReader(&decoderMetadata))) {
-            PROPVARIANT propValue;
-            PropVariantInit(&propValue);
+            wil::unique_prop_variant propValue;
             if (SUCCEEDED(decoderMetadata->GetMetadataByName(L"/logscrdesc/Width", &propValue))) {
                 if (propValue.vt == VT_UI2) canvasWidth = propValue.uiVal;
-                PropVariantClear(&propValue);
             }
+            propValue.reset(); // clear before reuse
             if (SUCCEEDED(decoderMetadata->GetMetadataByName(L"/logscrdesc/Height", &propValue))) {
                 if (propValue.vt == VT_UI2) canvasHeight = propValue.uiVal;
-                PropVariantClear(&propValue);
             }
         }
 
@@ -300,7 +291,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
 
             UINT frameWidth = 0, frameHeight = 0;
             frame->GetSize(&frameWidth, &frameHeight);
-
             // Fallback if dimensions arent found
             if (canvasWidth == 0 || canvasHeight == 0) {
                 canvasWidth = frameWidth;
@@ -314,32 +304,28 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
 
             ComPtr<IWICMetadataQueryReader> metadataReader;
             if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
-                PROPVARIANT propValue;
-                PropVariantInit(&propValue);
+                wil::unique_prop_variant propValue;
                 if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Delay", &propValue))) {
                     if (propValue.vt == VT_UI2) delay = propValue.uiVal * 10;
-                    PropVariantClear(&propValue);
                 }
+                propValue.reset(); // clear before reuse
                 if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Disposal", &propValue))) {
                     if (propValue.vt == VT_UI1) disposal = propValue.bVal;
-                    PropVariantClear(&propValue);
                 }
+                propValue.reset();
                 if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Left", &propValue))) {
                     if (propValue.vt == VT_UI2) left = propValue.uiVal;
-                    PropVariantClear(&propValue);
                 }
+                propValue.reset();
                 if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Top", &propValue))) {
                     if (propValue.vt == VT_UI2) top = propValue.uiVal;
-                    PropVariantClear(&propValue);
                 }
             }
             if (delay < 20) delay = 100;
-
             allFramesDelays.push_back(delay);
 
             UINT canvasStride = canvasWidth * 4;
             UINT canvasSize = canvasStride * canvasHeight;
-
             if (compositeBuffer.size() != canvasSize) {
                 compositeBuffer.assign(canvasSize, 0);
                 previousCompositeBuffer.assign(canvasSize, 0);
@@ -384,7 +370,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
 
                     allFramesPixels.push_back(compositeBuffer);
                 }
-            } 
+            }
 
             // Apply disposal method for next frame
             if (disposal == 2) {
@@ -405,12 +391,11 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                 compositeBuffer = previousCompositeBuffer;
             }
 
-            if (!IsSequenceValid(mySeqId)) { CoUninitialize(); return; }
+            if (!IsSequenceValid(mySeqId)) { return; }
         }
 
         if (allFramesPixels.empty()) {
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
-            CoUninitialize();
             return;
         }
 
@@ -427,18 +412,16 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         }
 
         PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
-        CoUninitialize();
-    });
+        });
 }
 
 // directory scanner 
 std::vector<std::wstring> ViewerApp::ScanDirectory(const std::wstring& directoryPath, int seqId) {
     namespace fs = std::filesystem;
-
     struct FileInfo {
         std::wstring path;
-        fs::file_time_type writeTime;
-        uintmax_t fileSize;
+        fs::file_time_type writeTime{};
+        uintmax_t fileSize = 0;
     };
 
     std::vector<FileInfo> foundFiles;
@@ -470,31 +453,24 @@ std::vector<std::wstring> ViewerApp::ScanDirectory(const std::wstring& directory
 
     if (!IsSequenceValid(seqId)) return {};
 
-    std::sort(foundFiles.begin(), foundFiles.end(), [&](const FileInfo& a, const FileInfo& b) {
-        int compareResult = 0;
+    std::ranges::sort(foundFiles, [&](const FileInfo& a, const FileInfo& b) {
+        std::strong_ordering cmp = std::strong_ordering::equal;
+
         switch (m_ctx.currentSortCriteria) {
         case SortCriteria::ByDateModified:
-            if (a.writeTime < b.writeTime) compareResult = -1;
-            else if (a.writeTime > b.writeTime) compareResult = 1;
-            else compareResult = 0;
+            cmp = a.writeTime <=> b.writeTime;
             break;
         case SortCriteria::ByFileSize:
-            if (a.fileSize < b.fileSize) compareResult = -1;
-            else if (a.fileSize > b.fileSize) compareResult = 1;
-            else compareResult = 0;
+            cmp = a.fileSize <=> b.fileSize;
             break;
         case SortCriteria::ByName:
         default:
-            compareResult = StrCmpLogicalW(a.path.c_str(), b.path.c_str());
+            // StrCmpLogicalW returns an int
+            cmp = StrCmpLogicalW(a.path.c_str(), b.path.c_str()) <=> 0;
             break;
         }
 
-        if (m_ctx.isSortAscending) {
-            return compareResult < 0;
-        }
-        else {
-            return compareResult > 0;
-        }
+        return m_ctx.isSortAscending ? (cmp < 0) : (cmp > 0);
         });
 
     std::vector<std::wstring> result;
@@ -670,7 +646,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
                 if (!IsSequenceValid(currentSeqId)) return;
 
                 int foundIndex = -1;
-                auto it = std::find_if(newFiles.begin(), newFiles.end(),
+                auto it = std::ranges::find_if(newFiles,
                     [&](const std::wstring& s) { return _wcsicmp(s.c_str(), currentFilePath.c_str()) == 0; }
                 );
                 foundIndex = (it != newFiles.end()) ? static_cast<int>(std::distance(newFiles.begin(), it)) : -1;

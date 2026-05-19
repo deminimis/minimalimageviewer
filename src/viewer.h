@@ -38,6 +38,8 @@
 using Microsoft::WRL::ComPtr;
 #include <wil/resource.h>
 #include "resource.h"
+#include <compare>
+#include <ranges>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")

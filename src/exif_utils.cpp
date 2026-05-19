@@ -1,28 +1,23 @@
 #include "exif_utils.h"
 #include "viewer.h"
 #include <propvarutil.h>
-
-
-
 #include <propsys.h>
 #include <propkey.h>
+#include <format>
 
 std::wstring GetPropertyString(IPropertyStore* pStore, REFPROPERTYKEY key) {
     if (!pStore) return L"N/A";
 
-    PROPVARIANT propValue;
-    PropVariantInit(&propValue);
+    wil::unique_prop_variant propValue;
     std::wstring val = L"N/A";
 
     if (SUCCEEDED(pStore->GetValue(key, &propValue))) {
-        PWSTR pszDisplayValue = nullptr;
+        wil::unique_cotaskmem_string pszDisplayValue;
         if (SUCCEEDED(PSFormatForDisplayAlloc(key, propValue, PDFF_DEFAULT, &pszDisplayValue))) {
-            if (pszDisplayValue && wcslen(pszDisplayValue) > 0) {
-                val = pszDisplayValue;
+            if (pszDisplayValue && wcslen(pszDisplayValue.get()) > 0) {
+                val = pszDisplayValue.get();
             }
-            CoTaskMemFree(pszDisplayValue);
         }
-        PropVariantClear(&propValue);
     }
     return val;
 }
@@ -69,7 +64,7 @@ std::wstring GetBitDepth(IWICBitmapFrameDecode* pFrame, IWICImagingFactory* wicF
 
     UINT bpp = 0;
     if (SUCCEEDED(pixelFormatInfo->GetBitsPerPixel(&bpp))) {
-        return std::to_wstring(bpp) + L"-bit";
+        return std::format(L"{}-bit", bpp);
     }
     return L"N/A";
 }
