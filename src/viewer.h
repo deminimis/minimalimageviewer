@@ -36,6 +36,7 @@
 #include <atomic>
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
+#include <wil/resource.h>
 #include "resource.h"
 
 #pragma comment(lib, "user32.lib")
@@ -169,7 +170,7 @@ struct AppContext {
     bool isSortAscending = true;
     DefaultZoomMode defaultZoomMode = DefaultZoomMode::Fit;
 
-    HACCEL hAccelTable = nullptr;
+    wil::unique_haccel hAccelTable;
 
     // Loading State
     std::atomic<bool> isLoading{ false };
@@ -226,7 +227,7 @@ struct AppContext {
 
     ComPtr<ID2D1SolidColorBrush> cropRectBrush;
     ComPtr<ID2D1SolidColorBrush> fadeBrush;
-    HBRUSH darkBrush = nullptr;
+    wil::unique_hbrush darkBrush;
     bool isCropMode = false;
     bool isSelectingCropRect = false;
     bool isCropPending = false;

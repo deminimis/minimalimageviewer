@@ -54,10 +54,7 @@ void ViewerApp::WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& w
 }
 
 void ViewerApp::UpdateAcceleratorTable() {
-    if (m_ctx.hAccelTable) {
-        DestroyAcceleratorTable(m_ctx.hAccelTable);
-        m_ctx.hAccelTable = nullptr;
-    }
+    m_ctx.hAccelTable.reset();
 
     std::vector<ACCEL> accels;
     auto addAccel = [&](WORD virtKey, BYTE modifiers, WORD cmd) {
@@ -100,6 +97,6 @@ void ViewerApp::UpdateAcceleratorTable() {
     addAccel(VK_F5, 0, IDM_REFRESH);
 
     if (!accels.empty()) {
-        m_ctx.hAccelTable = CreateAcceleratorTableW(accels.data(), static_cast<int>(accels.size()));
+        m_ctx.hAccelTable.reset(CreateAcceleratorTableW(accels.data(), static_cast<int>(accels.size())));
     }
 }

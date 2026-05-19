@@ -30,13 +30,10 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
     case WM_INITDIALOG: {
         pApp->UpdateTitleBarTheme(hDlg, ctx.bgColor);
         if (ctx.bgColor == BackgroundColor::Black || ctx.bgColor == BackgroundColor::Grey) {
-            if (!ctx.darkBrush) ctx.darkBrush = CreateSolidBrush(RGB(32, 32, 32));
+            if (!ctx.darkBrush) ctx.darkBrush.reset(CreateSolidBrush(RGB(32, 32, 32)));
         }
         else {
-            if (ctx.darkBrush) {
-                DeleteObject(ctx.darkBrush);
-                ctx.darkBrush = nullptr;
-            }
+            ctx.darkBrush.reset(); 
         }
 
         int bgRadio = IDC_RADIO_BG_GREY + static_cast<int>(ctx.bgColor);

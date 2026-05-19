@@ -9,16 +9,15 @@ HRESULT ViewerApp::EncodeAndSaveImage(ComPtr<IWICBitmapSource> source, const std
     ComPtr<IWICBitmapFrameEncode> frame;
     ComPtr<IPropertyBag2> props;
 
-    HRESULT hr = m_ctx.wicFactory->CreateStream(&stream);
-    if (SUCCEEDED(hr)) hr = stream->InitializeFromFilename(filePath.c_str(), GENERIC_WRITE);
-    if (SUCCEEDED(hr)) hr = m_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder);
-    if (SUCCEEDED(hr)) hr = encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache);
-    if (SUCCEEDED(hr)) hr = encoder->CreateNewFrame(&frame, &props);
-    if (SUCCEEDED(hr)) hr = frame->Initialize(props.Get());
-    if (SUCCEEDED(hr)) hr = frame->WriteSource(source.Get(), nullptr);
-    if (SUCCEEDED(hr)) hr = frame->Commit();
-    if (SUCCEEDED(hr)) hr = encoder->Commit();
-    return hr;
+    RETURN_IF_FAILED(m_ctx.wicFactory->CreateStream(&stream));
+    RETURN_IF_FAILED(stream->InitializeFromFilename(filePath.c_str(), GENERIC_WRITE));
+    RETURN_IF_FAILED(m_ctx.wicFactory->CreateEncoder(containerFormat, nullptr, &encoder));
+    RETURN_IF_FAILED(encoder->Initialize(stream.Get(), WICBitmapEncoderNoCache));
+    RETURN_IF_FAILED(encoder->CreateNewFrame(&frame, &props));
+    RETURN_IF_FAILED(frame->Initialize(props.Get()));
+    RETURN_IF_FAILED(frame->WriteSource(source.Get(), nullptr));
+    RETURN_IF_FAILED(frame->Commit());
+    return encoder->Commit();
 }
 
 void ViewerApp::CommitCrop() {

@@ -86,20 +86,20 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         }
 
         // Read entire file to avoid locking
-        HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
-        if (hFile == INVALID_HANDLE_VALUE) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return; }
+        wil::unique_hfile hFile(CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL));
+        if (!hFile) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return; }
 
         LARGE_INTEGER size;
-        if (!GetFileSizeEx(hFile, &size) || size.HighPart != 0 || size.LowPart == 0 || size.LowPart > 1024 * 1024 * 1024) { // Cap at 1GB for safety
-            CloseHandle(hFile); PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return;
+        if (!GetFileSizeEx(hFile.get(), &size) || size.HighPart != 0 || size.LowPart == 0 || size.LowPart > 1024 * 1024 * 1024) { // Cap at 1GB for safety
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return;
         }
 
         std::vector<BYTE> rawData(size.LowPart);
         DWORD bytesRead;
-        if (!ReadFile(hFile, rawData.data(), size.LowPart, &bytesRead, NULL) || bytesRead != size.LowPart) {
-            CloseHandle(hFile); PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return;
+        if (!ReadFile(hFile.get(), rawData.data(), size.LowPart, &bytesRead, NULL) || bytesRead != size.LowPart) {
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); CoUninitialize(); return;
         }
-        CloseHandle(hFile); // instant unlock
+        hFile.reset(); // instant unlock
 
         const wchar_t* ext = PathFindExtensionW(filePath.c_str());
         if (ext && _wcsicmp(ext, L".svg") == 0) {

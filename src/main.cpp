@@ -154,7 +154,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     MSG msg{};
     while (GetMessage(&msg, nullptr, 0, 0)) {
-        if (!m_ctx.hAccelTable || !TranslateAcceleratorW(m_ctx.hWnd, m_ctx.hAccelTable, &msg)) {
+        if (!m_ctx.hAccelTable || !TranslateAcceleratorW(m_ctx.hWnd, m_ctx.hAccelTable.get(), &msg)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
@@ -165,16 +165,6 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     while (m_ctx.activeBackgroundThreads > 0) {
         Sleep(10);
-    }
-
-    if (m_ctx.darkBrush) {
-        DeleteObject(m_ctx.darkBrush);
-        m_ctx.darkBrush = nullptr;
-    }
-
-    if (m_ctx.hAccelTable) {
-        DestroyAcceleratorTable(m_ctx.hAccelTable);
-        m_ctx.hAccelTable = nullptr;
     }
 
     m_ctx.wicConverter = nullptr;
