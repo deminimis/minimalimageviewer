@@ -2,6 +2,7 @@
 #include <memory>
 #include <algorithm>
 #include <shlwapi.h> 
+#include <filesystem>
 
 
 
@@ -454,47 +455,41 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
     });
 }
 
-// directory scanner that checks sequence validity
+// directory scanner 
 std::vector<std::wstring> ViewerApp::ScanDirectory(const std::wstring& directoryPath, int seqId) {
+    namespace fs = std::filesystem;
+
     struct FileInfo {
         std::wstring path;
-        FILETIME writeTime = {};
-        LARGE_INTEGER fileSize = {};
+        fs::file_time_type writeTime;
+        uintmax_t fileSize;
     };
+
     std::vector<FileInfo> foundFiles;
     foundFiles.reserve(100);
 
-    WIN32_FIND_DATAW fd{};
-    wchar_t searchPath[MAX_PATH] = { 0 };
-    PathCombineW(searchPath, directoryPath.c_str(), L"*.*");
+    std::error_code ec;
 
-    HANDLE hFind = FindFirstFileExW(searchPath, FindExInfoBasic, &fd, FindExSearchNameMatch, NULL, FIND_FIRST_EX_LARGE_FETCH);
-    if (hFind != INVALID_HANDLE_VALUE) {
-        do {
-            if (!IsSequenceValid(seqId)) {
-                FindClose(hFind);
-                return {};
-            }
-            if (m_ctx.cancelPreloading) {
-                FindClose(hFind);
-                return {};
-            }
+    for (const auto& entry : fs::directory_iterator(directoryPath, fs::directory_options::skip_permission_denied, ec)) {
+        if (!IsSequenceValid(seqId)) {
+            return {};
+        }
+        if (m_ctx.cancelPreloading) {
+            return {};
+        }
 
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                if (IsImageFile(fd.cFileName)) {
-                    wchar_t fullPath[MAX_PATH] = { 0 };
-                    PathCombineW(fullPath, directoryPath.c_str(), fd.cFileName);
+        // Skip directories/special files
+        if (entry.is_regular_file(ec)) {
+            std::wstring fullPath = entry.path().wstring();
 
-                    FileInfo info;
-                    info.path = fullPath;
-                    info.writeTime = fd.ftLastWriteTime;
-                    info.fileSize.LowPart = fd.nFileSizeLow;
-                    info.fileSize.HighPart = fd.nFileSizeHigh;
-                    foundFiles.push_back(info);
-                }
+            if (IsImageFile(fullPath.c_str())) {
+                FileInfo info;
+                info.path = std::move(fullPath);
+                info.writeTime = entry.last_write_time(ec);
+                info.fileSize = entry.file_size(ec);
+                foundFiles.push_back(info);
             }
-        } while (FindNextFileW(hFind, &fd));
-        FindClose(hFind);
+        }
     }
 
     if (!IsSequenceValid(seqId)) return {};
@@ -503,11 +498,13 @@ std::vector<std::wstring> ViewerApp::ScanDirectory(const std::wstring& directory
         int compareResult = 0;
         switch (m_ctx.currentSortCriteria) {
         case SortCriteria::ByDateModified:
-            compareResult = CompareFileTime(&a.writeTime, &b.writeTime);
+            if (a.writeTime < b.writeTime) compareResult = -1;
+            else if (a.writeTime > b.writeTime) compareResult = 1;
+            else compareResult = 0;
             break;
         case SortCriteria::ByFileSize:
-            if (a.fileSize.QuadPart < b.fileSize.QuadPart) compareResult = -1;
-            else if (a.fileSize.QuadPart > b.fileSize.QuadPart) compareResult = 1;
+            if (a.fileSize < b.fileSize) compareResult = -1;
+            else if (a.fileSize > b.fileSize) compareResult = 1;
             else compareResult = 0;
             break;
         case SortCriteria::ByName:
@@ -526,8 +523,8 @@ std::vector<std::wstring> ViewerApp::ScanDirectory(const std::wstring& directory
 
     std::vector<std::wstring> result;
     result.reserve(foundFiles.size());
-    for (const auto& info : foundFiles) {
-        result.push_back(info.path);
+    for (auto& info : foundFiles) {
+        result.push_back(std::move(info.path));
     }
     return result;
 }
