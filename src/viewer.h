@@ -255,10 +255,10 @@ struct AppContext {
 
     bool isFading = false;
     ULONGLONG fadeStartTime = 0;
-
     bool isAutoRefresh = false;
     bool smoothScaling = true;
     bool enableFadeAnimation = true;
+    bool askToDelete = true;
     FILETIME lastWriteTime = { 0 };
     bool preserveView = false;
     float renderScale = 1.0f;

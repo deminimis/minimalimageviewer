@@ -11,6 +11,7 @@ void ViewerApp::ReadSettings(const std::wstring& path, WINDOWPLACEMENT& wp, bool
     m_ctx.smoothScaling = getInt(L"Settings", L"SmoothScaling", 1) == 1;
     m_ctx.enableFadeAnimation = getInt(L"Settings", L"EnableFadeAnimation", 1) == 1;
     m_ctx.isOsdVisible = getInt(L"Settings", L"ShowOSD", 0) == 1;
+    m_ctx.askToDelete = getInt(L"Settings", L"AskToDelete", 1) == 1;
 
     int bgChoice = getInt(L"Settings", L"BackgroundColor", 0);
     m_ctx.bgColor = static_cast<BackgroundColor>((bgChoice < 0 || bgChoice > 3) ? 0 : bgChoice);
@@ -40,6 +41,7 @@ void ViewerApp::WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& w
     writeInt(L"Settings", L"SmoothScaling", m_ctx.smoothScaling ? 1 : 0);
     writeInt(L"Settings", L"EnableFadeAnimation", m_ctx.enableFadeAnimation ? 1 : 0);
     writeInt(L"Settings", L"ShowOSD", m_ctx.isOsdVisible ? 1 : 0);
+    writeInt(L"Settings", L"AskToDelete", m_ctx.askToDelete ? 1 : 0);
     writeInt(L"Settings", L"BackgroundColor", static_cast<int>(m_ctx.bgColor));
     writeInt(L"Settings", L"DefaultZoomMode", static_cast<int>(m_ctx.defaultZoomMode));
 

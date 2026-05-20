@@ -18,35 +18,60 @@ void ViewerApp::OpenFileAction() {
 void ViewerApp::DeleteCurrentImage() {
     if (m_ctx.currentImageIndex < 0 || m_ctx.imageFiles.empty()) return;
 
-    std::wstring filePath = m_ctx.imageFiles[m_ctx.currentImageIndex];
-    std::wstring pathDoubleNull = filePath + L'\0';
-
-    SHFILEOPSTRUCTW fileOp = { 0 };
-    fileOp.hwnd = m_ctx.hWnd;
-    fileOp.wFunc = FO_DELETE;
-    fileOp.pFrom = pathDoubleNull.c_str();
-    fileOp.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION;
-
-    if (SHFileOperationW(&fileOp) == 0 && !fileOp.fAnyOperationsAborted) {
-        m_ctx.imageFiles.erase(m_ctx.imageFiles.begin() + m_ctx.currentImageIndex);
-        if (m_ctx.imageFiles.empty()) {
-            m_ctx.currentImageIndex = -1;
-            {
-               std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-                m_ctx.wicConverter = nullptr;
-                m_ctx.wicConverterOriginal = nullptr;
-                m_ctx.undoStack.clear();
-                m_ctx.d2dBitmap = nullptr;
-                m_ctx.loadingFilePath = L"";
-            }
-            InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-            SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer");
+    if (m_ctx.askToDelete) {
+        if (MessageBoxW(m_ctx.hWnd, L"Are you sure you want to delete?", L"Confirm Delete", MB_YESNO | MB_ICONWARNING) != IDYES) {
+            return;
         }
-        else {
-            if (m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
-                m_ctx.currentImageIndex = 0;
+    }
+
+    std::wstring filePath = m_ctx.imageFiles[m_ctx.currentImageIndex];
+
+    ComPtr<IFileOperation> fileOp;
+    HRESULT hr = CoCreateInstance(CLSID_FileOperation, nullptr, CLSCTX_ALL, IID_PPV_ARGS(&fileOp));
+
+    if (SUCCEEDED(hr)) {
+        // Send to recycle bin with no prompt
+        hr = fileOp->SetOperationFlags(FOF_ALLOWUNDO | FOF_NOCONFIRMATION);
+        if (SUCCEEDED(hr)) {
+            ComPtr<IShellItem> itemToDelete;
+            hr = SHCreateItemFromParsingName(filePath.c_str(), nullptr, IID_PPV_ARGS(&itemToDelete));
+
+            if (SUCCEEDED(hr)) {
+                hr = fileOp->DeleteItem(itemToDelete.Get(), nullptr);
+
+                if (SUCCEEDED(hr)) {
+                    hr = fileOp->PerformOperations();
+
+                    if (SUCCEEDED(hr)) {
+                        BOOL aborted = FALSE;
+                        fileOp->GetAnyOperationsAborted(&aborted);
+
+                        if (!aborted) {
+                            m_ctx.imageFiles.erase(m_ctx.imageFiles.begin() + m_ctx.currentImageIndex);
+
+                            if (m_ctx.imageFiles.empty()) {
+                                m_ctx.currentImageIndex = -1;
+                                {
+                                    std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+                                    m_ctx.wicConverter = nullptr;
+                                    m_ctx.wicConverterOriginal = nullptr;
+                                    m_ctx.undoStack.clear();
+                                    m_ctx.d2dBitmap = nullptr;
+                                    m_ctx.loadingFilePath = L"";
+                                }
+                                InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+                                SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer");
+                            }
+                            else {
+                                if (m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
+                                    m_ctx.currentImageIndex = 0;
+                                }
+                                LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex]);
+                            }
+                        }
+                    }
+                }
             }
-            LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex]);
         }
     }
 }

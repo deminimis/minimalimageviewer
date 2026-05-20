@@ -69,5 +69,6 @@
 #define IDC_CHECK_SMOOTH_SCALING    2026
 #define IDC_CHECK_FADE_ANIMATION    2027
 #define IDC_CHECK_SHOW_OSD          2030
+#define IDC_CHECK_ASK_DELETE        2031
 
 #define IDC_STATIC                  -1
