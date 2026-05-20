@@ -6,7 +6,7 @@ void ViewerApp::OpenFileAction() {
     wchar_t szFile[MAX_PATH] = { 0 };
     OPENFILENAMEW ofn = { sizeof(OPENFILENAMEW) };
     ofn.hwndOwner = m_ctx.hWnd;
-    ofn.lpstrFilter = L"All Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;*.svg;*.qoi\0SVG Files (*.svg)\0*.svg\0QOI Files (*.qoi)\0*.qoi\0PNG Files (*.png)\0*.png\0JPEG Files (*.jpg;*.jpeg)\0*.jpg;*.jpeg\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFilter = L"All Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;*.svg;*.qoi;*.hdr\0HDR Files (*.hdr)\0*.hdr\0SVG Files (*.svg)\0*.svg\0QOI Files (*.qoi)\0*.qoi\0PNG Files (*.png)\0*.png\0JPEG Files (*.jpg;*.jpeg)\0*.jpg;*.jpeg\0All Files (*.*)\0*.*\0";
     ofn.lpstrFile = szFile;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_EXPLORER;

@@ -8,14 +8,27 @@
 #pragma warning(push)
 #pragma warning(disable : 4996) // Suppress 'fopen' unsafe error
 #pragma warning(disable : 4267) // Suppress size_t to int conversion warning
+
 #define QOI_IMPLEMENTATION
 #include "qoi.h"
+
+// stb_image is used only for Radiance HDR (.hdr) float decoding
+
+#define STBI_NO_STDIO
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+
 #pragma warning(pop)
 
 
 
 static bool IsImageFile(const wchar_t* filePath) {
-    return PathMatchSpecW(filePath, L"*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;*.svg;*.qoi") == TRUE;
+    return PathMatchSpecW(filePath,
+        L"*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;"
+        L"*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;"
+        L"*.svg;*.qoi;*.hdr;"
+        L"*.tga;*.psd;*.ppm;*.pgm;*.pbm;*.pnm;*.pic") == TRUE;
 }
 
 bool ViewerApp::IsSequenceValid(int seqId) {
@@ -90,6 +103,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             }
             return;
         }
+
         wil::unique_couninitialize_call cleanupCOM; // Automatically uninitializes COM on exit
 
         // Check before touching the disk
@@ -239,6 +253,292 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             return;
         }
+
+        if (ext && _wcsicmp(ext, L".hdr") == 0) {
+            int hdrW = 0;
+            int hdrH = 0;
+            int hdrComp = 0;
+
+            if (!stbi_info_from_memory(
+                rawData.data(),
+                static_cast<int>(rawData.size()),
+                &hdrW,
+                &hdrH,
+                &hdrComp))
+            {
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            if (hdrW <= 0 || hdrH <= 0) {
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            // HDR via stb_image requires a full float decode in memory.
+            // Keep this cap isolated to HDR so it does not disturb the existing WIC massive-image path.
+            constexpr uint64_t HDR_MAX_PIXELS = 40ull * 1000ull * 1000ull;
+            uint64_t hdrPixelsCount = static_cast<uint64_t>(hdrW) * static_cast<uint64_t>(hdrH);
+
+            if (hdrPixelsCount > HDR_MAX_PIXELS) {
+                MessageBoxW(
+                    m_ctx.hWnd,
+                    L"This HDR image is too large for the stb_image HDR loader safety limit.",
+                    L"HDR Image Too Large",
+                    MB_ICONWARNING
+                );
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            float* hdrPixels = stbi_loadf_from_memory(
+                rawData.data(),
+                static_cast<int>(rawData.size()),
+                &hdrW,
+                &hdrH,
+                &hdrComp,
+                3
+            );
+
+            if (!hdrPixels) {
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            ComPtr<IWICBitmap> hdrBmp;
+            HRESULT hdrHr = localFactory->CreateBitmap(
+                static_cast<UINT>(hdrW),
+                static_cast<UINT>(hdrH),
+                GUID_WICPixelFormat32bppPBGRA,
+                WICBitmapCacheOnLoad,
+                &hdrBmp
+            );
+
+            if (FAILED(hdrHr)) {
+                stbi_image_free(hdrPixels);
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            WICRect hdrRc = { 0, 0, hdrW, hdrH };
+            ComPtr<IWICBitmapLock> hdrLock;
+
+            hdrHr = hdrBmp->Lock(&hdrRc, WICBitmapLockWrite, &hdrLock);
+            if (FAILED(hdrHr)) {
+                stbi_image_free(hdrPixels);
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            UINT cbStride = 0;
+            UINT cbBufferSize = 0;
+            BYTE* pbBuffer = nullptr;
+
+            hdrLock->GetStride(&cbStride);
+            hdrLock->GetDataPointer(&cbBufferSize, &pbBuffer);
+
+            if (!pbBuffer) {
+                stbi_image_free(hdrPixels);
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            auto FloatHdrToByte = [](float v) -> BYTE {
+                if (!std::isfinite(v) || v <= 0.0f) {
+                    return 0;
+                }
+
+            // Simple Reinhard tone map, then display gamma.
+            float mapped = v / (1.0f + v);
+            float gammaCorrected = powf(mapped, 1.0f / 2.2f);
+
+            int out = static_cast<int>(gammaCorrected * 255.0f + 0.5f);
+            if (out < 0) return 0;
+            if (out > 255) return 255;
+            return static_cast<BYTE>(out);
+            };
+
+            for (int y = 0; y < hdrH; ++y) {
+                const float* srcRow = hdrPixels + (static_cast<size_t>(y) * static_cast<size_t>(hdrW) * 3u);
+                BYTE* dstRow = pbBuffer + (static_cast<size_t>(y) * cbStride);
+
+                for (int x = 0; x < hdrW; ++x) {
+                    const float r = srcRow[x * 3 + 0];
+                    const float g = srcRow[x * 3 + 1];
+                    const float b = srcRow[x * 3 + 2];
+
+                    BYTE* dst = dstRow + (static_cast<size_t>(x) * 4u);
+
+                    // Alpha is opaque, so premultiplied RGB == normal RGB.
+                    dst[0] = FloatHdrToByte(b);
+                    dst[1] = FloatHdrToByte(g);
+                    dst[2] = FloatHdrToByte(r);
+                    dst[3] = 255;
+                }
+            }
+
+            stbi_image_free(hdrPixels);
+
+            ComPtr<IWICBitmapSource> sourceToCache = hdrBmp;
+            bool downscaled = false;
+            float ratio = 1.0f;
+            UINT maxDim = 3840; 
+
+            if (static_cast<UINT>(hdrW) > maxDim || static_cast<UINT>(hdrH) > maxDim) {
+                downscaled = true;
+                ratio = std::min(
+                    static_cast<float>(maxDim) / static_cast<float>(hdrW),
+                    static_cast<float>(maxDim) / static_cast<float>(hdrH)
+                );
+
+                UINT newW = static_cast<UINT>(hdrW * ratio);
+                UINT newH = static_cast<UINT>(hdrH * ratio);
+
+                ComPtr<IWICBitmapScaler> scaler;
+                if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
+                    if (SUCCEEDED(scaler->Initialize(sourceToCache.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
+                        sourceToCache = scaler;
+                    }
+                }
+            }
+
+            if (ComPtr<IWICFormatConverter> finalConverter = ConvertToFormat(localFactory.Get(), sourceToCache.Get())) {
+                std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+
+                m_ctx.stagedStaticConverter = finalConverter;
+
+                // Don't add stb to high-res path
+                m_ctx.stagedRawFileData.clear();
+                m_ctx.stagedWicStream = nullptr;
+
+                m_ctx.stagedWidth = static_cast<UINT>(hdrW);
+                m_ctx.stagedHeight = static_cast<UINT>(hdrH);
+                m_ctx.originalContainerFormat = GUID_NULL;
+                m_ctx.stagedOrientation = 1;
+                m_ctx.isDownscaled = downscaled;
+                m_ctx.downscaleRatio = ratio;
+
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                return;
+            }
+
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+            return;
+        }
+
+        // STB fallback for non-WIC formats 
+        if (ext &&
+            (_wcsicmp(ext, L".tga") == 0 ||
+                _wcsicmp(ext, L".psd") == 0 ||
+                _wcsicmp(ext, L".ppm") == 0 ||
+                _wcsicmp(ext, L".pgm") == 0 ||
+                _wcsicmp(ext, L".pbm") == 0 ||
+                _wcsicmp(ext, L".pnm") == 0 ||
+                _wcsicmp(ext, L".pic") == 0))
+        {
+            int w = 0, h = 0, comp = 0;
+
+            if (!stbi_info_from_memory(
+                rawData.data(),
+                static_cast<int>(rawData.size()),
+                &w, &h, &comp))
+            {
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            if (w <= 0 || h <= 0)
+            {
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            unsigned char* pixels = stbi_load_from_memory(
+                rawData.data(),
+                static_cast<int>(rawData.size()),
+                &w, &h, &comp,
+                4
+            );
+
+            if (!pixels)
+            {
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
+            }
+
+            ComPtr<IWICBitmap> bmp;
+
+            if (SUCCEEDED(localFactory->CreateBitmap(
+                (UINT)w, (UINT)h,
+                GUID_WICPixelFormat32bppRGBA,
+                WICBitmapCacheOnLoad,
+                &bmp)))
+            {
+                WICRect rc = { 0, 0, w, h };
+
+                ComPtr<IWICBitmapLock> lock;
+                if (SUCCEEDED(bmp->Lock(&rc, WICBitmapLockWrite, &lock)))
+                {
+                    UINT stride = 0, size = 0;
+                    BYTE* dest = nullptr;
+
+                    lock->GetStride(&stride);
+                    lock->GetDataPointer(&size, &dest);
+
+                    if (dest)
+                    {
+                        memcpy(dest, pixels, (size_t)w * h * 4);
+                    }
+                }
+
+                ComPtr<IWICBitmapSource> sourceToCache = bmp;
+
+                bool downscaled = false;
+                float ratio = 1.0f;
+                UINT maxDim = 3840;
+
+                if ((UINT)w > maxDim || (UINT)h > maxDim)
+                {
+                    downscaled = true;
+                    ratio = std::min((float)maxDim / w, (float)maxDim / h);
+
+                    UINT newW = (UINT)(w * ratio);
+                    UINT newH = (UINT)(h * ratio);
+
+                    ComPtr<IWICBitmapScaler> scaler;
+                    if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler)) &&
+                        SUCCEEDED(scaler->Initialize(sourceToCache.Get(), newW, newH, WICBitmapInterpolationModeFant)))
+                    {
+                        sourceToCache = scaler;
+                    }
+                }
+
+                if (ComPtr<IWICFormatConverter> finalConverter =
+                    ConvertToFormat(localFactory.Get(), sourceToCache.Get()))
+                {
+                    std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+
+                    m_ctx.stagedStaticConverter = finalConverter;
+                    m_ctx.stagedRawFileData = std::move(rawData);
+                    m_ctx.stagedWidth = (UINT)w;
+                    m_ctx.stagedHeight = (UINT)h;
+                    m_ctx.originalContainerFormat = GUID_NULL;
+                    m_ctx.stagedOrientation = 1;
+                    m_ctx.isDownscaled = downscaled;
+                    m_ctx.downscaleRatio = ratio;
+
+                    stbi_image_free(pixels);
+
+                    PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                    return;
+                }
+            }
+
+            stbi_image_free(pixels);
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+            return;
+        }
+
 
         ComPtr<IWICStream> stream;
         localFactory->CreateStream(&stream);
