@@ -226,6 +226,7 @@ struct AppContext {
 
     // Animation State
     bool isAnimated = false;
+    bool isAnimationPaused = false;
     std::vector<ComPtr<ID2D1Bitmap>> animationD2DBitmaps;
     std::vector<AnimationFrameMetadata> animationFrameMetadata;
     std::vector<AnimationFrameMetadata> stagedFrameMetadata;

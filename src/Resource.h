@@ -46,6 +46,9 @@
 #define IDM_PLAY_PAUSE              1064
 #define IDM_RESUME_ANIM             1065
 #define IDM_CUSTOM_ZOOM             1066
+#define IDM_ANIM_NEXT_FRAME         1070
+#define IDM_ANIM_PREV_FRAME         1071
+#define IDM_ANIM_FIRST_FRAME        1072
 
 #define IDD_RESIZE_DIALOG           201
 #define IDC_EDIT_WIDTH              2001

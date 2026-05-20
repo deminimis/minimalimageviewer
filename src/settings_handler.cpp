@@ -96,6 +96,10 @@ void ViewerApp::UpdateAcceleratorTable() {
     addAccel('I', 0, IDM_TOGGLE_OSD);
     addAccel(VK_SPACE, 0, IDM_PLAY_PAUSE);
     addAccel(VK_SPACE, HOTKEYF_SHIFT, IDM_RESUME_ANIM);
+    addAccel(VK_RIGHT, HOTKEYF_SHIFT, IDM_ANIM_NEXT_FRAME);
+    addAccel(VK_LEFT, HOTKEYF_SHIFT, IDM_ANIM_PREV_FRAME);
+    addAccel(VK_UP, HOTKEYF_SHIFT, IDM_ANIM_FIRST_FRAME);
+    addAccel(VK_DOWN, HOTKEYF_SHIFT, IDM_ANIM_FIRST_FRAME);
     addAccel(VK_F5, 0, IDM_REFRESH);
 
     if (!accels.empty()) {

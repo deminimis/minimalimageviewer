@@ -135,8 +135,8 @@ void ViewerApp::HandleCommand(WORD cmd) {
         break;
     case IDM_PLAY_PAUSE:
         if (m_ctx.animationFrameDelays.size() > 1) {
-            if (m_ctx.isAnimated) {
-                m_ctx.isAnimated = false;
+            if (!m_ctx.isAnimationPaused) {
+                m_ctx.isAnimationPaused = true;
                 KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
             }
             else {
@@ -146,10 +146,34 @@ void ViewerApp::HandleCommand(WORD cmd) {
         }
         break;
     case IDM_RESUME_ANIM:
-        if (m_ctx.animationFrameDelays.size() > 1 && !m_ctx.isAnimated) {
-            m_ctx.isAnimated = true;
+        if (m_ctx.animationFrameDelays.size() > 1 && m_ctx.isAnimationPaused) {
+            m_ctx.isAnimationPaused = false;
             UINT delay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
             SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, delay > 0 ? delay : 100, nullptr);
+        }
+        break;
+    case IDM_ANIM_NEXT_FRAME:
+        if (m_ctx.isAnimated && !m_ctx.animationFrameDelays.empty()) {
+            m_ctx.isAnimationPaused = true;
+            KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+            m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameDelays.size();
+            UpdateViewToCurrentFrame();
+        }
+        break;
+    case IDM_ANIM_PREV_FRAME:
+        if (m_ctx.isAnimated && !m_ctx.animationFrameDelays.empty()) {
+            m_ctx.isAnimationPaused = true;
+            KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+            m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame - 1 + m_ctx.animationFrameDelays.size()) % m_ctx.animationFrameDelays.size();
+            UpdateViewToCurrentFrame();
+        }
+        break;
+    case IDM_ANIM_FIRST_FRAME:
+        if (m_ctx.isAnimated && !m_ctx.animationFrameDelays.empty()) {
+            m_ctx.isAnimationPaused = true;
+            KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
+            m_ctx.currentAnimationFrame = 0;
+            UpdateViewToCurrentFrame();
         }
         break;
     case IDM_SORT_BY_NAME_ASC:

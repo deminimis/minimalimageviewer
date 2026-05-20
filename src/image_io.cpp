@@ -459,6 +459,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         m_ctx.svgData.clear();
         m_ctx.isSvg = false;
         m_ctx.isAnimated = false;
+        m_ctx.isAnimationPaused = false;
         m_ctx.rotationAngle = 0;
         m_ctx.isFlippedHorizontal = false;
 
