@@ -36,11 +36,43 @@ void ViewerApp::UpdateTitleBarTheme(HWND hWnd, BackgroundColor bgColor) {
 
 int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     m_ctx.hInst = hInstance;
+
     wchar_t exePath[MAX_PATH] = { 0 };
     GetModuleFileNameW(nullptr, exePath, MAX_PATH);
     PathRemoveFileSpecW(exePath);
-    PathAppendW(exePath, L"minimal_image_viewer_settings.ini");
-    m_ctx.settingsPath = exePath;
+
+    std::wstring portableSettingsPath = std::wstring(exePath) + L"\\MIV-settings.ini";
+    bool canUsePortable = false;
+
+    // Write-Test: Attempt to open or create the file with write access
+    HANDLE hTest = CreateFileW(portableSettingsPath.c_str(), GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hTest != INVALID_HANDLE_VALUE) {
+        // Success: The directory is writable (e.g., Desktop, USB drive).
+        CloseHandle(hTest);
+        canUsePortable = true;
+    }
+
+    // Route based on permissions
+    if (canUsePortable) {
+        m_ctx.settingsPath = portableSettingsPath;
+    }
+    else {
+        // Fallback if read-only (MSIX App).
+        PWSTR localAppDataPath = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppDataPath))) {
+            std::wstring appDataFolder = std::wstring(localAppDataPath) + L"\\deminimis\\MinimalImageViewer";
+            CoTaskMemFree(localAppDataPath);
+
+            // Ensure directory structure exists before writing settings
+            SHCreateDirectoryExW(nullptr, appDataFolder.c_str(), nullptr);
+
+            m_ctx.settingsPath = appDataFolder + L"\\MIV-settings.ini";
+        }
+        else {
+            // Absolute failsafe 
+            m_ctx.settingsPath = portableSettingsPath;
+        }
+    }
 
     ReadSettings(m_ctx.settingsPath, m_ctx.windowPlacement, m_ctx.startFullScreen, m_ctx.enforceSingleInstance, m_ctx.alwaysOnTop);
     float sysDpiScale = GetDpiForSystem() / 96.0f;
