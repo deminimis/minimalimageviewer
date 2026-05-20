@@ -547,9 +547,20 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         ComPtr<IWICBitmapDecoder> decoder;
         hr = localFactory->CreateDecoderFromStream(stream.Get(), NULL, WICDecodeMetadataCacheOnLoad, &decoder);
 
-        if (!IsSequenceValid(mySeqId)) { return; }
+        if (!IsSequenceValid(mySeqId)) {
+            return;
+        }
 
         if (FAILED(hr)) {
+            // Intercept HEIC/AVIF failures and prompt to install the lightweight native codec
+            if (ext && (_wcsicmp(ext, L".heic") == 0 || _wcsicmp(ext, L".heif") == 0 || _wcsicmp(ext, L".avif") == 0)) {
+                if (MessageBoxW(m_ctx.hWnd,
+                    L"To view HEIC and AVIF images natively, you need the free 'HEIF Image Extensions' from the Microsoft Store.\n\nWould you like to open the Store page?",
+                    L"Missing Image Codec", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
+                    // Deep link directly to the Microsoft Store page for the official HEIF extension
+                    ShellExecuteW(nullptr, L"open", L"ms-windows-store://pdp/?ProductId=9PMMSR1CGPWG", nullptr, nullptr, SW_SHOW);
+                }
+            }
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             return;
         }
