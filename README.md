@@ -89,8 +89,8 @@ Supports a wide range of formats using WIC + custom decoders:
 - **RAW (Camera)**: CR2, CR3, NEF, DNG, ARW, ORF, RW2 *(via codecs)*  
 - **Advanced Formats**:
   - **SVG (Vector rendering, GPU-accelerated)**
-  - **HDR (.hdr Radiance with tone mapping)**
-  - **QOI (Quite OK Image)**
+  - **HDR (.hdr Radiance with tone mapping from [nothings](https://github.com/nothings/stb))**
+  - **QOI ([Quite OK Image](https://github.com/phoboslab/qoi)**
   - **TGA, PSD, PPM, PGM, PBM, PNM**
 
 ---
