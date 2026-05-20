@@ -40,9 +40,16 @@ void ViewerApp::CommitCrop() {
         if (rc.Width > 0 && rc.Height > 0) {
             if (SUCCEEDED(clipper->Initialize(source.Get(), &rc))) {
                 if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), clipper.Get())) {
+
+                    // Limit the undo stack to 10 states to prevent OOM exceptions
+                    constexpr size_t MAX_UNDO_STEPS = 10;
+                    if (m_ctx.undoStack.size() >= MAX_UNDO_STEPS) {
+                        m_ctx.undoStack.erase(m_ctx.undoStack.begin());
+                    }
+
                     m_ctx.undoStack.push_back(m_ctx.wicConverterOriginal);
                     m_ctx.wicConverterOriginal = converter;
-                        m_ctx.isDownscaled = false; // Edits destroy high-res alignment
+                    m_ctx.isDownscaled = false; // Edits destroy high-res alignment
 
                         if (m_ctx.isAnimated) {
                             m_ctx.isAnimated = false;
