@@ -7,7 +7,8 @@
 ### The most 🪶 LIGHTWEIGHT image viewer available for Windows
 <br>
 
-Minimal Image Viewer is an open-source image viewer and editor (**now with OCR**), prioritizing performance and minimalism. With a compiled size as low as ~20.5kb. It is able to open png photos of over 100mb in seconds (depending on your specs). 
+A **fast, lightweight, and secure image viewer for Windows**, built entirely with native Win32 and modern C++.  
+Designed to handle everything from tiny PNGs to massive RAW and HDR images—without bloat.
 <br><br><br><br>
 
 ### 💾 Download the latest version [here](https://github.com/deminimis/minimalimageviewer/releases).
@@ -15,259 +16,300 @@ Minimal Image Viewer is an open-source image viewer and editor (**now with OCR**
 
 _For a stripped-down 21kb version, you can try the [stable stripped .exe](https://github.com/deminimis/minimalimageviewer/releases/tag/v1.6)_
 
-## Key Features
 
-### Viewing & Navigation
 
-- **Comprehensive Format Support**: Leverages Windows Imaging Component (WIC) to support JPEG, PNG, BMP, GIF, TIFF, ICO, WebP, HEIF, AVIF, and many RAW formats (.cr2, .nef, .dng, etc.) with the proper codecs installed.
-    
-- **Animated Image Support**: Plays animated formats (like GIF) by decoding all frames and their metadata-defined delays.
-    - Space to pause and cycle through frames.
-    - Shift + space to restart animation. 
-    
-- **Asynchronous Pre-loading**: Intelligently pre-loads the next and previous images in a directory on background threads for instantaneous browsing.
-    
-- **Flexible Sorting**: Sorts all images in the current directory by **Name**, **Date Modified**, or **File Size** in ascending or descending order.
-    
-- **Smooth Viewing**:
-    
-    - Smooth zoom (Ctrl + Mouse Wheel) with customizable high-quality **Smooth Scaling (Interpolation)**.
-        
-    - Pan by clicking and dragging the image.
-        
-    - Fit to Window (Ctrl+0 / Double-Click).
-        
-    - Actual Size (100%) (Ctrl+*).
 
-    - Custom Zoom Dialog (Ctrl+Shift+Z).
-        
-- **Configurable Interface**:
-    
-    - **Custom Keybindings**: Fully remap default shortcuts to fit your workflow via the Keybindings menu.
-
-    - **Backgrounds**: Switch between Grey (default), Black, White, or a transparent checkerboard.
-
-    - **Visuals**: Toggle image **Fade Animations** and high-quality **Smooth Scaling** for zoomed images.
-        
-    - **Window State**: Toggle "Always on Top", "Start in Fullscreen", or "Enforce Single Instance".
-        
-    - **Default Zoom**: Set the default zoom to "Fit to Window" or "Actual Size (100%)".
- 
-
-### OCR
-
-- **Whole Image OCR**: Press 'q' to OCR the entire image.
-- **Area OCR**: Press 'w' to OCR a selected area. 
-        
-
-### Editing & Tools
-
-- **Non-Destructive Editing**: All edits (crop, rotate, flip, grayscale) are previewed in real-time without altering the original file until you explicitly save.
-    
-- **Visual Crop**: Press 'C' to enable crop mode. Click and drag to select a region, then press Enter to apply the crop. The save operation will only save the cropped area.
-    
-- **High-Quality Resize**: Resize images to new dimensions with aspect-ratio locking, using a high-quality Fant interpolation scaler.
-    
-- **Rotate & Flip**: Rotate images in 90° increments or flip them horizontally. All changes are saved correctly.
-    
-- **Undo System**: Press `Ctrl+Z` to revert the last applied edit or crop.
-
-- **Grayscale Filter**: Instantly apply or remove a non-destructive grayscale filter.
-    
-- **Eyedropper Tool**: Toggle via the context menu to activate the eyedropper. It displays the **RGB** and **Hex** value of the pixel under your cursor. Click to copy the Hex value to your clipboard.
-
-- **Image Effects**: Adjust **Contrast**, **Brightness**, and **Saturation** with real-time GPU-accelerated previews before saving.
-    
-
-### Data & File Management
-
-- **Detailed Properties Window**: Opens a separate window showing extensive file properties and detailed EXIF metadata, including camera, lens, and shot settings (F-stop, ISO, Exposure, etc.).
-    
-- **OSD Overlay**: Press 'I' to toggle an on-screen display (OSD) with key file and image data for quick reference.
-    
-- **File Operations**:
-    
-    - **Save (Ctrl+S)**: Overwrites the original file with any applied edits (rotate, flip, crop, grayscale).
-        
-    - **Save As (Ctrl+Shift+S)**: Save the edited image to a new file in PNG, JPEG, or BMP format.
-        
-    - **Delete (Delete)**: Securely moves the current file to the Recycle Bin.
-        
-    - **Clipboard**: Copy the image file or bitmap to the clipboard (Ctrl+C) and paste an image or file path from the clipboard (Ctrl+V).
-        
-    - **Drag & Drop**: Open an image by dragging it onto the window.
-
-    - **Auto Refresh**: Polls the image to see if it has changed elsewhere, and automatically updates if you have auto-refresh turned on. 
-        
+- ✅ No telemetry  
+- ✅ No dependencies  
+- ✅ No installer required  
+- ✅ ~500 KB executable
 
 ---
 
-## Why Minimal Image Viewer?
+## 📊 Comparison
 
-This viewer is built on the philosophy of "do one thing and do it well," offering distinct advantages in resource-constrained or OpSec-sensitive environments.
+| Feature | **Minimal Image Viewer** | **Windows Photos** | **IrfanView / XnView** |
+|--------|-------------------------|-------------------|------------------------|
+| Executable Size | **~500 KB** | ~50 MB+ | ~3–5 MB+ |
+| Telemetry / Network | **None** | Yes | Optional |
+| Portable | **Yes (.ini)** | No | Partial |
+| Deep Zoom | **Yes (GPU streaming)** | Limited | No |
+| RAW Preview Optimization | **Yes** | Limited | Plugin-based |
+| SVG Support | **Yes (native GPU)** | No | Limited |
+| HDR / QOI Support | **Yes** | No | Partial |
+| Startup Speed | **Instant** | Slow | Moderate |
+| Open Source | **Yes** | No | No |
 
-- **🔒 Secure & Private**:
-    
-    - **Zero Telemetry**: The application performs **no network activity** and contains no tracking or telemetry, ensuring complete privacy.
-        
-    - **Minimal Attack Surface**: Relies only on hardened, native Windows APIs (Direct2D, WIC) and avoids large third-party libraries.
-        
-    - **Safe File Handling**: Uses atomic save operations via temporary files to prevent data corruption and deletes to the Recycle Bin to prevent accidental data loss.
-        
-- **🚀 Efficient & Portable**:
-    
-    - **Lightweight**: Compiles to a tiny executable (~100 KB) and uses minimal RAM (<10 MB for most images).
-        
-    - **Portable Settings**: Saves all preferences (background color, window size, etc.) to a `minimal_image_viewer_settings.ini` file in the same directory, making it fully portable and leaving no trace in the Windows Registry.
-        
-    - **Hardware Accelerated**: Uses Direct2D for all rendering, ensuring smooth, GPU-accelerated scaling, panning, and animations.
-        
-
-### Comparison with Alternatives
-
-| **Feature**              | **Minimal Image Viewer** | **Windows Photos** | **IrfanView / XnView** |
-| ------------------------ | ------------------------ | ------------------ | ---------------------- |
-| **Executable Size**      | **~100 KB**              | ~50 MB+ (UWP)      | ~3-5 MB+               |
-| **Telemetry / Network**  | **None**                 | Yes                | Optional               |
-| **Settings**             | **Portable `.ini`**      | Registry / UWP     | Portable or Registry   |
-| **Animated GIF Support** | **Yes**                  | Yes                | Yes (with plugins)     |
-| **Open Source**          | **Yes**                  | No                 | No                     |
 
 ---
 
-## Installation and Usage
+## ✨ Features
 
-Download the `.exe` from the [Releases](https://github.com/deminimis/minimalimageviewer/releases) page and run it. No installation is required.
+### 🖼️ Image Support 
 
-To set it as your default viewer, see the [Default Viewer Instructions](https://github.com/deminimis/minimalimageviewer/blob/main/Instructions/Default%20Viewer.md).
+Supports a wide range of formats using WIC + custom decoders:
 
-### Hotkeys
-
-*Note: Most action hotkeys listed below are defaults and can be fully customized by right-clicking and selecting "Keybindings..."*
-
-#### File Operations
-
-- **Open Image**: `Ctrl+O` or **Drag & Drop**
-    
-- **Save (Overwrite)**: `Ctrl+S`
-    
-- **Save As**: `Ctrl+Shift+S`
-    
-- **Delete Image**: `Delete` (Moves to Recycle Bin)
-    
-- **Copy Image**: `Ctrl+C`
-    
-- **Paste Image**: `Ctrl+V`
-    
-- **Open File Location**: Right-Click → "Open File Location"
-    
-- **Properties**: Right-Click → "Properties..."
-    
-- **Refresh File/Directory**: `F5`
-
-#### Image Navigation
-
-- **Next/Previous Image**: `Right Arrow` / `Left Arrow`
-    
-- **Pan Image**: **Click and Drag** (when zoomed in)
-    
-- **Sort By**: Right-Click → "Sort By" → (Name/Date/Size)
-
-- **Step Animation Frame**: `Spacebar` (Pauses auto-play and advances GIF frame-by-frame)
-    
-#### Viewing
-
-- **Zoom In/Out**: `Ctrl++` / `Ctrl+-` or **Mouse Wheel**
-    
-- **Fit to Window**: `Ctrl+0` or **Double-Click**
-    
-- **Actual Size (100%)**: `Ctrl+*`
-
-- **Custom Zoom**: `Ctrl+Shift+Z`
-    
-- **Toggle Fullscreen**: `F11`
-    
-- **Exit**: `Esc`
-    
-#### Editing & Tools
-
-- **Undo Last Edit**: `Ctrl+Z`
-
-- **Rotate Clockwise**: `Up Arrow`
-    
-- **Rotate Counter-Clockwise**: `Down Arrow`
-    
-- **Flip Horizontal**: `F`
-    
-- **Toggle Crop Mode**: `C`
-    
-- **Apply Crop**: `Enter` (while in crop mode)
-    
-- **Cancel Action**: `Esc` (Exits crop mode, eyedropper, or OCR selection)
-    
-- **Toggle Grayscale**: Right-Click → "Edit" → "Grayscale"
-    
-- **Resize Image**: Right-Click → "Edit" → "Resize Image..."
-    
-- **Toggle OSD**: `I`
-    
-- **Eyedropper Tool**: Right-Click → "Edit" → "Pick Color" (Click to copy hex code)
-    
-- **Preferences**: Right-Click → "Preferences..."
-    
+- **Standard**: JPEG, PNG, BMP, GIF, TIFF, ICO, WebP  
+- **Modern**: HEIF, HEIC, AVIF  
+- **RAW (Camera)**: CR2, CR3, NEF, DNG, ARW, ORF, RW2 *(via codecs)*  
+- **Advanced Formats**:
+  - **SVG (Vector rendering, GPU-accelerated)**
+  - **HDR (.hdr Radiance with tone mapping)**
+  - **QOI (Quite OK Image)**
+  - **TGA, PSD, PPM, PGM, PBM, PNM**
 
 ---
 
-## Technical Highlights
+### 🎞️ Animated Images (GIF & Multi-frame)
 
-- **Core Technology**: Built with modern C++ and native Win32 APIs. All rendering is hardware-accelerated via **Direct2D** (`ID2D1HwndRenderTarget`) and text is rendered with **DirectWrite** for superior clarity.
-    
-- **WIC Pipeline**: All image I/O and transformations are handled by the **Windows Imaging Component (WIC)**.
-    
-    - **Loading**: `IWICBitmapDecoder` and `IWICFormatConverter` are used to load and convert any WIC-supported format to a Direct2D-compatible pixel format (`GUID_WICPixelFormat32bppPBGRA`).
-        
-    - **Editing**: Edits are applied by chaining WIC components before saving:
-        
-        - `IWICBitmapFlipRotator` (for rotation/flipping)
-            
-        - `IWICBitmapClipper` (for cropping)
-            
-        - `IWICBitmapScaler` (for resizing)
-            
-        - `IWICFormatConverter` (for grayscale)
-            
-    - **Animation**: `IWICBitmapDecoder::GetFrameCount()` is used to detect multi-frame images. Frame delays are read from the metadata (`/grctlext/Delay`) and a `WM_TIMER` event is used to cycle frames.
-        
-- **Concurrency**: Image loading is fully asynchronous on a separate `std::thread` to keep the UI responsive. A custom `WM_APP_IMAGE_LOADED` message is posted to the main window thread to safely transfer the decoded image. Directory pre-loading (`StartPreloading`) uses two additional threads for the next/previous images.
-    
-- **State Management**: Window state and user preferences are persisted in a portable `minimal_image_viewer_settings.ini` file using `GetPrivateProfileIntW` and `WritePrivateProfileStringW`.
-    
+- Full animated image playback
+- Correct frame timing + disposal behavior
+- Interactive controls:
+  - `Space` → Pause + step frames
+  - `Shift + Space` → Resume playback
+  - `Shift + ← / →` → Previous / Next frame
+  - `Shift + ↑ / ↓` → Jump to first frame
 
-## Build Process
+---
 
-1. Open `MinimalImageViewer-VS.vcxproj` in Visual Studio 2022.
-    
-2. Set the build configuration to "Release" and "x64".
-    
-3. Build the solution.
-    
+### 🔍 Viewing & Navigation
 
-The project links against the following standard Windows libraries:
+- Smooth zoom (`Ctrl + Mouse Wheel`, `Ctrl +/-`)
+- Cursor-centered zooming
+- Click + drag to pan
+- Fit to Window (`Ctrl+0` / double-click)
+- Actual Size (`Ctrl+*`)
+- Custom zoom dialog (`Ctrl+Shift+Z`)
+- Instant next / previous image navigation
 
-user32.lib, gdi32.lib, comdlg32.lib, shlwapi.lib, windowscodecs.lib, ole32.lib, shell32.lib, propsys.lib, oleaut32.lib, d2d1.lib, dwrite.lib, advapi32.lib.
+---
 
-## Contributing
+### 🚀 Performance (Built for Speed)
 
-Contributions are welcome! This project adheres to a minimalist and security-focused philosophy.
+- **Asynchronous image loading** → no UI blocking  
+- **Directory preloading** → instant browsing  
+- **Deep Zoom (GPU-assisted)**:
+  - Downscaled preview for huge images
+  - Full resolution streamed only when needed
+- **RAW preview extraction**:
+  - Loads embedded previews (fast)
+  - Falls back to full decode only when necessary
 
-1. Fork the repository.
-    
-2. Create a feature branch (`git checkout -b feature/YourFeature`).
-    
-3. Commit your changes (`git commit -m "Add YourFeature"`).
-    
-4. Push to the branch (`git push origin feature/YourFeature`).
-    
-5. Open a Pull Request.
+---
+
+### 📂 Smart File Handling
+
+- Automatic directory scanning
+- Navigate all images in current folder
+- Sort by:
+  - Name
+  - Date Modified
+  - File Size
+- Ascending / descending sorting
+
+---
+
+### 🎨 Rendering & Visuals
+
+- GPU rendering via **Direct2D + DXGI**
+- Smooth scaling (toggle interpolation)
+- Optional fade transitions
+- Background modes:
+  - Grey (default)
+  - Black
+  - White
+  - Checkerboard transparency
+- Automatic dark/light title bar
+
+---
+
+### 🛠️ Editing Tools (Non-Destructive)
+
+- **Crop Tool**
+  - `C` → Enable crop
+  - Drag selection
+  - `Enter` → Apply
+  - `Esc` → Cancel
+
+- **Resize Tool**
+  - Custom dimensions
+  - Aspect ratio lock
+  - High-quality scaling (Fant)
+
+- **Transformations**
+  - Rotate (90° increments)
+  - Flip horizontal
+  - EXIF auto-rotation on load
+
+- **Undo System**
+  - `Ctrl+Z`
+  - Memory-safe multi-step history
+
+---
+
+### 📊 Metadata & OSD
+
+- Built-in EXIF + file metadata parsing
+- Toggle OSD (`I`) showing:
+  - Format, resolution, DPI
+  - File size, attributes
+  - Camera data (ISO, aperture, exposure)
+  - Author / software
+
+---
+
+### 📁 File Operations
+
+- Open (`Ctrl+O`) or drag & drop
+- Save (`Ctrl+S`) with atomic overwrite
+- Save As (`Ctrl+Shift+S`)
+- Resize + save new file
+- Delete (Recycle Bin safe delete)
+- Clipboard support:
+  - Copy image path
+  - Paste images from clipboard
+- Open file location instantly
+
+---
+
+### 🔄 Automation
+
+- **Auto-refresh mode**
+  - Detects file changes on disk
+  - Reloads safely when modified externally
+
+---
+
+### ⚙️ Customization
+
+- Fully customizable keybindings
+- Portable `.ini` config
+- Preferences include:
+  - Always on Top
+  - Start Fullscreen
+  - Single Instance enforcement
+  - Background color
+  - Smooth scaling toggle
+  - Fade animation toggle
+  - OSD toggle
+  - Default zoom mode
+
+---
+
+## ⚙️ Technical Highlights
+
+### 🧱 Core Architecture
+
+- **Language**: C++20  
+- **Platform**: Native Win32 (no frameworks)  
+- **Rendering**:
+  - Direct2D (GPU)
+  - DirectWrite (text)
+  - DXGI swap chain
+
+---
+
+### 🖼️ Image Pipeline (WIC)
+
+- `IWICBitmapDecoder` → load images  
+- `IWICFormatConverter` → normalize formats  
+
+**Editing pipeline (non-destructive):**
+
+- Flip/Rotate → `IWICBitmapFlipRotator`  
+- Crop → `IWICBitmapClipper`  
+- Resize → `IWICBitmapScaler`  
+- Convert → `IWICFormatConverter`  
+
+---
+
+### 🎞️ Animation Engine
+
+- Frame-based decoding using WIC metadata
+- Custom compositor:
+  - Handles disposal modes
+  - Maintains frame buffers
+- Timer-driven playback system
+
+---
+
+### 🔍 Deep Zoom System
+
+- Large images downscaled (~4K working size)
+- High resolution streamed dynamically using:
+  - `ID2D1ImageSource`
+- Prevents VRAM spikes and improves responsiveness
+
+---
+
+### 🧵 Multithreading
+
+- Background threads for:
+  - Image decoding
+  - Directory scanning
+  - Preloading images
+- UI thread synchronized via `WM_APP` messages
+
+---
+
+### 🧠 Smart Loading
+
+- Full file read (avoids file locks)
+- RAW/TIFF preview extraction
+- Native codec downscaling when possible
+- CPU fallback scaler when needed
+
+---
+
+### 📦 Extended Format Support
+
+- **SVG**
+  - Rendered via `DrawSvgDocument` (GPU)
+
+- **HDR**
+  - Decoded via `stb_image`
+  - Tone-mapped to display space
+
+- **QOI**
+  - Decoded via embedded `qoi.h`
+
+---
+
+### 💾 Portable Configuration
+
+- Settings stored in: minimal_image_viewer_settings.ini
+
+- No registry usage
+- Fully portable between systems
+
+---
+
+### 🔒 Safety & Reliability
+
+- Atomic saves (temp file replacement)
+- Recycle Bin deletion (recoverable)
+- Memory-limited undo stack
+- Large image safeguards
+
+
+---
+
+## 🎯 Philosophy
+
+> **Do one thing extremely well.**
+
+Minimal Image Viewer is built to be:
+
+- ⚡ Fast  
+- 🧠 Smart  
+- 🔒 Private  
+- 📦 Tiny  
+- 🧩 Complete  
+
+No telemetry. No dependencies. No bloat.
+
+Just a **powerful, minimal image viewer for Windows**.
+
+Disclaimer: This readme was redone by CoPilot to add flashy icons and dumb advertisement/SEO language. 
 
 
