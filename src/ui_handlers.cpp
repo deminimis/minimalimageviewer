@@ -123,9 +123,10 @@ void ViewerApp::HandleCommand(WORD cmd) {
     // Hardcoded fallbacks 
     case IDM_UNDO:
         if (!m_ctx.undoStack.empty()) {
-           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+            std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             m_ctx.wicConverterOriginal = m_ctx.undoStack.back();
             m_ctx.undoStack.pop_back(); m_ctx.isCropActive = false; m_ctx.cropRectLocal = { 0 };
+            m_ctx.isOsdCacheValid = false;
             ApplyEffectsToView(); FitImageToWindow(); InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
         }
         break;

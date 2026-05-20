@@ -99,6 +99,8 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     }
     wil::unique_couninitialize_call cleanupCOM;
 
+    timeBeginPeriod(1);
+
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&m_ctx.wicFactory)))) {
         MessageBoxW(nullptr, L"Failed to create WIC Imaging Factory.", L"Error", MB_OK | MB_ICONERROR);
         return 1;
@@ -192,6 +194,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
         }
     }
 
+    timeEndPeriod(1);
     m_ctx.isShuttingDown = true;
     CleanupLoadingThread();
 

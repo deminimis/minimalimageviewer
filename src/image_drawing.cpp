@@ -145,8 +145,30 @@ void ViewerApp::DiscardDeviceResources() {
 }
 
 void ViewerApp::DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
-    ImageProperties props = GetCurrentOsdProperties();
-    if (props.filePath.empty()) return;
+    if (!m_ctx.isOsdCacheValid) {
+        ImageProperties props = GetCurrentOsdProperties();
+        if (props.filePath.empty()) {
+            m_ctx.cachedOsdText.clear();
+            return;
+        }
+
+        std::wstring osdText;
+        osdText += L"Image Format: " + props.imageFormat + L"\n";
+        osdText += L"Dimensions: " + props.dimensions + L"   Orientation: " + props.orientation + L"\n";
+        osdText += L"Bit Depth: " + props.bitDepth + L"\n";
+        osdText += L"DPI: " + props.dpi + L"\n";
+        osdText += L"\n";
+        osdText += L"File Size: " + props.fileSize + L"\n";
+        osdText += L"Attributes: " + props.attributes + L"\n";
+        osdText += L"\n";
+        osdText += L"F-stop: " + props.fStop + L"  Exposure: " + props.exposureTime + L"  ISO: " + props.iso + L"\n";
+        osdText += L"Author: " + props.author + L"  Software: " + props.software + L"\n";
+
+        m_ctx.cachedOsdText = osdText;
+        m_ctx.isOsdCacheValid = true;
+    }
+
+    if (m_ctx.cachedOsdText.empty()) return;
 
     D2D1_SIZE_F rtSize = renderTarget->GetSize();
     float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
@@ -154,29 +176,18 @@ void ViewerApp::DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
     float lineHeight = 18.0f * dpiScale;
     float textHeight = lineHeight * 8 + padding * 2;
 
-    std::wstring osdText;
-    osdText += L"Image Format: " + props.imageFormat + L"\n";
-    osdText += L"Dimensions: " + props.dimensions + L"   Orientation: " + props.orientation + L"\n";
-    osdText += L"Bit Depth: " + props.bitDepth + L"\n";
-    osdText += L"DPI: " + props.dpi + L"\n";
-    osdText += L"\n";
-    osdText += L"File Size: " + props.fileSize + L"\n";
-    osdText += L"Attributes: " + props.attributes + L"\n";
-    osdText += L"\n";
-    osdText += L"F-stop: " + props.fStop + L"  Exposure: " + props.exposureTime + L"  ISO: " + props.iso + L"\n";
-    osdText += L"Author: " + props.author + L"  Software: " + props.software + L"\n";
-
     renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
 
     ComPtr<IDWriteTextLayout> textLayout;
     if (FAILED(m_ctx.writeFactory->CreateTextLayout(
-        osdText.c_str(),
-        static_cast<UINT32>(osdText.length()),
+        m_ctx.cachedOsdText.c_str(),
+        static_cast<UINT32>(m_ctx.cachedOsdText.length()),
         m_ctx.textFormat.Get(),
         rtSize.width - 2 * padding,
         rtSize.height,
         &textLayout
     ))) return;
+
     DWRITE_TEXT_METRICS metrics;
     textLayout->GetMetrics(&metrics);
 

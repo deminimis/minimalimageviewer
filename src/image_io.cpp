@@ -65,6 +65,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
     m_ctx.cancelPreloading = false;
     int mySeqId = ++m_ctx.loadSequenceId;
     m_ctx.isLoading = true;
+    m_ctx.isOsdCacheValid = false;
     m_ctx.loadStartTime = GetTickCount64();
     SetTimer(m_ctx.hWnd, LOADING_TIMER_ID, 700, nullptr);
     m_ctx.loadingFilePath = filePath;
@@ -723,7 +724,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                 propValue.reset();
                 if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Top", &propValue)) && propValue.vt == VT_UI2) meta.top = propValue.uiVal;
             }
-            if (meta.delay < 20) meta.delay = 100;
+            if (meta.delay <= 10) meta.delay = 100;
             allFramesDelays.push_back(meta.delay);
             allFramesMetadata.push_back(meta);
 

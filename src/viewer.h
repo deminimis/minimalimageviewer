@@ -57,6 +57,8 @@ using Microsoft::WRL::ComPtr;
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dxguid.lib")
+#pragma comment(lib, "winmm.lib")
+#include <timeapi.h>
 
 constexpr UINT WM_APP_IMAGE_LOADED = (WM_APP + 1);
 constexpr UINT WM_APP_IMAGE_LOAD_FAILED = (WM_APP + 2);
@@ -244,6 +246,8 @@ struct AppContext {
 
     std::atomic<bool> isInitialized{ false };
     bool isOsdVisible = false;
+    bool isOsdCacheValid = false;
+    std::wstring cachedOsdText;
 
     bool isFlippedHorizontal = false;
 

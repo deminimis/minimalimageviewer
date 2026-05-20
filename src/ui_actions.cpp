@@ -157,6 +157,7 @@ void ViewerApp::HandlePaste() {
                         m_ctx.currentDirectory = L"";
                         m_ctx.loadingFilePath = L"Clipboard Image";
                         m_ctx.originalContainerFormat = GUID_ContainerFormatPng;
+                        m_ctx.isOsdCacheValid = false;
 
                         m_ctx.zoomFactor = 1.0f;
                         m_ctx.offsetX = 0;

@@ -64,6 +64,7 @@ void ViewerApp::CommitCrop() {
     }
     m_ctx.isCropActive = false;
     m_ctx.cropRectLocal = { 0 };
+    m_ctx.isOsdCacheValid = false;
 }
 
 void ViewerApp::ApplyEffectsToView() {
