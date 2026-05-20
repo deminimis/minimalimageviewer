@@ -25,7 +25,6 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
     if (!pApp) return (INT_PTR)FALSE;
 
     auto& ctx = pApp->GetContext();
-
     switch (message) {
     case WM_INITDIALOG: {
         pApp->UpdateTitleBarTheme(hDlg, ctx.bgColor);
@@ -33,12 +32,11 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             if (!ctx.darkBrush) ctx.darkBrush.reset(CreateSolidBrush(RGB(32, 32, 32)));
         }
         else {
-            ctx.darkBrush.reset(); 
+            ctx.darkBrush.reset();
         }
 
         int bgRadio = IDC_RADIO_BG_GREY + static_cast<int>(ctx.bgColor);
         CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, bgRadio);
-
         CheckDlgButton(hDlg, IDC_CHECK_ALWAYS_ON_TOP, ctx.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_START_FULLSCREEN, ctx.startFullScreen ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
@@ -87,6 +85,13 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             SetWindowPos(ctx.hWnd, (ctx.alwaysOnTop) ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
             pApp->UpdateTitleBarTheme(ctx.hWnd, ctx.bgColor);
             InvalidateRect(ctx.hWnd, NULL, FALSE);
+
+            // Auto-save changes 
+            if (!ctx.isFullScreen) {
+                ctx.windowPlacement.length = sizeof(WINDOWPLACEMENT);
+                GetWindowPlacement(ctx.hWnd, &ctx.windowPlacement);
+            }
+            pApp->WriteSettings(ctx.settingsPath, ctx.windowPlacement, ctx.startFullScreen, ctx.enforceSingleInstance, ctx.alwaysOnTop);
 
             EndDialog(hDlg, IDOK);
             return (INT_PTR)TRUE;
@@ -166,7 +171,15 @@ INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARA
             int idx = static_cast<int>(SendMessageW(GetDlgItem(hDlg, IDC_COMBO_ACTION), CB_GETCURSEL, 0, 0));
             if (idx != CB_ERR) {
                 ctx.hotkeys[idx] = static_cast<WORD>(SendMessageW(GetDlgItem(hDlg, IDC_HOTKEY_CTRL), HKM_GETHOTKEY, 0, 0));
-                pApp->UpdateAcceleratorTable(); // Rebuild dynamically
+                pApp->UpdateAcceleratorTable(); 
+
+                // Auto-save keybinding 
+                if (!ctx.isFullScreen) {
+                    ctx.windowPlacement.length = sizeof(WINDOWPLACEMENT);
+                    GetWindowPlacement(ctx.hWnd, &ctx.windowPlacement);
+                }
+                pApp->WriteSettings(ctx.settingsPath, ctx.windowPlacement, ctx.startFullScreen, ctx.enforceSingleInstance, ctx.alwaysOnTop);
+
                 SetDlgItemTextW(hDlg, IDOK, L"Applied!");
                 SetTimer(hDlg, KEYBINDING_TIMER_ID, 1500, nullptr);
             }

@@ -88,7 +88,7 @@ void ViewerApp::HandleCommand(WORD cmd) {
             InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
         }
         else {
-            PostQuitMessage(0);
+            SendMessage(m_ctx.hWnd, WM_CLOSE, 0, 0);
         }
         break;
     case IDM_ROTATE_CW:     RotateImage(true); break;
