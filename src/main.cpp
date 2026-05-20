@@ -139,9 +139,10 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     UpdateWindow(m_ctx.hWnd);
 
     if (lpCmdLine && *lpCmdLine) {
-        wchar_t filePath[MAX_PATH];
-        wcscpy_s(filePath, MAX_PATH, lpCmdLine);
-        PathUnquoteSpacesW(filePath);
+        std::wstring filePath(lpCmdLine);
+        if (filePath.length() >= 2 && filePath.front() == L'"' && filePath.back() == L'"') {
+            filePath = filePath.substr(1, filePath.length() - 2);
+        }
         LoadImageFromFile(filePath);
     }
 

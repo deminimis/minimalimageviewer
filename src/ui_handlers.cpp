@@ -518,9 +518,10 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
     case WM_COPYDATA: {
         PCOPYDATASTRUCT pcds = reinterpret_cast<PCOPYDATASTRUCT>(lParam);
         if (pcds && pcds->dwData == 1) {
-            wchar_t filePath[MAX_PATH];
-            wcscpy_s(filePath, MAX_PATH, static_cast<wchar_t*>(pcds->lpData));
-            PathUnquoteSpacesW(filePath);
+            std::wstring filePath(static_cast<wchar_t*>(pcds->lpData));
+            if (filePath.length() >= 2 && filePath.front() == L'"' && filePath.back() == L'"') {
+                filePath = filePath.substr(1, filePath.length() - 2);
+            }
             LoadImageFromFile(filePath);
         }
         return TRUE;

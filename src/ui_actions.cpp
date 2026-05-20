@@ -52,9 +52,14 @@ void ViewerApp::DeleteCurrentImage() {
 }
 
 void ViewerApp::HandleDropFiles(HDROP hDrop) {
-    wchar_t filePath[MAX_PATH];
-    if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH)) {
-        LoadImageFromFile(filePath);
+    UINT charsRequired = DragQueryFileW(hDrop, 0, nullptr, 0);
+
+    if (charsRequired > 0) {
+        std::wstring filePath(charsRequired + 1, L'\0');
+        if (DragQueryFileW(hDrop, 0, filePath.data(), charsRequired + 1)) {
+            filePath.resize(charsRequired); 
+            LoadImageFromFile(filePath);
+        }
     }
     DragFinish(hDrop);
 }
@@ -95,9 +100,13 @@ void ViewerApp::HandlePaste() {
             HANDLE hData = GetClipboardData(CF_HDROP);
             if (hData) {
                 HDROP hDrop = static_cast<HDROP>(hData);
-                wchar_t filePath[MAX_PATH];
-                if (DragQueryFileW(hDrop, 0, filePath, MAX_PATH)) {
-                    LoadImageFromFile(filePath);
+                UINT charsRequired = DragQueryFileW(hDrop, 0, nullptr, 0);
+                if (charsRequired > 0) {
+                    std::wstring filePath(charsRequired + 1, L'\0');
+                    if (DragQueryFileW(hDrop, 0, filePath.data(), charsRequired + 1)) {
+                        filePath.resize(charsRequired);
+                        LoadImageFromFile(filePath);
+                    }
                 }
             }
         }
