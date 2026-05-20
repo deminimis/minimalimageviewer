@@ -5,10 +5,17 @@
 #include <filesystem>
 #include <propkey.h>
 
+#pragma warning(push)
+#pragma warning(disable : 4996) // Suppress 'fopen' unsafe error
+#pragma warning(disable : 4267) // Suppress size_t to int conversion warning
+#define QOI_IMPLEMENTATION
+#include "qoi.h"
+#pragma warning(pop)
+
 
 
 static bool IsImageFile(const wchar_t* filePath) {
-    return PathMatchSpecW(filePath, L"*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;*.svg") == TRUE;
+    return PathMatchSpecW(filePath, L"*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;*.svg;*.qoi") == TRUE;
 }
 
 bool ViewerApp::IsSequenceValid(int seqId) {
@@ -26,7 +33,6 @@ HRESULT ViewerApp::CreateDecoderFromStream_FullFileRead(
 
     if (seqId != -1 && !IsSequenceValid(seqId)) return E_ABORT;
 
-    // Use WIC's native memory-mapped file decoding.
     return pFactory->CreateDecoderFromFilename(
         filePath,
         NULL,
@@ -170,7 +176,69 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
 
         ComPtr<IWICImagingFactory> localFactory;
         HRESULT hr = CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&localFactory));
-        if (FAILED(hr)) { PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); return; }
+        if (FAILED(hr)) {
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId); return;
+        }
+
+        if (ext && _wcsicmp(ext, L".qoi") == 0) {
+            qoi_desc desc;
+            void* pixels = qoi_decode(rawData.data(), static_cast<int>(rawData.size()), &desc, 4);
+            if (pixels) {
+                ComPtr<IWICBitmap> qoiBmp;
+                if (SUCCEEDED(localFactory->CreateBitmap(desc.width, desc.height, GUID_WICPixelFormat32bppRGBA, WICBitmapCacheOnLoad, &qoiBmp))) {
+                    WICRect rc = { 0, 0, (INT)desc.width, (INT)desc.height };
+                    ComPtr<IWICBitmapLock> lock;
+                    if (SUCCEEDED(qoiBmp->Lock(&rc, WICBitmapLockWrite, &lock))) {
+                        UINT cbStride = 0, cbBufferSize = 0;
+                        BYTE* pbBuffer = nullptr;
+                        lock->GetStride(&cbStride);
+                        lock->GetDataPointer(&cbBufferSize, &pbBuffer);
+                        if (pbBuffer) {
+                            memcpy(pbBuffer, pixels, desc.width * desc.height * 4);
+                        }
+                    }
+
+                    ComPtr<IWICBitmapSource> sourceToCache = qoiBmp;
+                    bool downscaled = false;
+                    float ratio = 1.0f;
+                    UINT maxDim = 3840; // Hooking into scaling constant
+
+                    // Route directly into existing CPU scaler 
+                    if (desc.width > maxDim || desc.height > maxDim) {
+                        downscaled = true;
+                        ratio = std::min(static_cast<float>(maxDim) / desc.width, static_cast<float>(maxDim) / desc.height);
+                        UINT newW = static_cast<UINT>(desc.width * ratio);
+                        UINT newH = static_cast<UINT>(desc.height * ratio);
+
+                        ComPtr<IWICBitmapScaler> scaler;
+                        if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
+                            if (SUCCEEDED(scaler->Initialize(sourceToCache.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
+                                sourceToCache = scaler;
+                            }
+                        }
+                    }
+
+                    if (ComPtr<IWICFormatConverter> finalConverter = ConvertToFormat(localFactory.Get(), sourceToCache.Get())) {
+                        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+                        m_ctx.stagedStaticConverter = finalConverter;
+                        m_ctx.stagedRawFileData = std::move(rawData);
+                        m_ctx.stagedWidth = desc.width;
+                        m_ctx.stagedHeight = desc.height;
+                        m_ctx.originalContainerFormat = GUID_NULL;
+                        m_ctx.stagedOrientation = 1;
+                        m_ctx.isDownscaled = downscaled;
+                        m_ctx.downscaleRatio = ratio;
+
+                        free(pixels); // Clean up QOI memory
+                        PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
+                        return;
+                    }
+                }
+                free(pixels);
+            }
+            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+            return;
+        }
 
         ComPtr<IWICStream> stream;
         localFactory->CreateStream(&stream);

@@ -22,6 +22,8 @@ void ViewerApp::ReadSettings(const std::wstring& path, WINDOWPLACEMENT& wp, bool
     m_ctx.defaultZoomMode = static_cast<DefaultZoomMode>((zoomChoice < 0 || zoomChoice > 1) ? 0 : zoomChoice);
 
     wp.length = sizeof(WINDOWPLACEMENT);
+    wp.rcNormalPosition.left = CW_USEDEFAULT;
+    wp.showCmd = SW_SHOWNORMAL;
     // Setup default before attempting read
     GetPrivateProfileStructW(L"Window", L"Placement", &wp, sizeof(WINDOWPLACEMENT), path.c_str());
 
