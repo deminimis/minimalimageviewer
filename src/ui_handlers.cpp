@@ -154,17 +154,21 @@ void ViewerApp::HandleCommand(WORD cmd) {
         break;
     case IDM_ANIM_NEXT_FRAME:
         if (m_ctx.isAnimated && !m_ctx.animationFrameDelays.empty()) {
+            const UINT frameCount = static_cast<UINT>(m_ctx.animationFrameDelays.size());
+
             m_ctx.isAnimationPaused = true;
             KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
-            m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameDelays.size();
+            m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % frameCount;
             UpdateViewToCurrentFrame();
         }
         break;
     case IDM_ANIM_PREV_FRAME:
         if (m_ctx.isAnimated && !m_ctx.animationFrameDelays.empty()) {
+            const UINT frameCount = static_cast<UINT>(m_ctx.animationFrameDelays.size());
+
             m_ctx.isAnimationPaused = true;
             KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
-            m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame - 1 + m_ctx.animationFrameDelays.size()) % m_ctx.animationFrameDelays.size();
+            m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + frameCount - 1) % frameCount;
             UpdateViewToCurrentFrame();
         }
         break;
@@ -329,11 +333,12 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
 
     case WM_TIMER:
         if (wParam == ANIMATION_TIMER_ID) {
-           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+            std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             if (m_ctx.isAnimated && !m_ctx.animationFrameDelays.empty()) {
+                const UINT frameCount = static_cast<UINT>(m_ctx.animationFrameDelays.size());
 
                 UINT currentDelay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
-                m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameDelays.size();
+                m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % frameCount;
                 UINT nextDelay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
 
                 m_ctx.currentAnimatedConverter = GetCompositedAnimationFrame(m_ctx.currentAnimationFrame);
