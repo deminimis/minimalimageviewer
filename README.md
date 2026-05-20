@@ -1,30 +1,65 @@
-# Minimal Image Viewer
+<h1 align="center"> Minimal Image Viewer </h1>
 
-<div style="overflow: auto;">
-  <img src="https://github.com/deminimis/minimalimageviewer/blob/main/src/app.ico?raw=true" alt="Project Logo" width="20%" align="left">
-</div> 
+<p align="center">
+  <img src="https://github.com/deminimis/minimalimageviewer/blob/main/src/app.ico?raw=true" alt="Minimal Image Viewer Logo" width="120">
+</p>
 
-### The most 🪶 LIGHTWEIGHT image viewer available for Windows
-<br>
+<h3 align="center">The most 🪶 lightweight image viewer available for Windows</h3>
 
-A **fast, lightweight, and secure image viewer for Windows**, built entirely with native Win32 and modern C++.  
-Designed to handle everything from tiny PNGs to massive RAW and HDR images—without bloat.
-<br><br><br><br>
+<p align="center">
+  <a href="https://apps.microsoft.com/detail/9PFRKSW3VHQ5?hl=en-us&gl=US&ocid=pdpshare">
+    <img src="https://img.shields.io/badge/Get%20it%20on-Microsoft%20Store-0078D4?style=for-the-badge&logo=microsoft&logoColor=white" alt="Microsoft Store">
+  </a>
+  <a href="https://github.com/deminimis/minimalimageviewer/releases">
+    <img src="https://img.shields.io/github/v/release/deminimis/minimalimageviewer?style=for-the-badge&label=Latest%20Release" alt="Latest Release">
+  </a>
+  <a href="https://github.com/deminimis/minimalimageviewer">
+    <img src="https://img.shields.io/github/license/deminimis/minimalimageviewer?style=for-the-badge" alt="License">
+  </a>
+</p>
 
-### 💾 Download the latest version [here](https://github.com/deminimis/minimalimageviewer/releases).
-<br>
+<p align="center">
+  <b>Fast. Native. Private. Minimal.</b>
+  <br>
+  A lightweight and secure image viewer for Windows, built with native Win32 and modern C++.
+  <br>
+  Designed to open everything from small PNGs to large RAW and HDR images without unnecessary bloat.
+</p>
 
-_For a stripped-down 21kb version, you can try the [stable stripped .exe](https://github.com/deminimis/minimalimageviewer/releases/tag/v1.6)_
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 
 
 
+# Download
 
-- ✅ No telemetry  
-- ✅ No dependencies  
-- ✅ No installer required  
-- ✅ ~500 KB executable
+### Recommended: Install the latest signed version from the Microsoft Store:
+
+<a href="https://apps.microsoft.com/detail/9PFRKSW3VHQ5?hl=en-us&gl=US&ocid=pdpshare" target="_blank"><img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft" width="200" style="margin-top: 10px;"></a>
+
+### Alternative: GitHub Releases
+
+💾 [**Download Portable (.exe)**](https://github.com/deminimis/minimalimageviewer/releases)
+
+
+
+For the ultra-minimal legacy build, try the [stripped 21 KB executable](https://github.com/deminimis/minimalimageviewer/releases/tag/v1.6).
 
 ---
+
+## Highlights
+
+- ✅ Native Win32 application  
+- ✅ No telemetry  
+- ✅ No external runtime dependencies  
+- ✅ No installer required for portable builds  
+- ✅ Lightweight executable size  
+- ✅ Fast startup and low memory usage  
+- ✅ Supports common image formats through Windows Imaging Component  
+- ✅ Designed for privacy-focused local image viewing  
+
+---
+
 
 ## 📊 Comparison
 
