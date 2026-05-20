@@ -52,7 +52,6 @@ void ViewerApp::WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& w
     writeInt(L"Settings", L"DefaultZoomMode", static_cast<int>(m_ctx.defaultZoomMode));
 
     const wchar_t* keyNames[Act_Count] = { L"Next", L"Prev", L"ZoomIn", L"ZoomOut", L"Fit", L"Actual", L"Fullscreen", L"RotateCW", L"RotateCCW", L"Flip", L"Crop", L"CustomZoom", L"Exit" };
-
     for (int i = 0; i < Act_Count; ++i) {
         writeInt(L"Keys", keyNames[i], m_ctx.hotkeys[i]);
     }
@@ -60,6 +59,9 @@ void ViewerApp::WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& w
     if (!IsIconic(m_ctx.hWnd) && wp.rcNormalPosition.left != CW_USEDEFAULT) {
         WritePrivateProfileStructW(L"Window", L"Placement", const_cast<WINDOWPLACEMENT*>(&wp), sizeof(WINDOWPLACEMENT), path.c_str());
     }
+
+    // Force flush INI cache 
+    WritePrivateProfileStringW(NULL, NULL, NULL, path.c_str());
 }
 
 void ViewerApp::UpdateAcceleratorTable() {

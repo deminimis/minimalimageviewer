@@ -43,11 +43,10 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
 
     std::wstring portableSettingsPath = std::wstring(exePath) + L"\\MIV-settings.ini";
     bool canUsePortable = false;
-
-    // Write-Test: Attempt to open or create the file with write access
-    HANDLE hTest = CreateFileW(portableSettingsPath.c_str(), GENERIC_WRITE, 0, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    // Write-Test: Attempt to open or create the file with write access 
+    HANDLE hTest = CreateFileW(portableSettingsPath.c_str(), GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hTest != INVALID_HANDLE_VALUE) {
-        // Success: The directory is writable (e.g., Desktop, USB drive).
+        // Success if writable
         CloseHandle(hTest);
         canUsePortable = true;
     }
