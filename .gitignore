@@ -15,7 +15,12 @@ build/
 *.ipch
 
 # ===========================
-# Your Original C++ Rules
+# Windows Store
+# ===========================
+windowsstore/
+
+# ===========================
+# C++ Rules
 # ===========================
 
 # Prerequisites
