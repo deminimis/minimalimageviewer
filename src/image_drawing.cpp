@@ -12,8 +12,10 @@ bool ViewerApp::GetCurrentImageSize(UINT* width, UINT* height) {
         *height = static_cast<UINT>(size.height);
         return true;
     }
-    else if (m_ctx.isAnimated && !m_ctx.animationFrameConverters.empty()) {
-        return SUCCEEDED(m_ctx.animationFrameConverters[0]->GetSize(width, height));
+    else if (m_ctx.isAnimated) {
+        *width = m_ctx.originalWidth;
+        *height = m_ctx.originalHeight;
+        return true;
     }
     else if (m_ctx.isDownscaled) {
         *width = m_ctx.originalWidth;
@@ -138,7 +140,6 @@ void ViewerApp::DiscardDeviceResources() {
     m_ctx.checkerboardBrush = nullptr;
     m_ctx.cropRectBrush = nullptr;
     m_ctx.fadeBrush = nullptr;
-    m_ctx.animationD2DBitmaps.clear();
     m_ctx.svgDocument = nullptr;
     m_ctx.highResImageSource = nullptr;
 }
@@ -253,14 +254,14 @@ void ViewerApp::Render() {
 
         if (m_ctx.isAnimated) {
            std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-            if (m_ctx.animationD2DBitmaps.size() != m_ctx.animationFrameConverters.size()) {
-                m_ctx.animationD2DBitmaps.assign(m_ctx.animationFrameConverters.size(), nullptr);
+            if (m_ctx.animationD2DBitmaps.size() != m_ctx.animationFrameDelays.size()) {
+                m_ctx.animationD2DBitmaps.assign(m_ctx.animationFrameDelays.size(), nullptr);
                 m_ctx.d2dBitmap = nullptr;
                 m_ctx.wicConverter = nullptr;
             }
 
             // Lazy load and aggressive unload
-            if (m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
+            if (m_ctx.currentAnimationFrame < m_ctx.animationFrameDelays.size()) {
                 if (!m_ctx.animationD2DBitmaps[m_ctx.currentAnimationFrame]) {
 
 
@@ -270,7 +271,7 @@ void ViewerApp::Render() {
                         }
                     }
 
-                    ComPtr<IWICBitmapSource> source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
+                    ComPtr<IWICBitmapSource> source = m_ctx.currentAnimatedConverter;
                     ComPtr<ID2D1Bitmap> d2dFrameBitmap;
                     D2D1_BITMAP_PROPERTIES props = D2D1::BitmapProperties(
                         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),

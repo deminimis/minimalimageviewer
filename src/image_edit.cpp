@@ -46,7 +46,7 @@ void ViewerApp::CommitCrop() {
 
                         if (m_ctx.isAnimated) {
                             m_ctx.isAnimated = false;
-                            m_ctx.animationFrameConverters.clear();
+                            m_ctx.animationFrameMetadata.clear();
                             m_ctx.animationFrameDelays.clear();
                             KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
                         }
@@ -110,7 +110,6 @@ void ViewerApp::ApplyEffectsToView() {
         std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         m_ctx.wicConverter = converter;
         m_ctx.d2dBitmap = nullptr;
-        m_ctx.animationD2DBitmaps.clear();
     }
 }
 
@@ -154,8 +153,8 @@ ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
    std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
     ComPtr<IWICBitmapSource> source;
 
-    if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
-        source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
+    if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameDelays.size()) {
+        source = m_ctx.currentAnimatedConverter;
     }
     else if (m_ctx.wicConverterOriginal) {
         source = m_ctx.wicConverterOriginal;
@@ -291,8 +290,8 @@ void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& co
     ComPtr<IWICBitmapSource> source;
     {
        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-        if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
-            source = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
+        if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameDelays.size()) {
+            source = m_ctx.currentAnimatedConverter;
         }
         else if (m_ctx.wicConverterOriginal) {
             source = m_ctx.wicConverterOriginal;

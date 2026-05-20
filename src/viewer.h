@@ -135,8 +135,8 @@ struct AppContext {
     ComPtr<IDXGISwapChain1> swapChain = nullptr;
     ComPtr<ID2D1Bitmap> d2dBitmap = nullptr;
     int pendingNavIndex = -1;
-    ComPtr<IWICFormatConverter> wicConverter = nullptr;
-    ComPtr<IWICFormatConverter> wicConverterOriginal = nullptr;
+    ComPtr<IWICBitmapSource> wicConverter = nullptr;
+    ComPtr<IWICBitmapSource> wicConverterOriginal = nullptr;
     std::vector<BYTE> rawFileData;
     std::vector<BYTE> stagedRawFileData;
     ComPtr<IWICStream> wicStream;
@@ -146,7 +146,7 @@ struct AppContext {
     UINT originalHeight = 0;
     bool isDownscaled = false;
     float downscaleRatio = 1.0f;
-    std::vector<ComPtr<IWICFormatConverter>> undoStack;
+    std::vector<ComPtr<IWICBitmapSource>> undoStack;
     ComPtr<IDWriteTextFormat> textFormat = nullptr;
     ComPtr<ID2D1SolidColorBrush> textBrush = nullptr;
     ComPtr<ID2D1BitmapBrush> checkerboardBrush = nullptr;
@@ -215,10 +215,25 @@ struct AppContext {
 
     HWND hPropsWnd = nullptr;
 
+    struct AnimationFrameMetadata {
+        UINT delay = 100;
+        UINT disposal = 0;
+        UINT left = 0;
+        UINT top = 0;
+        UINT width = 0;
+        UINT height = 0;
+    };
+
     // Animation State
     bool isAnimated = false;
-    std::vector<ComPtr<IWICFormatConverter>> animationFrameConverters;
     std::vector<ComPtr<ID2D1Bitmap>> animationD2DBitmaps;
+    std::vector<AnimationFrameMetadata> animationFrameMetadata;
+    std::vector<AnimationFrameMetadata> stagedFrameMetadata;
+    std::vector<BYTE> animationCanvas;
+    std::vector<BYTE> animationCanvasPrev;
+    int lastCompositedFrame = -1;
+    ComPtr<IWICBitmapDecoder> animationDecoder;
+    ComPtr<IWICBitmapSource> currentAnimatedConverter;
     std::vector<UINT> animationFrameDelays;
     UINT currentAnimationFrame = 0;
 
@@ -346,6 +361,8 @@ public:
     static INT_PTR CALLBACK ZoomDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
     static LRESULT CALLBACK PropsWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
+    ComPtr<IWICBitmapSource> GetCompositedAnimationFrame(UINT targetIndex);
+
 private:
     AppContext m_ctx;
 
@@ -372,7 +389,16 @@ private:
     {
         ComPtr<IWICFormatConverter> pConverter;
         if (SUCCEEDED(pFactory->CreateFormatConverter(&pConverter))) {
-            if (SUCCEEDED(pConverter->Initialize(pSource, format, WICBitmapDitherTypeNone, nullptr, 0.f, palette))) {
+            ComPtr<IWICPalette> pWicPalette;
+            // Attempt to retrieve the palette from source 
+            if (palette == WICBitmapPaletteTypeCustom) {
+                if (SUCCEEDED(pFactory->CreatePalette(&pWicPalette))) {
+                    if (FAILED(pSource->CopyPalette(pWicPalette.Get()))) {
+                        pWicPalette = nullptr; // Source is not indexed, no palette needed
+                    }
+                }
+            }
+            if (SUCCEEDED(pConverter->Initialize(pSource, format, WICBitmapDitherTypeNone, pWicPalette.Get(), 0.f, palette))) {
                 return pConverter;
             }
         }

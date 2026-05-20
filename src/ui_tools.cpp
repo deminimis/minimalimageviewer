@@ -9,20 +9,22 @@ void ViewerApp::UpdateWindowTitle() {
     }
 
     std::wstring title = m_ctx.loadingFilePath;
-    if (m_ctx.animationFrameConverters.size() > 1) {
-        title = std::format(L"{} (Frame {}/{})", m_ctx.loadingFilePath, m_ctx.currentAnimationFrame + 1, m_ctx.animationFrameConverters.size());
+    if (m_ctx.animationFrameDelays.size() > 1) {
+        title = std::format(L"{} (Frame {}/{})", m_ctx.loadingFilePath, m_ctx.currentAnimationFrame + 1, m_ctx.animationFrameDelays.size());
     }
     SetWindowTextW(m_ctx.hWnd, title.c_str());
 }
 
 void ViewerApp::UpdateViewToCurrentFrame() {
     {
-       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-        if (m_ctx.currentAnimationFrame < m_ctx.animationFrameConverters.size()) {
-            m_ctx.wicConverterOriginal = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
+        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+        if (!m_ctx.animationFrameDelays.empty()) {
+            m_ctx.currentAnimatedConverter = GetCompositedAnimationFrame(m_ctx.currentAnimationFrame);
+            m_ctx.wicConverterOriginal = m_ctx.currentAnimatedConverter;
+            m_ctx.wicConverter = m_ctx.currentAnimatedConverter;
+            m_ctx.d2dBitmap = nullptr;
         }
     }
-    // Re-apply rotation, flip, grayscale, etc. to the new frame
     ApplyEffectsToView();
     UpdateWindowTitle();
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);

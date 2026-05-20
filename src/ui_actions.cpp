@@ -114,8 +114,7 @@ void ViewerApp::HandlePaste() {
                         m_ctx.wicConverter = converter;
                         m_ctx.wicConverterOriginal = converter;
                         m_ctx.d2dBitmap = nullptr;
-                        m_ctx.animationD2DBitmaps.clear();
-                        m_ctx.animationFrameConverters.clear();
+                        m_ctx.animationFrameMetadata.clear();
                         m_ctx.animationFrameDelays.clear();
                         m_ctx.isAnimated = false;
                         // clear file context

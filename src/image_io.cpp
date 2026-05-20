@@ -308,25 +308,17 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             }
         }
 
-        std::vector<std::vector<BYTE>> allFramesPixels;
         std::vector<UINT> allFramesDelays;
+        std::vector<AppContext::AnimationFrameMetadata> allFramesMetadata;
         UINT canvasWidth = 0, canvasHeight = 0;
 
-        // Retrieve global logical screen descriptor 
         ComPtr<IWICMetadataQueryReader> decoderMetadata;
         if (SUCCEEDED(decoder->GetMetadataQueryReader(&decoderMetadata))) {
             wil::unique_prop_variant propValue;
-            if (SUCCEEDED(decoderMetadata->GetMetadataByName(L"/logscrdesc/Width", &propValue))) {
-                if (propValue.vt == VT_UI2) canvasWidth = propValue.uiVal;
-            }
-            propValue.reset(); // clear before reuse
-            if (SUCCEEDED(decoderMetadata->GetMetadataByName(L"/logscrdesc/Height", &propValue))) {
-                if (propValue.vt == VT_UI2) canvasHeight = propValue.uiVal;
-            }
+            if (SUCCEEDED(decoderMetadata->GetMetadataByName(L"/logscrdesc/Width", &propValue)) && propValue.vt == VT_UI2) canvasWidth = propValue.uiVal;
+            propValue.reset();
+            if (SUCCEEDED(decoderMetadata->GetMetadataByName(L"/logscrdesc/Height", &propValue)) && propValue.vt == VT_UI2) canvasHeight = propValue.uiVal;
         }
-
-        std::vector<BYTE> compositeBuffer;
-        std::vector<BYTE> previousCompositeBuffer;
 
         for (UINT i = 0; i < frameCount; ++i) {
             ComPtr<IWICBitmapFrameDecode> frame;
@@ -334,120 +326,42 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
 
             UINT frameWidth = 0, frameHeight = 0;
             frame->GetSize(&frameWidth, &frameHeight);
-            // Fallback if dimensions arent found
             if (canvasWidth == 0 || canvasHeight == 0) {
-                canvasWidth = frameWidth;
-                canvasHeight = frameHeight;
+                canvasWidth = frameWidth; canvasHeight = frameHeight;
             }
 
-            UINT delay = 100;
-            UINT disposal = 0;
-            UINT left = 0;
-            UINT top = 0;
+            AppContext::AnimationFrameMetadata meta;
+            meta.width = frameWidth; meta.height = frameHeight;
 
             ComPtr<IWICMetadataQueryReader> metadataReader;
             if (SUCCEEDED(frame->GetMetadataQueryReader(&metadataReader))) {
                 wil::unique_prop_variant propValue;
-                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Delay", &propValue))) {
-                    if (propValue.vt == VT_UI2) delay = propValue.uiVal * 10;
-                }
-                propValue.reset(); // clear before reuse
-                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Disposal", &propValue))) {
-                    if (propValue.vt == VT_UI1) disposal = propValue.bVal;
-                }
+                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Delay", &propValue)) && propValue.vt == VT_UI2) meta.delay = propValue.uiVal * 10;
                 propValue.reset();
-                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Left", &propValue))) {
-                    if (propValue.vt == VT_UI2) left = propValue.uiVal;
-                }
+                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/grctlext/Disposal", &propValue)) && propValue.vt == VT_UI1) meta.disposal = propValue.bVal;
                 propValue.reset();
-                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Top", &propValue))) {
-                    if (propValue.vt == VT_UI2) top = propValue.uiVal;
-                }
+                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Left", &propValue)) && propValue.vt == VT_UI2) meta.left = propValue.uiVal;
+                propValue.reset();
+                if (SUCCEEDED(metadataReader->GetMetadataByName(L"/imgdesc/Top", &propValue)) && propValue.vt == VT_UI2) meta.top = propValue.uiVal;
             }
-            if (delay < 20) delay = 100;
-            allFramesDelays.push_back(delay);
+            if (meta.delay < 20) meta.delay = 100;
+            allFramesDelays.push_back(meta.delay);
+            allFramesMetadata.push_back(meta);
 
-            UINT canvasStride = canvasWidth * 4;
-            UINT canvasSize = canvasStride * canvasHeight;
-            if (compositeBuffer.size() != canvasSize) {
-                compositeBuffer.assign(canvasSize, 0);
-                previousCompositeBuffer.assign(canvasSize, 0);
-            }
-
-            if (disposal == 3) {
-                previousCompositeBuffer = compositeBuffer;
-            }
-
-            if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(localFactory.Get(), frame.Get())) {
-                UINT frameStride = frameWidth * 4;
-                UINT frameSize = frameStride * frameHeight;
-                std::vector<BYTE> framePixels(frameSize);
-
-                if (SUCCEEDED(converter->CopyPixels(nullptr, frameStride, frameSize, framePixels.data()))) {
-                    for (UINT y = 0; y < frameHeight; ++y) {
-                        if (top + y >= canvasHeight) break;
-                        BYTE* destRow = compositeBuffer.data() + (top + y) * canvasStride + (left * 4);
-                        BYTE* srcRow = framePixels.data() + y * frameStride;
-
-                        for (UINT x = 0; x < frameWidth; ++x) {
-                            if (left + x >= canvasWidth) break;
-                            UINT dp = x * 4;
-                            UINT sp = x * 4;
-
-                            BYTE alpha = srcRow[sp + 3];
-                            if (alpha == 255) {
-                                destRow[dp] = srcRow[sp];
-                                destRow[dp + 1] = srcRow[sp + 1];
-                                destRow[dp + 2] = srcRow[sp + 2];
-                                destRow[dp + 3] = 255;
-                            }
-                            else if (alpha > 0) {
-                                BYTE invAlpha = 255 - alpha;
-                                destRow[dp] = srcRow[sp] + (destRow[dp] * invAlpha) / 255;
-                                destRow[dp + 1] = srcRow[sp + 1] + (destRow[dp + 1] * invAlpha) / 255;
-                                destRow[dp + 2] = srcRow[sp + 2] + (destRow[dp + 2] * invAlpha) / 255;
-                                destRow[dp + 3] = alpha + (destRow[dp + 3] * invAlpha) / 255;
-                            }
-                        }
-                    }
-
-                    allFramesPixels.push_back(compositeBuffer);
-                }
-            }
-
-            // Apply disposal method for next frame
-            if (disposal == 2) {
-                for (UINT y = 0; y < frameHeight; ++y) {
-                    if (top + y >= canvasHeight) break;
-                    BYTE* destRow = compositeBuffer.data() + (top + y) * canvasStride + (left * 4);
-                    for (UINT x = 0; x < frameWidth; ++x) {
-                        if (left + x >= canvasWidth) break;
-                        UINT dp = x * 4;
-                        destRow[dp] = 0;
-                        destRow[dp + 1] = 0;
-                        destRow[dp + 2] = 0;
-                        destRow[dp + 3] = 0;
-                    }
-                }
-            }
-            else if (disposal == 3) {
-                compositeBuffer = previousCompositeBuffer;
-            }
-
-            if (!IsSequenceValid(mySeqId)) { return; }
+            if (!IsSequenceValid(mySeqId)) return;
         }
 
-        if (allFramesPixels.empty()) {
+        if (allFramesMetadata.empty()) {
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
             return;
         }
 
         {
             std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-            m_ctx.stagedFrames = std::move(allFramesPixels);
             m_ctx.stagedDelays = std::move(allFramesDelays);
+            m_ctx.stagedFrameMetadata = std::move(allFramesMetadata);
+            m_ctx.stagedRawFileData = std::move(rawData); // Transfer file memory to context
 
-            // Stage using the global canvas dimensions
             m_ctx.stagedWidth = canvasWidth;
             m_ctx.stagedHeight = canvasHeight;
             m_ctx.originalContainerFormat = containerFormat;
@@ -526,11 +440,9 @@ std::vector<std::wstring> ViewerApp::ScanDirectory(const std::wstring& directory
 
 void ViewerApp::OnImageReady(bool success, int seqId) {
     if (m_ctx.loadSequenceId != seqId) return;
-
     if (success) {
-       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-
-        if (!m_ctx.stagedStaticConverter && m_ctx.stagedFrames.empty() && m_ctx.stagedSvgData.empty()) {
+        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+        if (!m_ctx.stagedStaticConverter && m_ctx.stagedFrames.empty() && m_ctx.stagedSvgData.empty() && m_ctx.stagedFrameMetadata.empty()) {
             m_ctx.isLoading = false;
             return;
         }
@@ -540,7 +452,6 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         m_ctx.d2dBitmap = nullptr;
         m_ctx.highResImageSource = nullptr;
         m_ctx.animationD2DBitmaps.clear();
-        m_ctx.animationFrameConverters.clear();
         m_ctx.animationFrameDelays.clear();
         m_ctx.wicConverter = nullptr;
         m_ctx.wicConverterOriginal = nullptr;
@@ -570,60 +481,47 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
             m_ctx.originalContainerFormat = GUID_NULL;
             CreateDeviceResources();
         }
-        else {
-            bool animated = m_ctx.stagedFrames.size() > 1;
-            // Disable automatic animation for TIFFs 
-            if (m_ctx.originalContainerFormat == GUID_ContainerFormatTiff) {
-                animated = false;
-            }
+        else if (!m_ctx.stagedFrameMetadata.empty()) {
+            bool animated = m_ctx.stagedFrameMetadata.size() > 1;
+            if (m_ctx.originalContainerFormat == GUID_ContainerFormatTiff) animated = false;
 
             m_ctx.isAnimated = animated;
-            m_ctx.animationFrameConverters.clear();
-            m_ctx.animationFrameDelays.clear();
+            m_ctx.animationFrameMetadata = std::move(m_ctx.stagedFrameMetadata);
+            m_ctx.animationFrameDelays = std::move(m_ctx.stagedDelays);
+            m_ctx.rawFileData = std::move(m_ctx.stagedRawFileData);
+            m_ctx.originalWidth = m_ctx.stagedWidth;
+            m_ctx.originalHeight = m_ctx.stagedHeight;
 
-            // Determine start frame
+            ComPtr<IWICStream> stream;
+            if (SUCCEEDED(m_ctx.wicFactory->CreateStream(&stream)) &&
+                SUCCEEDED(stream->InitializeFromMemory(m_ctx.rawFileData.data(), static_cast<DWORD>(m_ctx.rawFileData.size())))) {
+                m_ctx.wicFactory->CreateDecoderFromStream(stream.Get(), NULL, WICDecodeMetadataCacheOnLoad, &m_ctx.animationDecoder);
+
+                // Keep  stream alive in the context
+                m_ctx.wicStream = stream;
+            }
+
+            m_ctx.lastCompositedFrame = -1;
+            UINT canvasSize = m_ctx.stagedWidth * m_ctx.stagedHeight * 4;
+            m_ctx.animationCanvas.assign(canvasSize, 0);
+            m_ctx.animationCanvasPrev.assign(canvasSize, 0);
+            m_ctx.currentAnimatedConverter = nullptr;
+
             m_ctx.currentAnimationFrame = 0;
-            if (m_ctx.startAtEnd && !animated && !m_ctx.stagedFrames.empty()) {
-                m_ctx.currentAnimationFrame = static_cast<UINT>(m_ctx.stagedFrames.size() - 1);
+            if (m_ctx.startAtEnd && !animated) {
+                m_ctx.currentAnimationFrame = static_cast<UINT>(m_ctx.animationFrameMetadata.size() - 1);
             }
 
-            UINT stride = m_ctx.stagedWidth * 4;
-
-            // Reconstruct WIC 
-            for (const auto& pixels : m_ctx.stagedFrames) {
-                ComPtr<IWICBitmap> memoryBitmap;
-                HRESULT hr = m_ctx.wicFactory->CreateBitmapFromMemory(
-                    m_ctx.stagedWidth,
-                    m_ctx.stagedHeight,
-                    GUID_WICPixelFormat32bppPBGRA,
-                    stride,
-                    static_cast<UINT>(pixels.size()),
-                    const_cast<BYTE*>(pixels.data()),
-                    &memoryBitmap
-                );
-                if (SUCCEEDED(hr)) {
-                    if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), memoryBitmap.Get())) {
-                        m_ctx.animationFrameConverters.push_back(converter);
-                    }
-                }
+            if (m_ctx.animationDecoder) {
+                m_ctx.currentAnimatedConverter = GetCompositedAnimationFrame(m_ctx.currentAnimationFrame);
+                m_ctx.wicConverter = m_ctx.currentAnimatedConverter;
+                m_ctx.wicConverterOriginal = m_ctx.currentAnimatedConverter;
             }
 
-            if (!m_ctx.animationFrameConverters.empty()) {
-                // Set the primary converter based on calculated start frame
-                if (m_ctx.currentAnimationFrame >= m_ctx.animationFrameConverters.size()) {
-                    m_ctx.currentAnimationFrame = 0;
-                }
-                m_ctx.wicConverter = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
-                m_ctx.wicConverterOriginal = m_ctx.animationFrameConverters[m_ctx.currentAnimationFrame];
-                if (animated) {
-                    m_ctx.animationFrameDelays = m_ctx.stagedDelays;
-                    // Start animation timer
-                    SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, m_ctx.animationFrameDelays[0], nullptr);
-                }
+            if (animated && !m_ctx.animationFrameDelays.empty()) {
+                SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame], nullptr);
             }
         }
-
-        // Reset flag
         m_ctx.startAtEnd = false;
         m_ctx.stagedFrames.clear();
         m_ctx.stagedDelays.clear();
@@ -739,13 +637,12 @@ void ViewerApp::FinalizeImageLoad(bool success, int foundIndex) {
     KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
 
     {
-       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         m_ctx.d2dBitmap = nullptr;
-        m_ctx.animationD2DBitmaps.clear();
         m_ctx.wicConverter = nullptr;
         m_ctx.wicConverterOriginal = nullptr;
         m_ctx.undoStack.clear();
-        m_ctx.stagedFrames.clear();
+        m_ctx.stagedFrameMetadata.clear();
     }
 
     if (success) {
@@ -778,4 +675,114 @@ void ViewerApp::CleanupPreloadingThreads() {
 void ViewerApp::StartPreloading() {
     CleanupPreloadingThreads();
     m_ctx.cancelPreloading = false;
+}
+
+ComPtr<IWICBitmapSource> ViewerApp::GetCompositedAnimationFrame(UINT targetIndex) {
+    if (!m_ctx.animationDecoder || targetIndex >= m_ctx.animationFrameMetadata.size()) return nullptr;
+
+    UINT canvasWidth = m_ctx.originalWidth;
+    UINT canvasHeight = m_ctx.originalHeight;
+    UINT canvasStride = canvasWidth * 4;
+
+    // Standard GIF rendering sequence
+    UINT startIndex = m_ctx.lastCompositedFrame + 1;
+    if (m_ctx.lastCompositedFrame == -1 || targetIndex < startIndex) {
+        std::fill(m_ctx.animationCanvas.begin(), m_ctx.animationCanvas.end(), 0);
+        std::fill(m_ctx.animationCanvasPrev.begin(), m_ctx.animationCanvasPrev.end(), 0);
+        startIndex = 0;
+    }
+
+    for (UINT i = startIndex; i <= targetIndex; ++i) {
+        const auto& meta = m_ctx.animationFrameMetadata[i];
+
+        // Save previous state for disposal method 3
+        if (meta.disposal == 3) {
+            m_ctx.animationCanvasPrev = m_ctx.animationCanvas;
+        }
+
+        // Decode and composite the current frame
+        ComPtr<IWICBitmapFrameDecode> frame;
+        if (SUCCEEDED(m_ctx.animationDecoder->GetFrame(i, &frame))) {
+            if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), frame.Get())) {
+                UINT frameStride = meta.width * 4;
+                UINT frameSize = frameStride * meta.height;
+                std::vector<BYTE> framePixels(frameSize);
+
+                if (SUCCEEDED(converter->CopyPixels(nullptr, frameStride, frameSize, framePixels.data()))) {
+                    for (UINT y = 0; y < meta.height; ++y) {
+                        if (meta.top + y >= canvasHeight) break;
+                        BYTE* destRow = m_ctx.animationCanvas.data() + (meta.top + y) * canvasStride + (meta.left * 4);
+                        BYTE* srcRow = framePixels.data() + y * frameStride;
+
+                        for (UINT x = 0; x < meta.width; ++x) {
+                            if (meta.left + x >= canvasWidth) break;
+                            UINT dp = x * 4, sp = x * 4;
+                            BYTE alpha = srcRow[sp + 3];
+
+                            // PBGRA SrcOver Blending
+                            if (alpha == 255) {
+                                destRow[dp] = srcRow[sp];
+                                destRow[dp + 1] = srcRow[sp + 1];
+                                destRow[dp + 2] = srcRow[sp + 2];
+                                destRow[dp + 3] = 255;
+                            }
+                            else if (alpha > 0) {
+                                BYTE inv = 255 - alpha;
+                                destRow[dp] = srcRow[sp] + (destRow[dp] * inv) / 255;
+                                destRow[dp + 1] = srcRow[sp + 1] + (destRow[dp + 1] * inv) / 255;
+                                destRow[dp + 2] = srcRow[sp + 2] + (destRow[dp + 2] * inv) / 255;
+                                destRow[dp + 3] = alpha + (destRow[dp + 3] * inv) / 255;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // The disposal method of the target frame applies to the next frame
+        if (i == targetIndex) break;
+
+        // Apply disposal for next frame
+        if (meta.disposal == 2) {
+            for (UINT y = 0; y < meta.height; ++y) {
+                if (meta.top + y >= canvasHeight) break;
+                BYTE* destRow = m_ctx.animationCanvas.data() + (meta.top + y) * canvasStride + (meta.left * 4);
+                for (UINT x = 0; x < meta.width; ++x) {
+                    if (meta.left + x >= canvasWidth) break;
+                    UINT dp = x * 4;
+                    destRow[dp] = 0; destRow[dp + 1] = 0; destRow[dp + 2] = 0; destRow[dp + 3] = 0;
+                }
+            }
+        }
+        else if (meta.disposal == 3) {
+            m_ctx.animationCanvas = m_ctx.animationCanvasPrev;
+        }
+    }
+
+    m_ctx.lastCompositedFrame = targetIndex;
+
+    // New standalone bitmap with deep copy of the memory
+    ComPtr<IWICBitmap> finalBmp;
+    if (SUCCEEDED(m_ctx.wicFactory->CreateBitmap(canvasWidth, canvasHeight, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad, &finalBmp))) {
+        WICRect rc = { 0, 0, static_cast<INT>(canvasWidth), static_cast<INT>(canvasHeight) };
+        ComPtr<IWICBitmapLock> lock;
+        if (SUCCEEDED(finalBmp->Lock(&rc, WICBitmapLockWrite, &lock))) {
+            UINT cbStride = 0, cbBufferSize = 0;
+            BYTE* pbBuffer = nullptr;
+            lock->GetStride(&cbStride);
+            lock->GetDataPointer(&cbBufferSize, &pbBuffer);
+
+            if (pbBuffer) {
+                // Copy row by row to respect WIC 
+                for (UINT y = 0; y < canvasHeight; ++y) {
+                    memcpy(pbBuffer + y * cbStride, m_ctx.animationCanvas.data() + y * canvasStride, canvasStride);
+                }
+            }
+        }
+
+        // Return the WIC bitmap directly 
+        return finalBmp;
+    }
+
+    return nullptr;
 }

@@ -134,19 +134,19 @@ void ViewerApp::HandleCommand(WORD cmd) {
         InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
         break;
     case IDM_PLAY_PAUSE:
-        if (m_ctx.animationFrameConverters.size() > 1) {
+        if (m_ctx.animationFrameDelays.size() > 1) {
             if (m_ctx.isAnimated) {
                 m_ctx.isAnimated = false;
                 KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
             }
             else {
-                m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameConverters.size();
+                m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameDelays.size();
                 UpdateViewToCurrentFrame();
             }
         }
         break;
     case IDM_RESUME_ANIM:
-        if (m_ctx.animationFrameConverters.size() > 1 && !m_ctx.isAnimated) {
+        if (m_ctx.animationFrameDelays.size() > 1 && !m_ctx.isAnimated) {
             m_ctx.isAnimated = true;
             UINT delay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
             SetTimer(m_ctx.hWnd, ANIMATION_TIMER_ID, delay > 0 ? delay : 100, nullptr);
@@ -311,6 +311,11 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
                 UINT currentDelay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
                 m_ctx.currentAnimationFrame = (m_ctx.currentAnimationFrame + 1) % m_ctx.animationFrameDelays.size();
                 UINT nextDelay = m_ctx.animationFrameDelays[m_ctx.currentAnimationFrame];
+
+                m_ctx.currentAnimatedConverter = GetCompositedAnimationFrame(m_ctx.currentAnimationFrame);
+                m_ctx.wicConverterOriginal = m_ctx.currentAnimatedConverter;
+                m_ctx.wicConverter = m_ctx.currentAnimatedConverter;
+                m_ctx.d2dBitmap = nullptr; // Force D2D recreation
 
                 UpdateWindowTitle();
                 InvalidateRect(hWnd, nullptr, FALSE);

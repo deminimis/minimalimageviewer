@@ -174,8 +174,8 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     m_ctx.wicConverterOriginal = nullptr;
     m_ctx.undoStack.clear();
     m_ctx.d2dBitmap = nullptr;
-    m_ctx.animationFrameConverters.clear();
-    m_ctx.animationD2DBitmaps.clear();
+    m_ctx.animationFrameMetadata.clear();
+    m_ctx.animationFrameDelays.clear();
     m_ctx.textBrush = nullptr;
     m_ctx.textFormat = nullptr;
     m_ctx.renderTarget = nullptr;
