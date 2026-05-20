@@ -116,11 +116,11 @@ std::wstring ViewerApp::GetHotkeyString(WORD hk) {
     std::wstring str;
     BYTE mods = HIBYTE(hk);
     BYTE vk = LOBYTE(hk);
+
     if (mods & HOTKEYF_CONTROL) str += L"Ctrl+";
     if (mods & HOTKEYF_SHIFT) str += L"Shift+";
     if (mods & HOTKEYF_ALT) str += L"Alt+";
 
-    UINT scanCode = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
     wchar_t keyName[64] = { 0 };
     switch (vk) {
     case VK_LEFT: wcscpy_s(keyName, L"Left Arrow"); break;
@@ -128,10 +128,39 @@ std::wstring ViewerApp::GetHotkeyString(WORD hk) {
     case VK_UP: wcscpy_s(keyName, L"Up Arrow"); break;
     case VK_DOWN: wcscpy_s(keyName, L"Down Arrow"); break;
     case VK_ESCAPE: wcscpy_s(keyName, L"Esc"); break;
-    case VK_ADD: wcscpy_s(keyName, L"+"); break;
-    case VK_SUBTRACT: wcscpy_s(keyName, L"-"); break;
+    case VK_RETURN: wcscpy_s(keyName, L"Enter"); break;
+    case VK_SPACE: wcscpy_s(keyName, L"Spacebar"); break;
+    case VK_DELETE: wcscpy_s(keyName, L"Delete"); break;
+    case VK_INSERT: wcscpy_s(keyName, L"Insert"); break;
+    case VK_HOME: wcscpy_s(keyName, L"Home"); break;
+    case VK_END: wcscpy_s(keyName, L"End"); break;
+    case VK_PRIOR: wcscpy_s(keyName, L"Page Up"); break;
+    case VK_NEXT: wcscpy_s(keyName, L"Page Down"); break;
+    case VK_ADD:
+    case VK_OEM_PLUS: wcscpy_s(keyName, L"+"); break;
+    case VK_SUBTRACT:
+    case VK_OEM_MINUS: wcscpy_s(keyName, L"-"); break;
     case VK_MULTIPLY: wcscpy_s(keyName, L"*"); break;
-    default: GetKeyNameTextW(scanCode << 16, keyName, 64); break;
+    case VK_DIVIDE: wcscpy_s(keyName, L"/"); break;
+    case VK_TAB: wcscpy_s(keyName, L"Tab"); break;
+    case VK_NUMPAD0: wcscpy_s(keyName, L"Numpad 0"); break;
+    case VK_NUMPAD1: wcscpy_s(keyName, L"Numpad 1"); break;
+    case VK_NUMPAD2: wcscpy_s(keyName, L"Numpad 2"); break;
+    case VK_NUMPAD3: wcscpy_s(keyName, L"Numpad 3"); break;
+    case VK_NUMPAD4: wcscpy_s(keyName, L"Numpad 4"); break;
+    case VK_NUMPAD5: wcscpy_s(keyName, L"Numpad 5"); break;
+    case VK_NUMPAD6: wcscpy_s(keyName, L"Numpad 6"); break;
+    case VK_NUMPAD7: wcscpy_s(keyName, L"Numpad 7"); break;
+    case VK_NUMPAD8: wcscpy_s(keyName, L"Numpad 8"); break;
+    case VK_NUMPAD9: wcscpy_s(keyName, L"Numpad 9"); break;
+    default: {
+        UINT scanCode = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC);
+        LONG lParam = (scanCode << 16);
+        // Ensure GetKeyNameTextW doesn't fall back to numpad equivalents
+        if (mods & HOTKEYF_EXT) lParam |= (1 << 24);
+        GetKeyNameTextW(lParam, keyName, 64);
+        break;
+    }
     }
     str += keyName;
     return str;
@@ -139,7 +168,10 @@ std::wstring ViewerApp::GetHotkeyString(WORD hk) {
 
 static const wchar_t* ActionNames[] = {
     L"Next Image", L"Previous Image", L"Zoom In", L"Zoom Out", L"Fit to Window", L"Actual Size",
-    L"Fullscreen", L"Rotate Clockwise", L"Rotate Counter-Clockwise", L"Flip", L"Crop", L"Custom Zoom", L"Exit"
+    L"Fullscreen", L"Rotate Clockwise", L"Rotate Counter-Clockwise", L"Flip", L"Crop", L"Custom Zoom", L"Exit",
+    L"Open File", L"Refresh", L"Copy", L"Paste", L"Save", L"Save As", L"Delete Image", L"Undo",
+    L"Center Image", L"Commit Crop", L"Toggle OSD", L"Play/Pause Animation", L"Resume Animation",
+    L"Next Frame", L"Previous Frame", L"First Frame", L"Open Context Menu"
 };
 
 INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {

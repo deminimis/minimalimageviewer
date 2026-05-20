@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "1xdpujQzlgg=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\anon\\PROGRAMMING\\C++\\Minimal Image Viewer\\MinimalImageViewer-VS\\MinimalImageViewer\\MinimalImageViewer\\MinimalImageViewer\\windowsstore\\windowsstore.wapproj",
+  "expectedPackageFiles": [
+    "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages\\microsoft.windows.sdk.buildtools\\10.0.26100.7705\\microsoft.windows.sdk.buildtools.10.0.26100.7705.nupkg.sha512"
+  ],
+  "logs": []
+}

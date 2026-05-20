@@ -27,11 +27,28 @@ void ViewerApp::ReadSettings(const std::wstring& path, WINDOWPLACEMENT& wp, bool
     // Setup default before attempting read
     GetPrivateProfileStructW(L"Window", L"Placement", &wp, sizeof(WINDOWPLACEMENT), path.c_str());
 
-    const wchar_t* keyNames[Act_Count] = { L"Next", L"Prev", L"ZoomIn", L"ZoomOut", L"Fit", L"Actual", L"Fullscreen", L"RotateCW", L"RotateCCW", L"Flip", L"Crop", L"CustomZoom", L"Exit" };
-    const WORD defaultKeys[Act_Count] = { VK_RIGHT, VK_LEFT, MAKEWORD(VK_ADD, HOTKEYF_CONTROL), MAKEWORD(VK_SUBTRACT, HOTKEYF_CONTROL), MAKEWORD('0', HOTKEYF_CONTROL), MAKEWORD(VK_MULTIPLY, HOTKEYF_CONTROL), VK_F11, VK_UP, VK_DOWN, 'F', 'C', MAKEWORD('Z', HOTKEYF_CONTROL | HOTKEYF_SHIFT), VK_ESCAPE };
-
+    const wchar_t* keyNames[Act_Count] = {
+        L"Next", L"Prev", L"ZoomIn", L"ZoomOut", L"Fit", L"Actual", L"Fullscreen", L"RotateCW", L"RotateCCW", L"Flip", L"Crop", L"CustomZoom", L"Exit",
+        L"Open", L"Refresh", L"Copy", L"Paste", L"Save", L"SaveAs", L"Delete", L"Undo", L"CenterImage", L"CommitCrop", L"ToggleOSD", L"PlayPause", L"ResumeAnim",
+        L"AnimNext", L"AnimPrev", L"AnimFirst", L"ContextMenu"
+    };
+    const WORD defaultKeys[Act_Count] = {
+        MAKEWORD(VK_RIGHT, HOTKEYF_EXT), MAKEWORD(VK_LEFT, HOTKEYF_EXT), MAKEWORD(VK_ADD, HOTKEYF_CONTROL), MAKEWORD(VK_SUBTRACT, HOTKEYF_CONTROL), MAKEWORD('0', HOTKEYF_CONTROL), MAKEWORD(VK_MULTIPLY, HOTKEYF_CONTROL), VK_F11, MAKEWORD(VK_UP, HOTKEYF_EXT), MAKEWORD(VK_DOWN, HOTKEYF_EXT), 'F', 'C', MAKEWORD('Z', HOTKEYF_CONTROL | HOTKEYF_SHIFT), VK_ESCAPE,
+        MAKEWORD('O', HOTKEYF_CONTROL), VK_F5, MAKEWORD('C', HOTKEYF_CONTROL), MAKEWORD('V', HOTKEYF_CONTROL), MAKEWORD('S', HOTKEYF_CONTROL), MAKEWORD('S', HOTKEYF_CONTROL | HOTKEYF_SHIFT), MAKEWORD(VK_DELETE, HOTKEYF_EXT), MAKEWORD('Z', HOTKEYF_CONTROL), 0, VK_RETURN, 'I', VK_SPACE, MAKEWORD(VK_SPACE, HOTKEYF_SHIFT),
+        MAKEWORD(VK_RIGHT, HOTKEYF_SHIFT | HOTKEYF_EXT), MAKEWORD(VK_LEFT, HOTKEYF_SHIFT | HOTKEYF_EXT), MAKEWORD(VK_UP, HOTKEYF_SHIFT | HOTKEYF_EXT), MAKEWORD(VK_F10, HOTKEYF_SHIFT)
+    };
     for (int i = 0; i < Act_Count; ++i) {
-        m_ctx.hotkeys[i] = getInt(L"Keys", keyNames[i], defaultKeys[i]);
+        m_ctx.hotkeys[i] = (WORD)getInt(L"Keys", keyNames[i], defaultKeys[i]);
+
+        BYTE vk = LOBYTE(m_ctx.hotkeys[i]);
+        if (vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN ||
+            vk == VK_DELETE || vk == VK_INSERT || vk == VK_HOME || vk == VK_END ||
+            vk == VK_PRIOR || vk == VK_NEXT || vk == VK_DIVIDE) {
+            BYTE mods = HIBYTE(m_ctx.hotkeys[i]);
+            if (!(mods & HOTKEYF_EXT)) {
+                m_ctx.hotkeys[i] = MAKEWORD(vk, mods | HOTKEYF_EXT);
+            }
+        }
     }
 }
 
@@ -51,7 +68,11 @@ void ViewerApp::WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& w
     writeInt(L"Settings", L"BackgroundColor", static_cast<int>(m_ctx.bgColor));
     writeInt(L"Settings", L"DefaultZoomMode", static_cast<int>(m_ctx.defaultZoomMode));
 
-    const wchar_t* keyNames[Act_Count] = { L"Next", L"Prev", L"ZoomIn", L"ZoomOut", L"Fit", L"Actual", L"Fullscreen", L"RotateCW", L"RotateCCW", L"Flip", L"Crop", L"CustomZoom", L"Exit" };
+    const wchar_t* keyNames[Act_Count] = {
+        L"Next", L"Prev", L"ZoomIn", L"ZoomOut", L"Fit", L"Actual", L"Fullscreen", L"RotateCW", L"RotateCCW", L"Flip", L"Crop", L"CustomZoom", L"Exit",
+        L"Open", L"Refresh", L"Copy", L"Paste", L"Save", L"SaveAs", L"Delete", L"Undo", L"CenterImage", L"CommitCrop", L"ToggleOSD", L"PlayPause", L"ResumeAnim",
+        L"AnimNext", L"AnimPrev", L"AnimFirst", L"ContextMenu"
+    };
     for (int i = 0; i < Act_Count; ++i) {
         writeInt(L"Keys", keyNames[i], m_ctx.hotkeys[i]);
     }
@@ -79,11 +100,14 @@ void ViewerApp::UpdateAcceleratorTable() {
         accels.push_back(a);
         };
 
-    // Map configurable actions dynamically
+    // Map all configurable actions dynamically
     WORD actionCmds[Act_Count] = {
         IDM_NEXT_IMG, IDM_PREV_IMG, IDM_ZOOM_IN, IDM_ZOOM_OUT, IDM_FIT_TO_WINDOW,
         IDM_ACTUAL_SIZE, IDM_FULLSCREEN, IDM_ROTATE_CW, IDM_ROTATE_CCW, IDM_FLIP,
-        IDM_CROP, IDM_CUSTOM_ZOOM, IDM_EXIT
+        IDM_CROP, IDM_CUSTOM_ZOOM, IDM_EXIT,
+        IDM_OPEN, IDM_REFRESH, IDM_COPY, IDM_PASTE, IDM_SAVE, IDM_SAVE_AS, IDM_DELETE_IMG, IDM_UNDO,
+        IDM_CENTER_IMAGE, IDM_COMMIT_CROP, IDM_TOGGLE_OSD, IDM_PLAY_PAUSE, IDM_RESUME_ANIM,
+        IDM_ANIM_NEXT_FRAME, IDM_ANIM_PREV_FRAME, IDM_ANIM_FIRST_FRAME, IDM_CONTEXT_MENU
     };
 
     for (int i = 0; i < Act_Count; ++i) {
@@ -91,25 +115,6 @@ void ViewerApp::UpdateAcceleratorTable() {
             addAccel(LOBYTE(m_ctx.hotkeys[i]), HIBYTE(m_ctx.hotkeys[i]), actionCmds[i]);
         }
     }
-
-    // Fallback shortcuts
-    addAccel(VK_DELETE, 0, IDM_DELETE_IMG);
-    addAccel('O', HOTKEYF_CONTROL, IDM_OPEN);
-    addAccel('Z', HOTKEYF_CONTROL, IDM_UNDO);
-    addAccel('S', HOTKEYF_CONTROL, IDM_SAVE);
-    addAccel('S', HOTKEYF_CONTROL | HOTKEYF_SHIFT, IDM_SAVE_AS);
-    addAccel('C', HOTKEYF_CONTROL, IDM_COPY);
-    addAccel('V', HOTKEYF_CONTROL, IDM_PASTE);
-    addAccel('0', HOTKEYF_CONTROL, IDM_CENTER_IMAGE);
-    addAccel(VK_RETURN, 0, IDM_COMMIT_CROP);
-    addAccel('I', 0, IDM_TOGGLE_OSD);
-    addAccel(VK_SPACE, 0, IDM_PLAY_PAUSE);
-    addAccel(VK_SPACE, HOTKEYF_SHIFT, IDM_RESUME_ANIM);
-    addAccel(VK_RIGHT, HOTKEYF_SHIFT, IDM_ANIM_NEXT_FRAME);
-    addAccel(VK_LEFT, HOTKEYF_SHIFT, IDM_ANIM_PREV_FRAME);
-    addAccel(VK_UP, HOTKEYF_SHIFT, IDM_ANIM_FIRST_FRAME);
-    addAccel(VK_DOWN, HOTKEYF_SHIFT, IDM_ANIM_FIRST_FRAME);
-    addAccel(VK_F5, 0, IDM_REFRESH);
 
     if (!accels.empty()) {
         m_ctx.hAccelTable.reset(CreateAcceleratorTableW(accels.data(), static_cast<int>(accels.size())));

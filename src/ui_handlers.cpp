@@ -111,8 +111,16 @@ void ViewerApp::HandleCommand(WORD cmd) {
     case IDM_PREFERENCES:   OpenPreferencesDialog(); break;
     case IDM_KEYBINDINGS:   OpenKeybindingsDialog(); break;
     case IDM_CUSTOM_ZOOM:   OpenZoomDialog(); break;
+    case IDM_CONTEXT_MENU: {
+        RECT rc;
+        GetClientRect(m_ctx.hWnd, &rc);
+        POINT pt = { (rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2 };
+        ClientToScreen(m_ctx.hWnd, &pt);
+        OnContextMenu(m_ctx.hWnd, pt);
+        break;
+    }
 
-        // Hardcoded fallbacks 
+    // Hardcoded fallbacks 
     case IDM_UNDO:
         if (!m_ctx.undoStack.empty()) {
            std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
