@@ -177,7 +177,7 @@ ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
     if (FAILED(source->GetPixelFormat(&sourcePixelFormat))) return nullptr;
 
     if (targetFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
-        if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapPaletteTypeMedianCut)) {
+        if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapPaletteTypeCustom)) {
             source = converter;
         }
     }
@@ -330,7 +330,7 @@ void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& co
     WICPixelFormatGUID sourcePixelFormat{};
     if (SUCCEEDED(source->GetPixelFormat(&sourcePixelFormat))) {
         if (containerFormat == GUID_ContainerFormatJpeg && sourcePixelFormat != GUID_WICPixelFormat24bppBGR) {
-            if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapPaletteTypeMedianCut)) {
+            if (ComPtr<IWICFormatConverter> converter = ConvertToFormat(m_ctx.wicFactory.Get(), source.Get(), GUID_WICPixelFormat24bppBGR, WICBitmapPaletteTypeCustom)) {
                 source = converter;
             }
         }
