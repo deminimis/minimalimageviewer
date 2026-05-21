@@ -112,10 +112,11 @@ Supports a wide range of formats using WIC + custom decoders:
 - Smooth zoom (`Ctrl + Mouse Wheel`, `Ctrl +/-`)
 - Cursor-centered zooming
 - Click + drag to pan
-- Fit to Window (`Ctrl+0` / double-click)
-- Actual Size (`Ctrl+*`)
+- Fit to Window (`Ctrl+0` / double-click / middle mouse button)
+- Actual Size (`Ctrl+*` / middle mouse button)
 - Custom zoom dialog (`Ctrl+Shift+Z`)
 - Instant next / previous image navigation
+    - Use arrow keys, customizable keys, mouse cursor on sides of screen, mouse buttons, or right click + scroll 
 
 ---
 
