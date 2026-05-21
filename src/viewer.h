@@ -131,6 +131,39 @@ public:
     std::wstring lensModel = L"N/A";
 };
 
+// Skip zero-initialization
+struct FastByteBuffer {
+    std::unique_ptr<BYTE[]> ptr;
+    size_t len = 0;
+
+    FastByteBuffer() = default;
+
+    // Move constructor
+    FastByteBuffer(FastByteBuffer&& other) noexcept : ptr(std::move(other.ptr)), len(other.len) {
+        other.len = 0;
+    }
+
+    // Move assignment
+    FastByteBuffer& operator=(FastByteBuffer&& other) noexcept {
+        if (this != &other) {
+            ptr = std::move(other.ptr);
+            len = other.len;
+            other.len = 0;
+        }
+        return *this;
+    }
+
+    BYTE* data() const { return ptr.get(); }
+    size_t size() const { return len; }
+    bool empty() const { return len == 0; }
+    void clear() { ptr.reset(); len = 0; }
+
+    void allocate(size_t new_size) {
+        ptr.reset(new BYTE[new_size]);
+        len = new_size;
+    }
+};
+
 struct AppContext {
     HINSTANCE hInst = nullptr;
     HWND hWnd = nullptr;
@@ -143,8 +176,8 @@ struct AppContext {
     int pendingNavIndex = -1;
     ComPtr<IWICBitmapSource> wicConverter = nullptr;
     ComPtr<IWICBitmapSource> wicConverterOriginal = nullptr;
-    std::vector<BYTE> rawFileData;
-    std::vector<BYTE> stagedRawFileData;
+    FastByteBuffer rawFileData;
+    FastByteBuffer stagedRawFileData;
     ComPtr<IWICStream> wicStream;
     ComPtr<IWICStream> stagedWicStream;
     ComPtr<ID2D1ImageSourceFromWic> highResImageSource = nullptr;
@@ -212,8 +245,8 @@ struct AppContext {
     // SVG State
     bool isSvg = false;
     ComPtr<ID2D1SvgDocument> svgDocument = nullptr;
-    std::vector<BYTE> svgData;
-    std::vector<BYTE> stagedSvgData;
+    FastByteBuffer svgData;
+    FastByteBuffer stagedSvgData;
     UINT preloadedNextOrientation = 1;
     UINT preloadedPrevOrientation = 1;
     std::atomic<bool> cancelPreloading{ false };

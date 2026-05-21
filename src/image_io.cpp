@@ -122,7 +122,9 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         // Check before large memory allocation and blocking read
         if (!IsSequenceValid(mySeqId)) return;
 
-        std::vector<BYTE> rawData(size.LowPart);
+        FastByteBuffer rawData;
+        rawData.allocate(size.LowPart);
+
         DWORD bytesRead;
         if (!ReadFile(hFile.get(), rawData.data(), size.LowPart, &bytesRead, NULL) || bytesRead != size.LowPart) {
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
