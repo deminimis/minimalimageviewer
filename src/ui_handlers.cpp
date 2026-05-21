@@ -429,6 +429,18 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
     case WM_COMMAND:
         HandleCommand(LOWORD(wParam));
         break;
+    case WM_XBUTTONDOWN: {
+        WORD xButton = GET_XBUTTON_WPARAM(wParam);
+        if (xButton == XBUTTON1) { // Standard Back button
+            HandleCommand(IDM_PREV_IMG);
+            return TRUE;
+        }
+        else if (xButton == XBUTTON2) { // Standard Forward button
+            HandleCommand(IDM_NEXT_IMG);
+            return TRUE;
+        }
+        break;
+    }
     case WM_MOUSEWHEEL: {
         POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
         ScreenToClient(hWnd, &pt);
@@ -480,12 +492,24 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             SetCapture(hWnd);
         }
         else {
-            UINT w = 0, h = 0;
-            if (GetCurrentImageSize(&w, &h)) {
-                m_ctx.isDraggingImage = true;
-                dragStart = pt;
-                SetCapture(hWnd);
-                SetCursor(LoadCursor(nullptr, IDC_HAND));
+            RECT rc; GetClientRect(hWnd, &rc);
+            int width = rc.right - rc.left;
+
+            // Check for left/right 8% navigation clicks
+            if (!m_ctx.imageFiles.empty() && width > 0 && pt.x < width * 0.08) {
+                HandleCommand(IDM_PREV_IMG);
+            }
+            else if (!m_ctx.imageFiles.empty() && width > 0 && pt.x > width * 0.92) {
+                HandleCommand(IDM_NEXT_IMG);
+            }
+            else {
+                UINT w = 0, h = 0;
+                if (GetCurrentImageSize(&w, &h)) {
+                    m_ctx.isDraggingImage = true;
+                    dragStart = pt;
+                    SetCapture(hWnd);
+                    SetCursor(LoadCursor(nullptr, IDC_HAND));
+                }
             }
         }
         break;
@@ -547,6 +571,19 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
                 return TRUE;
             }
             if (m_ctx.isDraggingImage) {
+                SetCursor(LoadCursor(nullptr, IDC_HAND));
+                return TRUE;
+            }
+
+            // Check if over 8% navigation zones
+            POINT pt;
+            GetCursorPos(&pt);
+            ScreenToClient(hWnd, &pt);
+            RECT rc;
+            GetClientRect(hWnd, &rc);
+            int width = rc.right - rc.left;
+
+            if (!m_ctx.imageFiles.empty() && width > 0 && (pt.x < width * 0.08 || pt.x > width * 0.92)) {
                 SetCursor(LoadCursor(nullptr, IDC_HAND));
                 return TRUE;
             }
