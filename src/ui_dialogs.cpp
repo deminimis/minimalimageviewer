@@ -53,11 +53,17 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
         switch (LOWORD(wParam)) {
         case IDOK: {
             for (int id = IDC_RADIO_BG_GREY; id <= IDC_RADIO_BG_TRANSPARENT; ++id) {
-                if (IsDlgButtonChecked(hDlg, id)) ctx.bgColor = static_cast<BackgroundColor>(id - IDC_RADIO_BG_GREY);
+                if (IsDlgButtonChecked(hDlg, id)) {
+                    ctx.bgColor = static_cast<BackgroundColor>(id - IDC_RADIO_BG_GREY);
+                }
             }
 
             ctx.alwaysOnTop = (IsDlgButtonChecked(hDlg, IDC_CHECK_ALWAYS_ON_TOP) == BST_CHECKED);
-            ctx.startFullScreen = (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
+
+            const bool newStartFullScreen =
+                (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
+
+            ctx.startFullScreen = newStartFullScreen;
             ctx.enforceSingleInstance = (IsDlgButtonChecked(hDlg, IDC_CHECK_SINGLE_INSTANCE) == BST_CHECKED);
 
             bool newAutoRefresh = (IsDlgButtonChecked(hDlg, IDC_CHECK_AUTO_REFRESH) == BST_CHECKED);
@@ -80,18 +86,44 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             ctx.isOsdVisible = (IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_OSD) == BST_CHECKED);
             ctx.askToDelete = (IsDlgButtonChecked(hDlg, IDC_CHECK_ASK_DELETE) == BST_CHECKED);
 
-            if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) ctx.defaultZoomMode = DefaultZoomMode::Fit;
-            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) ctx.defaultZoomMode = DefaultZoomMode::Actual;
-            SetWindowPos(ctx.hWnd, (ctx.alwaysOnTop) ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) {
+                ctx.defaultZoomMode = DefaultZoomMode::Fit;
+            }
+            else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) {
+                ctx.defaultZoomMode = DefaultZoomMode::Actual;
+            }
+
+            // Immediate update from fullscreen setting
+            if (!ctx.startFullScreen && ctx.isFullScreen) {
+                pApp->ToggleFullScreen();
+            }
+
+            // Fullscreen not topmost
+            if (!ctx.isFullScreen) {
+                SetWindowPos(
+                    ctx.hWnd,
+                    ctx.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+                    0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE
+                );
+            }
+
             pApp->UpdateTitleBarTheme(ctx.hWnd, ctx.bgColor);
             InvalidateRect(ctx.hWnd, NULL, FALSE);
 
-            // Auto-save changes 
+            // Auto-save 
             if (!ctx.isFullScreen) {
                 ctx.windowPlacement.length = sizeof(WINDOWPLACEMENT);
                 GetWindowPlacement(ctx.hWnd, &ctx.windowPlacement);
             }
-            pApp->WriteSettings(ctx.settingsPath, ctx.windowPlacement, ctx.startFullScreen, ctx.enforceSingleInstance, ctx.alwaysOnTop);
+
+            pApp->WriteSettings(
+                ctx.settingsPath,
+                ctx.windowPlacement,
+                ctx.startFullScreen,
+                ctx.enforceSingleInstance,
+                ctx.alwaysOnTop
+            );
 
             EndDialog(hDlg, IDOK);
             return (INT_PTR)TRUE;

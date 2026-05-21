@@ -42,17 +42,33 @@ void ViewerApp::ToggleFullScreen() {
         GetMonitorInfo(hMonitor, &mi);
 
         SetWindowLong(m_ctx.hWnd, GWL_STYLE, WS_POPUP | WS_VISIBLE);
-        SetWindowPos(m_ctx.hWnd, m_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
-            mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
-            SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+        // Do not make fullscreen topmost
+        SetWindowPos(
+            m_ctx.hWnd,
+            HWND_TOP,
+            mi.rcMonitor.left,
+            mi.rcMonitor.top,
+            mi.rcMonitor.right - mi.rcMonitor.left,
+            mi.rcMonitor.bottom - mi.rcMonitor.top,
+            SWP_FRAMECHANGED | SWP_SHOWWINDOW
+        );
+
         m_ctx.isFullScreen = true;
     }
     else {
         SetWindowLong(m_ctx.hWnd, GWL_STYLE, m_ctx.savedStyle | WS_VISIBLE);
         SetWindowPlacement(m_ctx.hWnd, &m_ctx.windowPlacement);
-        SetWindowPos(m_ctx.hWnd, m_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
-            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+
+        SetWindowPos(
+            m_ctx.hWnd,
+            m_ctx.alwaysOnTop ? HWND_TOPMOST : HWND_NOTOPMOST,
+            0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_SHOWWINDOW
+        );
+
         m_ctx.isFullScreen = false;
     }
+
     FitImageToWindow();
 }
