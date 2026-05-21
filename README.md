@@ -160,6 +160,10 @@ Supports a wide range of formats using WIC + custom decoders:
 
 ### 🛠️ Editing Tools (Non-Destructive)
 
+- Note, OCR and Color Picker were moved to dedicated utilities.
+    - Very light OCR tool: [MiniSnip](https://github.com/deminimis/MiniSnip)
+    - Extremely light 20 kb colorpicker: [minimal color picker](https://github.com/deminimis/MinimalColorPicker)
+
 - **Crop Tool**
   - `C` → Enable crop
   - Drag selection
