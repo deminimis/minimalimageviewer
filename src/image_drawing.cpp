@@ -276,11 +276,8 @@ void ViewerApp::Render() {
                 if (!m_ctx.animationD2DBitmaps[m_ctx.currentAnimationFrame]) {
 
 
-                    for (size_t i = 0; i < m_ctx.animationD2DBitmaps.size(); ++i) {
-                        if (i != m_ctx.currentAnimationFrame) {
-                            m_ctx.animationD2DBitmaps[i] = nullptr;
-                        }
-                    }
+                    // Vectorized clear to aggressively unload all frames except the current one
+                    std::ranges::fill(m_ctx.animationD2DBitmaps, nullptr);
 
                     ComPtr<IWICBitmapSource> source = m_ctx.currentAnimatedConverter;
                     ComPtr<ID2D1Bitmap> d2dFrameBitmap;
@@ -629,29 +626,24 @@ void ViewerApp::ConvertWindowToImagePoint(POINT pt, float& localX, float& localY
 
     RECT cr;
     GetClientRect(m_ctx.hWnd, &cr);
-    float windowCenterX = (cr.right - cr.left) / 2.0f;
-    float windowCenterY = (cr.bottom - cr.top) / 2.0f;
+    D2D1_POINT_2F windowCenter = D2D1::Point2F((cr.right - cr.left) / 2.0f, (cr.bottom - cr.top) / 2.0f);
+    D2D1_POINT_2F bmpCenter = D2D1::Point2F(imgWidth / 2.0f, imgHeight / 2.0f);
 
-    float scaleX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
+    float scaleX = (m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor);
     float scaleY = m_ctx.zoomFactor;
     if (scaleX == 0.0f) scaleX = 1.0f;
     if (scaleY == 0.0f) scaleY = 1.0f;
 
-    float translatedX = pt.x - (windowCenterX + m_ctx.offsetX);
-    float translatedY = pt.y - (windowCenterY + m_ctx.offsetY);
+    D2D1::Matrix3x2F transform =
+        D2D1::Matrix3x2F::Rotation(static_cast<float>(m_ctx.rotationAngle), bmpCenter) *
+        D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter) *
+        D2D1::Matrix3x2F::Translation(windowCenter.x - bmpCenter.x + m_ctx.offsetX, windowCenter.y - bmpCenter.y + m_ctx.offsetY);
 
-    float scaledX = translatedX / scaleX;
-    float scaledY = translatedY / scaleY;
+    transform.Invert();
+    D2D1_POINT_2F result = transform.TransformPoint(D2D1::Point2F(static_cast<float>(pt.x), static_cast<float>(pt.y)));
 
-    double rad = -m_ctx.rotationAngle * std::numbers::pi / 180.0;
-    float cosTheta = static_cast<float>(cos(rad));
-    float sinTheta = static_cast<float>(sin(rad));
-
-    float unrotatedX = scaledX * cosTheta - scaledY * sinTheta;
-    float unrotatedY = scaledX * sinTheta + scaledY * cosTheta;
-
-    localX = unrotatedX + imgWidth / 2.0f;
-    localY = unrotatedY + imgHeight / 2.0f;
+    localX = result.x;
+    localY = result.y;
 
     if (m_ctx.renderScale > 0.0f && m_ctx.renderScale != 1.0f) {
         localX /= m_ctx.renderScale;
@@ -671,25 +663,21 @@ void ViewerApp::ConvertImageToWindowPoint(float localX, float localY, POINT& pt)
         localY *= m_ctx.renderScale;
     }
 
-    float unrotatedX = localX - imgWidth / 2.0f;
-    float unrotatedY = localY - imgHeight / 2.0f;
-
-    double rad = m_ctx.rotationAngle * std::numbers::pi / 180.0;
-    float cosTheta = static_cast<float>(cos(rad));
-    float sinTheta = static_cast<float>(sin(rad));
-    float scaledX = unrotatedX * cosTheta - unrotatedY * sinTheta;
-    float scaledY = unrotatedX * sinTheta + unrotatedY * cosTheta;
-
-    float scaleFactorX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
-    float scaleFactorY = m_ctx.zoomFactor;
-    float translatedX = scaledX * scaleFactorX;
-    float translatedY = scaledY * scaleFactorY;
-
     RECT cr;
     GetClientRect(m_ctx.hWnd, &cr);
-    float windowCenterX = (cr.right - cr.left) / 2.0f;
-    float windowCenterY = (cr.bottom - cr.top) / 2.0f;
+    D2D1_POINT_2F windowCenter = D2D1::Point2F((cr.right - cr.left) / 2.0f, (cr.bottom - cr.top) / 2.0f);
+    D2D1_POINT_2F bmpCenter = D2D1::Point2F(imgWidth / 2.0f, imgHeight / 2.0f);
 
-    pt.x = static_cast<LONG>(translatedX + windowCenterX + m_ctx.offsetX);
-    pt.y = static_cast<LONG>(translatedY + windowCenterY + m_ctx.offsetY);
+    float scaleX = m_ctx.isFlippedHorizontal ? -m_ctx.zoomFactor : m_ctx.zoomFactor;
+    float scaleY = m_ctx.zoomFactor;
+
+    D2D1::Matrix3x2F transform =
+        D2D1::Matrix3x2F::Rotation(static_cast<float>(m_ctx.rotationAngle), bmpCenter) *
+        D2D1::Matrix3x2F::Scale(scaleX, scaleY, bmpCenter) *
+        D2D1::Matrix3x2F::Translation(windowCenter.x - bmpCenter.x + m_ctx.offsetX, windowCenter.y - bmpCenter.y + m_ctx.offsetY);
+
+    D2D1_POINT_2F result = transform.TransformPoint(D2D1::Point2F(localX, localY));
+
+    pt.x = static_cast<LONG>(std::round(result.x));
+    pt.y = static_cast<LONG>(std::round(result.y));
 }
