@@ -442,15 +442,48 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
         break;
     }
     case WM_MOUSEWHEEL: {
-        POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-        ScreenToClient(hWnd, &pt);
-        ZoomImage(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 1.1f : 0.9f, pt);
+        // If holding right-click, cycle images instead of zooming
+        if (GET_KEYSTATE_WPARAM(wParam) & MK_RBUTTON) {
+            m_ctx.rightClickScrolled = true;
+            if (GET_WHEEL_DELTA_WPARAM(wParam) > 0) {
+                HandleCommand(IDM_PREV_IMG); // Scroll Up = Previous
+            }
+            else {
+                HandleCommand(IDM_NEXT_IMG); // Scroll Down = Next 
+            }
+        }
+        else {
+            // Normal zoom behavior
+            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ScreenToClient(hWnd, &pt);
+            ZoomImage(GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 1.1f : 0.9f, pt);
+        }
+        break;
+    }
+    case WM_MBUTTONUP: {
+        // Toggle between fit window and actual size on middle click
+        if (std::abs(m_ctx.zoomFactor - 1.0f) < 0.001f) {
+            HandleCommand(IDM_FIT_TO_WINDOW);
+        }
+        else {
+            HandleCommand(IDM_ACTUAL_SIZE);
+        }
         break;
     }
     case WM_LBUTTONDBLCLK:
         FitImageToWindow();
         break;
+    case WM_RBUTTONDOWN: {
+        m_ctx.rightClickScrolled = false; // Reset flag on fresh right-click
+        break;
+    }
     case WM_RBUTTONUP: {
+        // Prevent context menu if we used right-click to cycle images
+        if (m_ctx.rightClickScrolled) {
+            m_ctx.rightClickScrolled = false;
+            break;
+        }
+
         if (m_ctx.isCropMode || m_ctx.isSelectingCropRect || m_ctx.isCropPending) {
             bool wasCropActive = m_ctx.isCropActive;
             m_ctx.isCropMode = false;

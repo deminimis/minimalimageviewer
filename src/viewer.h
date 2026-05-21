@@ -205,6 +205,7 @@ struct AppContext {
     bool enforceSingleInstance = true;
     bool alwaysOnTop = false;
     bool isDraggingImage = false;
+    bool rightClickScrolled = false; 
     std::wstring settingsPath;
     std::wstring currentDirectory;
     SortCriteria currentSortCriteria = SortCriteria::ByName;
