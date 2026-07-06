@@ -38,7 +38,7 @@ void ViewerApp::HandleCommand(WORD cmd) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex + 1) % static_cast<int>(size);
             std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
-            title += L"  [Loading...]";
+            title += L"  [Loading...] - Minimal Image Viewer v2.0.3";
             SetWindowTextW(m_ctx.hWnd, title.c_str());
             LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], false);
         }
@@ -48,7 +48,7 @@ void ViewerApp::HandleCommand(WORD cmd) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
             std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
-            title += L"  [Loading...]";
+            title += L"  [Loading...] - Minimal Image Viewer v2.0.3";
             SetWindowTextW(m_ctx.hWnd, title.c_str());
             LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], true);
         }

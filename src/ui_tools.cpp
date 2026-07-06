@@ -3,14 +3,19 @@
 #include <format>
 
 void ViewerApp::UpdateWindowTitle() {
+    const std::wstring appNameAndVersion = L"Minimal Image Viewer v2.0.3";
+
     if (m_ctx.loadingFilePath.empty()) {
-        SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer");
+        SetWindowTextW(m_ctx.hWnd, appNameAndVersion.c_str());
         return;
     }
 
     std::wstring title = m_ctx.loadingFilePath;
     if (m_ctx.animationFrameDelays.size() > 1) {
-        title = std::format(L"{} (Frame {}/{})", m_ctx.loadingFilePath, m_ctx.currentAnimationFrame + 1, m_ctx.animationFrameDelays.size());
+        title = std::format(L"{} (Frame {}/{}) - {}", m_ctx.loadingFilePath, m_ctx.currentAnimationFrame + 1, m_ctx.animationFrameDelays.size(), appNameAndVersion);
+    }
+    else {
+        title = std::format(L"{} - {}", m_ctx.loadingFilePath, appNameAndVersion);
     }
     SetWindowTextW(m_ctx.hWnd, title.c_str());
 }

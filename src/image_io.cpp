@@ -994,11 +994,11 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
     }
     else {
         m_ctx.isLoading = false;
-       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         m_ctx.wicConverter = nullptr;
         m_ctx.wicConverterOriginal = nullptr;
         m_ctx.undoStack.clear();
-        SetWindowTextW(m_ctx.hWnd, L"Load Failed");
+        SetWindowTextW(m_ctx.hWnd, L"Load Failed - Minimal Image Viewer v2.0.3");
     }
 
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
@@ -1018,7 +1018,6 @@ void ViewerApp::OnDirReady(int seqId) {
 void ViewerApp::FinalizeImageLoad(bool success, int foundIndex) {
     m_ctx.isLoading = false;
     KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
-
     {
         std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         m_ctx.d2dBitmap = nullptr;
@@ -1035,7 +1034,7 @@ void ViewerApp::FinalizeImageLoad(bool success, int foundIndex) {
     }
     else {
         m_ctx.currentImageIndex = -1;
-        SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer");
+        SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer v2.0.3");
         CenterImage(true);
     }
 }
