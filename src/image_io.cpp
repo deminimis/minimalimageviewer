@@ -45,12 +45,11 @@ HRESULT ViewerApp::CreateDecoderFromStream_FullFileRead(
     *ppDecoder = nullptr;
 
     if (seqId != -1 && !IsSequenceValid(seqId)) return E_ABORT;
-
     return pFactory->CreateDecoderFromFilename(
         filePath,
         NULL,
         GENERIC_READ,
-        WICDecodeMetadataCacheOnLoad,
+        WICDecodeMetadataCacheOnDemand,
         ppDecoder
     );
 }
@@ -548,7 +547,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         stream->InitializeFromMemory(rawData.data(), static_cast<DWORD>(rawData.size()));
 
         ComPtr<IWICBitmapDecoder> decoder;
-        hr = localFactory->CreateDecoderFromStream(stream.Get(), NULL, WICDecodeMetadataCacheOnLoad, &decoder);
+        hr = localFactory->CreateDecoderFromStream(stream.Get(), NULL, WICDecodeMetadataCacheOnDemand, &decoder);
 
         if (!IsSequenceValid(mySeqId)) {
             return;
@@ -587,32 +586,34 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                 float ratio = 1.0f;
                 bool loadedPreview = false;
 
-                // Extract the embedded preview for raw/tiff
-                ComPtr<IWICBitmapSource> preview;
-                if (SUCCEEDED(decoder->GetPreview(&preview))) {
-                    UINT previewW = 0, previewH = 0;
-                    if (SUCCEEDED(preview->GetSize(&previewW, &previewH)) && previewW > 0 && previewH > 0) {
-                        sourceToCache = preview;
-                        loadedPreview = true;
+                // Extract the embedded preview for raw/tiff (except jpeg/png) 
+                if (containerFormat != GUID_ContainerFormatJpeg && containerFormat != GUID_ContainerFormatPng) {
+                    ComPtr<IWICBitmapSource> preview;
+                    if (SUCCEEDED(decoder->GetPreview(&preview))) {
+                        UINT previewW = 0, previewH = 0;
+                        if (SUCCEEDED(preview->GetSize(&previewW, &previewH)) && previewW > 0 && previewH > 0) {
+                            sourceToCache = preview;
+                            loadedPreview = true;
 
-                        if (previewW < frameWidth || previewH < frameHeight) {
-                            downscaled = true;
-                            // Deep zoom when past preview's resolution
-                            ratio = std::min(static_cast<float>(previewW) / frameWidth, static_cast<float>(previewH) / frameHeight);
-                        }
+                            if (previewW < frameWidth || previewH < frameHeight) {
+                                downscaled = true;
+                                // Deep zoom when past preview's resolution
+                                ratio = std::min(static_cast<float>(previewW) / frameWidth, static_cast<float>(previewH) / frameHeight);
+                            }
 
-                        // Prevent memory spikes for massive previews
-                        if (previewW > maxDim || previewH > maxDim) {
-                            float prevRatio = std::min(static_cast<float>(maxDim) / previewW, static_cast<float>(maxDim) / previewH);
-                            UINT newW = static_cast<UINT>(previewW * prevRatio);
-                            UINT newH = static_cast<UINT>(previewH * prevRatio);
+                            // Prevent memory spikes for massive previews
+                            if (previewW > maxDim || previewH > maxDim) {
+                                float prevRatio = std::min(static_cast<float>(maxDim) / previewW, static_cast<float>(maxDim) / previewH);
+                                UINT newW = static_cast<UINT>(previewW * prevRatio);
+                                UINT newH = static_cast<UINT>(previewH * prevRatio);
 
-                            ComPtr<IWICBitmapScaler> scaler;
-                            if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
-                                if (SUCCEEDED(scaler->Initialize(preview.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
-                                    sourceToCache = scaler;
-                                    downscaled = true;
-                                    ratio = std::min(static_cast<float>(newW) / frameWidth, static_cast<float>(newH) / frameHeight);
+                                ComPtr<IWICBitmapScaler> scaler;
+                                if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler))) {
+                                    if (SUCCEEDED(scaler->Initialize(preview.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
+                                        sourceToCache = scaler;
+                                        downscaled = true;
+                                        ratio = std::min(static_cast<float>(newW) / frameWidth, static_cast<float>(newH) / frameHeight);
+                                    }
                                 }
                             }
                         }
@@ -881,8 +882,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
             ComPtr<IWICStream> stream;
             if (SUCCEEDED(m_ctx.wicFactory->CreateStream(&stream)) &&
                 SUCCEEDED(stream->InitializeFromMemory(m_ctx.rawFileData.data(), static_cast<DWORD>(m_ctx.rawFileData.size())))) {
-                m_ctx.wicFactory->CreateDecoderFromStream(stream.Get(), NULL, WICDecodeMetadataCacheOnLoad, &m_ctx.animationDecoder);
-
+                m_ctx.wicFactory->CreateDecoderFromStream(stream.Get(), NULL, WICDecodeMetadataCacheOnDemand, &m_ctx.animationDecoder);
                 // Keep  stream alive in the context
                 m_ctx.wicStream = stream;
             }

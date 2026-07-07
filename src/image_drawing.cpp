@@ -381,7 +381,7 @@ void ViewerApp::Render() {
                         // Natively initialize virtualized image source on demand
                         if (!m_ctx.highResImageSource) {
                             ComPtr<IWICBitmapDecoder> decoder;
-                            if (SUCCEEDED(m_ctx.wicFactory->CreateDecoderFromStream(m_ctx.wicStream.Get(), NULL, WICDecodeMetadataCacheOnLoad, &decoder))) {
+                            if (SUCCEEDED(m_ctx.wicFactory->CreateDecoderFromStream(m_ctx.wicStream.Get(), NULL, WICDecodeMetadataCacheOnDemand, &decoder))) {
                                 ComPtr<IWICBitmapFrameDecode> frame;
                                 if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
                                     ComPtr<IWICFormatConverter> converter;
