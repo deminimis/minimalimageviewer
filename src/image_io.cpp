@@ -866,7 +866,10 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         }
         else if (!m_ctx.stagedFrameMetadata.empty()) {
             bool animated = m_ctx.stagedFrameMetadata.size() > 1;
-            if (m_ctx.originalContainerFormat == GUID_ContainerFormatTiff) animated = false;
+            if (m_ctx.originalContainerFormat == GUID_ContainerFormatTiff ||
+                m_ctx.originalContainerFormat == GUID_ContainerFormatIco) {
+                animated = false;
+            }
 
             m_ctx.isAnimated = animated;
             m_ctx.animationFrameMetadata = std::move(m_ctx.stagedFrameMetadata);
