@@ -1069,7 +1069,7 @@ ComPtr<IWICBitmapSource> ViewerApp::GetCompositedAnimationFrame(UINT targetIndex
     UINT canvasHeight = m_ctx.originalHeight;
     UINT canvasStride = canvasWidth * 4;
 
-    // Standard GIF rendering sequence
+    // GIF rendering sequence
     UINT startIndex = m_ctx.lastCompositedFrame + 1;
     if (m_ctx.lastCompositedFrame == -1 || targetIndex < startIndex) {
         std::fill(m_ctx.animationCanvas.begin(), m_ctx.animationCanvas.end(), 0);
@@ -1078,9 +1078,30 @@ ComPtr<IWICBitmapSource> ViewerApp::GetCompositedAnimationFrame(UINT targetIndex
     }
 
     for (UINT i = startIndex; i <= targetIndex; ++i) {
+
+        // Apply disposal of previosu frame first
+        if (i > 0) {
+            const auto& prevMeta = m_ctx.animationFrameMetadata[i - 1];
+            if (prevMeta.disposal == 2) {
+                for (UINT y = 0; y < prevMeta.height; ++y) {
+                    if (prevMeta.top + y >= canvasHeight) break;
+                    BYTE* destRow = m_ctx.animationCanvas.data() + (prevMeta.top + y) * canvasStride + (prevMeta.left * 4);
+                    for (UINT x = 0; x < prevMeta.width; ++x) {
+                        if (prevMeta.left + x >= canvasWidth) break;
+                        UINT dp = x * 4;
+                        destRow[dp] = 0; destRow[dp + 1] = 0; destRow[dp + 2] = 0;
+                        destRow[dp + 3] = 0;
+                    }
+                }
+            }
+            else if (prevMeta.disposal == 3) {
+                m_ctx.animationCanvas = m_ctx.animationCanvasPrev;
+            }
+        }
+
         const auto& meta = m_ctx.animationFrameMetadata[i];
 
-        // Save previous state for disposal method 3
+        // Save previous state for disposal method before compositing
         if (meta.disposal == 3) {
             m_ctx.animationCanvasPrev = m_ctx.animationCanvas;
         }
@@ -1123,30 +1144,11 @@ ComPtr<IWICBitmapSource> ViewerApp::GetCompositedAnimationFrame(UINT targetIndex
                 }
             }
         }
-
-        // The disposal method of the target frame applies to the next frame
-        if (i == targetIndex) break;
-
-        // Apply disposal for next frame
-        if (meta.disposal == 2) {
-            for (UINT y = 0; y < meta.height; ++y) {
-                if (meta.top + y >= canvasHeight) break;
-                BYTE* destRow = m_ctx.animationCanvas.data() + (meta.top + y) * canvasStride + (meta.left * 4);
-                for (UINT x = 0; x < meta.width; ++x) {
-                    if (meta.left + x >= canvasWidth) break;
-                    UINT dp = x * 4;
-                    destRow[dp] = 0; destRow[dp + 1] = 0; destRow[dp + 2] = 0; destRow[dp + 3] = 0;
-                }
-            }
-        }
-        else if (meta.disposal == 3) {
-            m_ctx.animationCanvas = m_ctx.animationCanvasPrev;
-        }
     }
 
     m_ctx.lastCompositedFrame = targetIndex;
 
-    // New standalone bitmap with deep copy of the memory
+    // Bitmap with deep copy of the memory
     ComPtr<IWICBitmap> finalBmp;
     if (SUCCEEDED(m_ctx.wicFactory->CreateBitmap(canvasWidth, canvasHeight, GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad, &finalBmp))) {
         WICRect rc = { 0, 0, static_cast<INT>(canvasWidth), static_cast<INT>(canvasHeight) };
