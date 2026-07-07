@@ -45,6 +45,8 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
         CheckDlgButton(hDlg, IDC_CHECK_FADE_ANIMATION, ctx.enableFadeAnimation ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_SHOW_OSD, ctx.isOsdVisible ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hDlg, IDC_CHECK_ASK_DELETE, ctx.askToDelete ? BST_CHECKED : BST_UNCHECKED);
+        CheckDlgButton(hDlg, IDC_CHECK_PRESERVE_ZOOM, ctx.preserveZoomOnResize ? BST_CHECKED : BST_UNCHECKED);
+
         CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL,
             ctx.defaultZoomMode == DefaultZoomMode::Fit ? IDC_RADIO_ZOOM_FIT : IDC_RADIO_ZOOM_ACTUAL);
         return (INT_PTR)TRUE;
@@ -59,10 +61,7 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             }
 
             ctx.alwaysOnTop = (IsDlgButtonChecked(hDlg, IDC_CHECK_ALWAYS_ON_TOP) == BST_CHECKED);
-
-            const bool newStartFullScreen =
-                (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
-
+            const bool newStartFullScreen = (IsDlgButtonChecked(hDlg, IDC_CHECK_START_FULLSCREEN) == BST_CHECKED);
             ctx.startFullScreen = newStartFullScreen;
             ctx.enforceSingleInstance = (IsDlgButtonChecked(hDlg, IDC_CHECK_SINGLE_INSTANCE) == BST_CHECKED);
 
@@ -85,6 +84,7 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             ctx.enableFadeAnimation = (IsDlgButtonChecked(hDlg, IDC_CHECK_FADE_ANIMATION) == BST_CHECKED);
             ctx.isOsdVisible = (IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_OSD) == BST_CHECKED);
             ctx.askToDelete = (IsDlgButtonChecked(hDlg, IDC_CHECK_ASK_DELETE) == BST_CHECKED);
+            ctx.preserveZoomOnResize = (IsDlgButtonChecked(hDlg, IDC_CHECK_PRESERVE_ZOOM) == BST_CHECKED);
 
             if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) {
                 ctx.defaultZoomMode = DefaultZoomMode::Fit;
@@ -203,7 +203,7 @@ static const wchar_t* ActionNames[] = {
     L"Fullscreen", L"Rotate Clockwise", L"Rotate Counter-Clockwise", L"Flip", L"Crop", L"Custom Zoom", L"Exit",
     L"Open File", L"Refresh", L"Copy", L"Paste", L"Save", L"Save As", L"Delete Image", L"Undo",
     L"Center Image", L"Commit Crop", L"Toggle OSD", L"Play/Pause Animation", L"Resume Animation",
-    L"Next Frame", L"Previous Frame", L"First Frame", L"Open Context Menu"
+    L"Next Frame", L"Previous Frame", L"First Frame", L"Open Context Menu", L"Toggle Slideshow"
 };
 
 INT_PTR CALLBACK ViewerApp::KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {

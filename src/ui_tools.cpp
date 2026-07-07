@@ -75,5 +75,10 @@ void ViewerApp::ToggleFullScreen() {
         m_ctx.isFullScreen = false;
     }
 
-    FitImageToWindow();
+    if (!m_ctx.preserveZoomOnResize) {
+        FitImageToWindow();
+    }
+    else {
+        InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
+    }
 }

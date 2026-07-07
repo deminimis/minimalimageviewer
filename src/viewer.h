@@ -71,6 +71,7 @@ constexpr UINT AUTO_REFRESH_TIMER_ID = 3;
 constexpr UINT LOADING_TIMER_ID = 4;
 constexpr UINT NAV_DEBOUNCE_TIMER_ID = 6;
 constexpr UINT KEYBINDING_TIMER_ID = 7;
+constexpr UINT SLIDESHOW_TIMER_ID = 8;
 
 enum class BackgroundColor {
     Grey = 0,
@@ -95,7 +96,7 @@ enum ActionID {
     Act_Fullscreen, Act_RotateCW, Act_RotateCCW, Act_Flip, Act_Crop, Act_CustomZoom, Act_Exit,
     Act_Open, Act_Refresh, Act_Copy, Act_Paste, Act_Save, Act_SaveAs, Act_Delete, Act_Undo,
     Act_CenterImage, Act_CommitCrop, Act_ToggleOSD, Act_PlayPause, Act_ResumeAnim,
-    Act_AnimNext, Act_AnimPrev, Act_AnimFirst, Act_ContextMenu,
+    Act_AnimNext, Act_AnimPrev, Act_AnimFirst, Act_ContextMenu, Act_Slideshow,
     Act_Count
 };
 
@@ -299,9 +300,12 @@ struct AppContext {
     bool isFading = false;
     ULONGLONG fadeStartTime = 0;
     bool isAutoRefresh = false;
+    bool isSlideshowActive = false;
+    int slideshowIntervalSeconds = 3;
     bool smoothScaling = true;
     bool enableFadeAnimation = true;
     bool askToDelete = true;
+    bool preserveZoomOnResize = false;
     FILETIME lastWriteTime = { 0 };
     bool preserveView = false;
     float renderScale = 1.0f;

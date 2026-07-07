@@ -50,6 +50,7 @@
 #define IDM_ANIM_PREV_FRAME         1071
 #define IDM_ANIM_FIRST_FRAME        1072
 #define IDM_CONTEXT_MENU            1075
+#define IDM_SLIDESHOW               1076
 
 #define IDD_RESIZE_DIALOG           201
 #define IDC_EDIT_WIDTH              2001
@@ -74,5 +75,6 @@
 #define IDC_CHECK_FADE_ANIMATION    2027
 #define IDC_CHECK_SHOW_OSD          2030
 #define IDC_CHECK_ASK_DELETE        2031
+#define IDC_CHECK_PRESERVE_ZOOM     2032
 
 #define IDC_STATIC                  -1

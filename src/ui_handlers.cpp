@@ -108,6 +108,15 @@ void ViewerApp::HandleCommand(WORD cmd) {
     case IDM_SAVE_AS:       SaveImageAs(); break;
     case IDM_OPEN_LOCATION: OpenFileLocationAction(); break;
     case IDM_PROPERTIES:    ShowImageProperties(); break;
+    case IDM_SLIDESHOW:
+        m_ctx.isSlideshowActive = !m_ctx.isSlideshowActive;
+        if (m_ctx.isSlideshowActive) {
+            SetTimer(m_ctx.hWnd, SLIDESHOW_TIMER_ID, std::max(1, m_ctx.slideshowIntervalSeconds) * 1000, nullptr);
+        }
+        else {
+            KillTimer(m_ctx.hWnd, SLIDESHOW_TIMER_ID);
+        }
+        break;
     case IDM_PREFERENCES:   OpenPreferencesDialog(); break;
     case IDM_KEYBINDINGS:   OpenKeybindingsDialog(); break;
     case IDM_CUSTOM_ZOOM:   OpenZoomDialog(); break;
@@ -268,6 +277,7 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     addAction(hViewMenu, IDM_FIT_TO_WINDOW, Act_Fit, L"Fit to Window");
     AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
     addAction(hViewMenu, IDM_FULLSCREEN, Act_Fullscreen, L"Full Screen");
+    addAction(hViewMenu, IDM_SLIDESHOW, Act_Slideshow, L"Toggle Slideshow");
     AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hViewMenu, L"View");
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
@@ -286,6 +296,10 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hMenu, MF_STRING, IDM_DELETE_IMG, L"Delete Image\tDelete");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_EXIT, L"Exit\tEsc");
+
+    if (m_ctx.isSlideshowActive) {
+        CheckMenuItem(hMenu, IDM_SLIDESHOW, MF_BYCOMMAND | MF_CHECKED);
+    }
 
     int cmd = TrackPopupMenu(hMenu, TPM_RIGHTBUTTON | TPM_RETURNCMD, pt.x, pt.y, 0, hWnd, nullptr);
     DestroyMenu(hMenu);
@@ -374,6 +388,11 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             if (m_ctx.pendingNavIndex != -1 && m_ctx.pendingNavIndex < m_ctx.imageFiles.size()) {
                 LoadImageFromFile(m_ctx.imageFiles[m_ctx.pendingNavIndex].c_str(), m_ctx.startAtEnd);
                 m_ctx.pendingNavIndex = -1;
+            }
+        }
+        else if (wParam == SLIDESHOW_TIMER_ID) {
+            if (m_ctx.isSlideshowActive) {
+                HandleCommand(IDM_NEXT_IMG);
             }
         }
         
@@ -658,7 +677,9 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
         }
         if (wParam != SIZE_MINIMIZED) {
             if (!m_ctx.isLoading) {
-                FitImageToWindow();
+                if (!m_ctx.preserveZoomOnResize) {
+                    FitImageToWindow();
+                }
                 InvalidateRect(hWnd, nullptr, FALSE);
             }
         }
