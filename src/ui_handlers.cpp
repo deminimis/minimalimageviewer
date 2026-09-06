@@ -106,6 +106,7 @@ void ViewerApp::HandleCommand(WORD cmd) {
     case IDM_RESIZE:        ResizeImageAction(); break;
     case IDM_SAVE:          SaveImage(); break;
     case IDM_SAVE_AS:       SaveImageAs(); break;
+    case IDM_SET_WALLPAPER: SetWallpaper(); break;
     case IDM_OPEN_LOCATION: OpenFileLocationAction(); break;
     case IDM_PROPERTIES:    ShowImageProperties(); break;
     case IDM_SLIDESHOW:
@@ -283,6 +284,7 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(hMenu, MF_STRING, IDM_SAVE, L"Save\tCtrl+S");
     AppendMenuW(hMenu, MF_STRING, IDM_SAVE_AS, L"Save As\tCtrl+Shift+S");
+    AppendMenuW(hMenu, MF_STRING, IDM_SET_WALLPAPER, L"Set as Wallpaper");
 
     UINT locationFlags = (m_ctx.currentImageIndex != -1) ? MF_STRING : MF_STRING | MF_GRAYED;
     AppendMenuW(hMenu, locationFlags, IDM_OPEN_LOCATION, L"Open File Location");
