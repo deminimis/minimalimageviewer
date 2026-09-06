@@ -38,7 +38,26 @@ ImageProperties ViewerApp::GetCurrentOsdProperties() {
 
     pProps.filePath = m_ctx.imageFiles[m_ctx.currentImageIndex];
     UINT w = 0, h = 0;
-    if (GetCurrentImageSize(&w, &h)) pProps.dimensions = std::format(L"{} x {} pixels", w, h);
+    if (GetCurrentImageSize(&w, &h)) {
+        double ratio = static_cast<double>(w) / h;
+        std::wstring aspectStr;
+        if (std::abs(ratio - 16.0 / 9.0) < 0.01) aspectStr = L"16:9";
+        else if (std::abs(ratio - 9.0 / 16.0) < 0.01) aspectStr = L"9:16";
+        else if (std::abs(ratio - 4.0 / 3.0) < 0.01) aspectStr = L"4:3";
+        else if (std::abs(ratio - 3.0 / 4.0) < 0.01) aspectStr = L"3:4";
+        else if (std::abs(ratio - 3.0 / 2.0) < 0.01) aspectStr = L"3:2";
+        else if (std::abs(ratio - 2.0 / 3.0) < 0.01) aspectStr = L"2:3";
+        else if (std::abs(ratio - 1.0) < 0.01) aspectStr = L"1:1";
+        else if (std::abs(ratio - 21.0 / 9.0) < 0.05) aspectStr = L"21:9";
+        else if (std::abs(ratio - 16.0 / 10.0) < 0.01) aspectStr = L"16:10";
+        else if (std::abs(ratio - 10.0 / 16.0) < 0.01) aspectStr = L"10:16";
+        else if (std::abs(ratio - 5.0 / 4.0) < 0.01) aspectStr = L"5:4";
+        else if (std::abs(ratio - 4.0 / 5.0) < 0.01) aspectStr = L"4:5";
+        else aspectStr = std::format(L"{:.2f}:1", ratio);
+
+        pProps.aspectRatio = aspectStr;
+        pProps.dimensions = std::format(L"{} x {} pixels", w, h);
+    }
 
     WIN32_FILE_ATTRIBUTE_DATA fad = {};
     if (GetFileAttributesExW(pProps.filePath.c_str(), GetFileExInfoStandard, &fad)) {

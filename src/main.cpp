@@ -1,5 +1,7 @@
 #include "viewer.h"
 
+int g_languageOverride = -1;
+
 // define dark mode for older Windows
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -141,7 +143,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     m_ctx.hWnd = CreateWindowExW(
         exStyle,
         wcex.lpszClassName,
-        L"Minimal Image Viewer v2.0.3",
+        L"Minimal Image Viewer v2.0.4",
         WS_OVERLAPPEDWINDOW,
         x, y, w, h,
         nullptr, nullptr, hInstance, this

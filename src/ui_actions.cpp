@@ -3,12 +3,33 @@
 
 
 void ViewerApp::OpenFileAction() {
+    std::wstring initialDir;
+    if (!m_ctx.currentDirectory.empty()) {
+        if (GetFileAttributesW(m_ctx.currentDirectory.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            // Folder deleted: safely fall back to Pictures folder to avoid System32
+            PWSTR picturesPath = nullptr;
+            if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Pictures, 0, nullptr, &picturesPath))) {
+                initialDir = picturesPath;
+                CoTaskMemFree(picturesPath);
+            }
+            else {
+                initialDir = L"C:\\";
+            }
+        }
+        else {
+            initialDir = m_ctx.currentDirectory;
+        }
+    }
+
     wchar_t szFile[MAX_PATH] = { 0 };
     OPENFILENAMEW ofn = { sizeof(OPENFILENAMEW) };
     ofn.hwndOwner = m_ctx.hWnd;
-    ofn.lpstrFilter = L"All Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;*.svg;*.qoi;*.hdr\0HDR Files (*.hdr)\0*.hdr\0SVG Files (*.svg)\0*.svg\0QOI Files (*.qoi)\0*.qoi\0PNG Files (*.png)\0*.png\0JPEG Files (*.jpg;*.jpeg)\0*.jpg;*.jpeg\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFilter = L"All Image Files\0*.jpg;*.jpeg;*.png;*.bmp;*.gif;*.tiff;*.tif;*.ico;*.webp;*.heic;*.heif;*.avif;*.cr2;*.cr3;*.nef;*.dng;*.arw;*.orf;*.rw2;*.svg;*.qoi;*.hdr\0HDR Files (*.hdr)\0*.hdr\0SVG Files (*.svg)\0*.svg\0QOI Files (*.qoi)\0*.qoi\0PNG Files (*.png)\0*.png\0JPEG Files (*.jpg;*.jpeg)\0*.jpg;*.jpeg\0WebP Files (*.webp)\0*.webp\0All Files (*.*)\0*.*\0";
     ofn.lpstrFile = szFile;
     ofn.nMaxFile = MAX_PATH;
+    if (!initialDir.empty()) {
+        ofn.lpstrInitialDir = initialDir.c_str();
+    }
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_EXPLORER;
     if (GetOpenFileNameW(&ofn)) {
         LoadImageFromFile(szFile);
@@ -19,7 +40,7 @@ void ViewerApp::DeleteCurrentImage() {
     if (m_ctx.currentImageIndex < 0 || m_ctx.imageFiles.empty()) return;
 
     if (m_ctx.askToDelete) {
-        if (MessageBoxW(m_ctx.hWnd, L"Are you sure you want to delete?", L"Confirm Delete", MB_YESNO | MB_ICONWARNING) != IDYES) {
+        if (MessageBoxW(m_ctx.hWnd, Tr(StrId::ConfirmDelete), Tr(StrId::ConfirmDeleteTitle), MB_YESNO | MB_ICONWARNING) != IDYES) {
             return;
         }
     }
@@ -60,7 +81,7 @@ void ViewerApp::DeleteCurrentImage() {
                                     m_ctx.loadingFilePath = L"";
                                 }
                                 InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-                                SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer v2.0.3");
+                                SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer v2.0.4");
                             }
                             else {
                                 if (m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
@@ -219,4 +240,62 @@ void ViewerApp::SetWallpaper() {
     else {
         MessageBoxW(m_ctx.hWnd, L"Failed to set wallpaper.", L"Set Wallpaper", MB_ICONERROR);
     }
+}
+
+void ViewerApp::RegisterFileAssociations() {
+    wchar_t exePath[MAX_PATH];
+    GetModuleFileNameW(nullptr, exePath, MAX_PATH);
+
+    std::wstring command = std::wstring(L"\"") + exePath + L"\" \"%1\"";
+    std::wstring progId = L"MinimalImageViewer.Image";
+    std::wstring appName = L"Minimal Image Viewer";
+
+    HKEY hKey;
+
+    // Register base ProgID
+    std::wstring progIdPath = L"Software\\Classes\\" + progId;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, progIdPath.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        RegSetValueExW(hKey, L"", 0, REG_SZ, reinterpret_cast<const BYTE*>(appName.c_str()), static_cast<DWORD>((appName.length() + 1) * sizeof(wchar_t)));
+        RegCloseKey(hKey);
+    }
+    std::wstring commandPath = progIdPath + L"\\shell\\open\\command";
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, commandPath.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        RegSetValueExW(hKey, L"", 0, REG_SZ, reinterpret_cast<const BYTE*>(command.c_str()), static_cast<DWORD>((command.length() + 1) * sizeof(wchar_t)));
+        RegCloseKey(hKey);
+    }
+
+    // Register app capabilities
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\MinimalImageViewer\\Capabilities", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        RegSetValueExW(hKey, L"ApplicationName", 0, REG_SZ, reinterpret_cast<const BYTE*>(appName.c_str()), static_cast<DWORD>((appName.length() + 1) * sizeof(wchar_t)));
+        RegSetValueExW(hKey, L"ApplicationDescription", 0, REG_SZ, reinterpret_cast<const BYTE*>(appName.c_str()), static_cast<DWORD>((appName.length() + 1) * sizeof(wchar_t)));
+        RegCloseKey(hKey);
+    }
+
+    // Register FileAssociations 
+    const wchar_t* exts[] = { L".jpg", L".jpeg", L".png", L".bmp", L".gif", L".webp", L".heic", L".heif", L".avif", L".svg", L".qoi", L".hdr", L".tiff", L".tif", L".ico" };
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\MinimalImageViewer\\Capabilities\\FileAssociations", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        for (const auto& ext : exts) {
+            RegSetValueExW(hKey, ext, 0, REG_SZ, reinterpret_cast<const BYTE*>(progId.c_str()), static_cast<DWORD>((progId.length() + 1) * sizeof(wchar_t)));
+        }
+        RegCloseKey(hKey);
+    }
+
+    // Register in Windows RegisteredApplications 
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\RegisteredApplications", 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+        std::wstring capPath = L"Software\\MinimalImageViewer\\Capabilities";
+        RegSetValueExW(hKey, L"MinimalImageViewer", 0, REG_SZ, reinterpret_cast<const BYTE*>(capPath.c_str()), static_cast<DWORD>((capPath.length() + 1) * sizeof(wchar_t)));
+        RegCloseKey(hKey);
+    }
+
+    // Inject into OpenWithProgids for each extension for context menu
+    for (const auto& ext : exts) {
+        std::wstring extKey = L"Software\\Classes\\" + std::wstring(ext) + L"\\OpenWithProgids";
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, extKey.c_str(), 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE, nullptr, &hKey, nullptr) == ERROR_SUCCESS) {
+            RegSetValueExW(hKey, progId.c_str(), 0, REG_SZ, reinterpret_cast<const BYTE*>(L""), sizeof(L""));
+            RegCloseKey(hKey);
+        }
+    }
+
+    // Notify shell
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 }

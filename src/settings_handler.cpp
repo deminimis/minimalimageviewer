@@ -18,6 +18,9 @@ void ViewerApp::ReadSettings(const std::wstring& path, WINDOWPLACEMENT& wp, bool
     m_ctx.isAutoRefresh = getInt(L"Settings", L"AutoRefresh", 0) == 1;
     m_ctx.slideshowIntervalSeconds = getInt(L"Settings", L"SlideshowInterval", 3);
 
+    extern int g_languageOverride;
+    g_languageOverride = getInt(L"Settings", L"LanguageOverride", -1);
+
     int bgChoice = getInt(L"Settings", L"BackgroundColor", 0);
     m_ctx.bgColor = static_cast<BackgroundColor>((bgChoice < 0 || bgChoice > 3) ? 0 : bgChoice);
 
@@ -73,6 +76,9 @@ void ViewerApp::WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& w
     writeInt(L"Settings", L"PreserveZoomOnResize", m_ctx.preserveZoomOnResize ? 1 : 0);
     writeInt(L"Settings", L"AutoRefresh", m_ctx.isAutoRefresh ? 1 : 0);
     writeInt(L"Settings", L"SlideshowInterval", m_ctx.slideshowIntervalSeconds);
+
+    extern int g_languageOverride;
+    writeInt(L"Settings", L"LanguageOverride", g_languageOverride);
     writeInt(L"Settings", L"BackgroundColor", static_cast<int>(m_ctx.bgColor));
     writeInt(L"Settings", L"DefaultZoomMode", static_cast<int>(m_ctx.defaultZoomMode));
     writeInt(L"Settings", L"SortCriteria", static_cast<int>(m_ctx.currentSortCriteria));

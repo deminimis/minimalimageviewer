@@ -49,9 +49,28 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
 
         CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL,
             ctx.defaultZoomMode == DefaultZoomMode::Fit ? IDC_RADIO_ZOOM_FIT : IDC_RADIO_ZOOM_ACTUAL);
+
+        SetDlgItemTextW(hDlg, IDC_STATIC_LANGUAGE, Tr(StrId::Language));
+        HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_LANGUAGE);
+        SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)Tr(StrId::SystemDefault));
+        const wchar_t* langs[] = { L"English", L"Español", L"中文", L"Français", L"Deutsch", L"Português", L"日本語", L"Русский", L"Italiano", L"한국어", L"Українська", L"Tiếng Việt", L"العربية", L"हिन्दी", L"Polski" };
+        for (const auto& lang : langs) {
+            SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)lang);
+        }
+
+        extern int g_languageOverride;
+        int selIdx = (g_languageOverride >= 0 && g_languageOverride <= 14) ? (g_languageOverride + 1) : 0;
+        SendMessageW(hCombo, CB_SETCURSEL, selIdx, 0);
+
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
+        if (LOWORD(wParam) == IDC_BTN_REGISTER_ASSOC) {
+            pApp->RegisterFileAssociations();
+            MessageBoxW(hDlg, L"File associations successfully registered! You can now find Minimal Image Viewer in the Windows 'Default Apps' settings menu.", L"Success", MB_OK | MB_ICONINFORMATION);
+            return (INT_PTR)TRUE;
+        }
+
         switch (LOWORD(wParam)) {
         case IDOK: {
             for (int id = IDC_RADIO_BG_GREY; id <= IDC_RADIO_BG_TRANSPARENT; ++id) {
@@ -92,6 +111,13 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             else if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_ACTUAL)) {
                 ctx.defaultZoomMode = DefaultZoomMode::Actual;
             }
+
+            HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_LANGUAGE);
+            int selIdx = static_cast<int>(SendMessageW(hCombo, CB_GETCURSEL, 0, 0));
+            extern int g_languageOverride;
+            g_languageOverride = (selIdx > 0) ? (selIdx - 1) : -1;
+
+            ctx.isOsdCacheValid = false; // Force OSD text to regenerate in the new language
 
             // Immediate update from fullscreen setting
             if (!ctx.startFullScreen && ctx.isFullScreen) {

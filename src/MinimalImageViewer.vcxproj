@@ -34,6 +34,7 @@
   <ItemGroup>
     <ClInclude Include="exif_utils.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="translations.h" />
     <ClInclude Include="viewer.h" />
   </ItemGroup>
   <ItemGroup>

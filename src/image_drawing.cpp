@@ -154,7 +154,7 @@ void ViewerApp::DrawOsdOverlay(ID2D1DeviceContext* renderTarget) {
 
         std::wstring osdText;
         osdText += L"Image Format: " + props.imageFormat + L"\n";
-        osdText += L"Dimensions: " + props.dimensions + L"   Orientation: " + props.orientation + L"\n";
+        osdText += L"Dimensions: " + props.dimensions + L"   Aspect Ratio: " + props.aspectRatio + L"   Orientation: " + props.orientation + L"\n";
         osdText += L"Bit Depth: " + props.bitDepth + L"\n";
         osdText += L"DPI: " + props.dpi + L"\n";
         osdText += L"\n";
@@ -249,9 +249,10 @@ void ViewerApp::Render() {
         m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
         m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
         m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        const wchar_t* loadTxt = Tr(StrId::Loading);
         m_ctx.renderTarget->DrawTextW(
-            L"Loading...",
-            10,
+            loadTxt,
+            static_cast<UINT32>(wcslen(loadTxt)),
             m_ctx.textFormat.Get(),
             layoutRect,
             m_ctx.textBrush.Get()
@@ -468,9 +469,10 @@ void ViewerApp::Render() {
             m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
             m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+            const wchar_t* emptyTxt = Tr(StrId::EmptyPrompt);
             m_ctx.renderTarget->DrawTextW(
-                L"Right-click for options or drag an image here",
-                46,
+                emptyTxt,
+                static_cast<UINT32>(wcslen(emptyTxt)),
                 m_ctx.textFormat.Get(),
                 layoutRect,
                 m_ctx.textBrush.Get()
@@ -530,9 +532,10 @@ void ViewerApp::Render() {
             m_ctx.renderTarget->SetTransform(D2D1::Matrix3x2F::Identity());
             m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
             m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
+            const wchar_t* cropTxt = Tr(StrId::CropPrompt);
             m_ctx.renderTarget->DrawTextW(
-                L"Press Enter to apply crop, Esc to cancel",
-                40,
+                cropTxt,
+                static_cast<UINT32>(wcslen(cropTxt)),
                 m_ctx.textFormat.Get(),
                 layoutRect,
                 m_ctx.textBrush.Get()

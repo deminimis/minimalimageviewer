@@ -428,98 +428,55 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
             return;
         }
 
-        // STB fallback for non-WIC formats 
-        if (ext &&
-            (_wcsicmp(ext, L".tga") == 0 ||
-                _wcsicmp(ext, L".psd") == 0 ||
-                _wcsicmp(ext, L".ppm") == 0 ||
-                _wcsicmp(ext, L".pgm") == 0 ||
-                _wcsicmp(ext, L".pbm") == 0 ||
-                _wcsicmp(ext, L".pnm") == 0 ||
-                _wcsicmp(ext, L".pic") == 0))
-        {
+        // STB fallback for non-WIC formats or corrupted metadata
+        auto RunStbFallback = [&]() {
             int w = 0, h = 0, comp = 0;
 
-            if (!stbi_info_from_memory(
-                rawData.data(),
-                static_cast<int>(rawData.size()),
-                &w, &h, &comp))
-            {
+            if (!stbi_info_from_memory(rawData.data(), static_cast<int>(rawData.size()), &w, &h, &comp) || w <= 0 || h <= 0) {
                 PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
                 return;
             }
 
-            if (w <= 0 || h <= 0)
-            {
-                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
-                return;
-            }
-
-            unsigned char* pixels = stbi_load_from_memory(
-                rawData.data(),
-                static_cast<int>(rawData.size()),
-                &w, &h, &comp,
-                4
-            );
-
-            if (!pixels)
-            {
+            unsigned char* pixels = stbi_load_from_memory(rawData.data(), static_cast<int>(rawData.size()), &w, &h, &comp, 4);
+            if (!pixels) {
                 PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
                 return;
             }
 
             ComPtr<IWICBitmap> bmp;
-
-            if (SUCCEEDED(localFactory->CreateBitmap(
-                (UINT)w, (UINT)h,
-                GUID_WICPixelFormat32bppRGBA,
-                WICBitmapCacheOnLoad,
-                &bmp)))
-            {
+            if (SUCCEEDED(localFactory->CreateBitmap((UINT)w, (UINT)h, GUID_WICPixelFormat32bppRGBA, WICBitmapCacheOnLoad, &bmp))) {
                 WICRect rc = { 0, 0, w, h };
-
                 ComPtr<IWICBitmapLock> lock;
-                if (SUCCEEDED(bmp->Lock(&rc, WICBitmapLockWrite, &lock)))
-                {
+                if (SUCCEEDED(bmp->Lock(&rc, WICBitmapLockWrite, &lock))) {
                     UINT stride = 0, size = 0;
                     BYTE* dest = nullptr;
-
                     lock->GetStride(&stride);
                     lock->GetDataPointer(&size, &dest);
-
-                    if (dest)
-                    {
+                    if (dest) {
                         memcpy(dest, pixels, (size_t)w * h * 4);
                     }
                 }
 
                 ComPtr<IWICBitmapSource> sourceToCache = bmp;
-
                 bool downscaled = false;
                 float ratio = 1.0f;
                 UINT maxDim = 3840;
 
-                if ((UINT)w > maxDim || (UINT)h > maxDim)
-                {
+                if ((UINT)w > maxDim || (UINT)h > maxDim) {
                     downscaled = true;
                     ratio = std::min((float)maxDim / w, (float)maxDim / h);
-
                     UINT newW = (UINT)(w * ratio);
                     UINT newH = (UINT)(h * ratio);
 
                     ComPtr<IWICBitmapScaler> scaler;
                     if (SUCCEEDED(localFactory->CreateBitmapScaler(&scaler)) &&
-                        SUCCEEDED(scaler->Initialize(sourceToCache.Get(), newW, newH, WICBitmapInterpolationModeFant)))
-                    {
+                        SUCCEEDED(scaler->Initialize(sourceToCache.Get(), newW, newH, WICBitmapInterpolationModeFant))) {
                         sourceToCache = scaler;
                     }
                 }
 
-                if (ComPtr<IWICFormatConverter> finalConverter =
-                    ConvertToFormat(localFactory.Get(), sourceToCache.Get()))
-                {
+                if (ComPtr<IWICFormatConverter> finalConverter = ConvertToFormat(localFactory.Get(), sourceToCache.Get())) {
                     std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
-
                     m_ctx.stagedStaticConverter = finalConverter;
                     m_ctx.stagedRawFileData = std::move(rawData);
                     m_ctx.stagedWidth = (UINT)w;
@@ -530,7 +487,6 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
                     m_ctx.downscaleRatio = ratio;
 
                     stbi_image_free(pixels);
-
                     PostMessage(m_ctx.hWnd, WM_APP_IMAGE_READY, 1, (LPARAM)mySeqId);
                     return;
                 }
@@ -538,9 +494,14 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
 
             stbi_image_free(pixels);
             PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+            };
+
+        if (ext && (_wcsicmp(ext, L".tga") == 0 || _wcsicmp(ext, L".psd") == 0 || _wcsicmp(ext, L".ppm") == 0 ||
+            _wcsicmp(ext, L".pgm") == 0 || _wcsicmp(ext, L".pbm") == 0 || _wcsicmp(ext, L".pnm") == 0 ||
+            _wcsicmp(ext, L".pic") == 0)) {
+            RunStbFallback();
             return;
         }
-
 
         ComPtr<IWICStream> stream;
         localFactory->CreateStream(&stream);
@@ -554,16 +515,19 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         }
 
         if (FAILED(hr)) {
-            // Intercept HEIC/AVIF failures and prompt to install the lightweight native codec
+            // Intercept HEIC/AVIF failures and prompt to install native codec
             if (ext && (_wcsicmp(ext, L".heic") == 0 || _wcsicmp(ext, L".heif") == 0 || _wcsicmp(ext, L".avif") == 0)) {
                 if (MessageBoxW(m_ctx.hWnd,
                     L"To view HEIC and AVIF images natively, you need the free 'HEIF Image Extensions' from the Microsoft Store.\n\nWould you like to open the Store page?",
                     L"Missing Image Codec", MB_YESNO | MB_ICONINFORMATION) == IDYES) {
-                    // Deep link directly to the Microsoft Store page for the official HEIF extension
                     ShellExecuteW(nullptr, L"open", L"ms-windows-store://pdp/?ProductId=9PMMSR1CGPWG", nullptr, nullptr, SW_SHOW);
                 }
+                PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+                return;
             }
-            PostMessage(m_ctx.hWnd, WM_APP_IMAGE_LOAD_FAILED, 0, (LPARAM)mySeqId);
+
+            // Try STB fallback if WIC fails 
+            RunStbFallback();
             return;
         }
 
@@ -574,7 +538,7 @@ void ViewerApp::LoadImageFromFile(const std::wstring& filePath, bool startAtEnd)
         if (frameCount == 0) frameCount = 1;
 
         // Fast static image loading
-        if (frameCount == 1 && containerFormat != GUID_ContainerFormatGif) {
+        if (containerFormat != GUID_ContainerFormatGif) {
             ComPtr<IWICBitmapFrameDecode> frame;
             if (SUCCEEDED(decoder->GetFrame(0, &frame))) {
                 UINT frameWidth = 0, frameHeight = 0;
@@ -982,7 +946,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
                 foundIndex = (it != newFiles.end()) ? static_cast<int>(std::distance(newFiles.begin(), it)) : -1;
 
                 {
-                   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+                    std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
                     m_ctx.stagedImageFiles = std::move(newFiles);
                     m_ctx.stagedFoundIndex = foundIndex;
                 }
@@ -991,7 +955,20 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
                 });
         }
         else {
-            // Directory is already cached, jump straight to preloading next/prev
+            // Directory is already cached, update currentImageIndex to dragged file
+            {
+                std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+                auto it = std::ranges::find_if(m_ctx.imageFiles,
+                    [&](const std::wstring& s) { return _wcsicmp(s.c_str(), m_ctx.loadingFilePath.c_str()) == 0; }
+                );
+                if (it != m_ctx.imageFiles.end()) {
+                    m_ctx.currentImageIndex = static_cast<int>(std::distance(m_ctx.imageFiles.begin(), it));
+                }
+                else {
+                    m_ctx.imageFiles.push_back(m_ctx.loadingFilePath);
+                    m_ctx.currentImageIndex = static_cast<int>(m_ctx.imageFiles.size() - 1);
+                }
+            }
             StartPreloading();
         }
     }

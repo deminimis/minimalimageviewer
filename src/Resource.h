@@ -77,5 +77,8 @@
 #define IDC_CHECK_SHOW_OSD          2030
 #define IDC_CHECK_ASK_DELETE        2031
 #define IDC_CHECK_PRESERVE_ZOOM     2032
+#define IDC_BTN_REGISTER_ASSOC      2033
+#define IDC_STATIC_LANGUAGE         2034
+#define IDC_COMBO_LANGUAGE          2035
 
 #define IDC_STATIC                  -1

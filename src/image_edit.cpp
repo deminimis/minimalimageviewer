@@ -158,7 +158,7 @@ ComPtr<IWICBitmapSource> ViewerApp::ApplyCropAndTransform(ComPtr<IWICBitmapSourc
 }
 
 ComPtr<IWICBitmapSource> ViewerApp::GetSaveSource(const GUID& targetFormat) {
-   std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+    std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
     ComPtr<IWICBitmapSource> source;
 
     if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameDelays.size()) {
@@ -234,14 +234,14 @@ void ViewerApp::SaveImage() {
 
     const std::wstring& originalPath = m_ctx.imageFiles[m_ctx.currentImageIndex];
     if (m_ctx.rotationAngle == 0 && !m_ctx.isFlippedHorizontal && !m_ctx.isCropActive) {
-        MessageBoxW(m_ctx.hWnd, L"No changes to save.", L"Save", MB_OK | MB_ICONINFORMATION);
+        MessageBoxW(m_ctx.hWnd, Tr(StrId::NoChanges), Tr(StrId::Save), MB_OK | MB_ICONINFORMATION);
         return;
     }
 
-    // AVIF/HEIC save prompt
+    // AVIF/HEIC/WebP save prompt
     const wchar_t* ext = PathFindExtensionW(originalPath.c_str());
-    if (ext && (_wcsicmp(ext, L".heic") == 0 || _wcsicmp(ext, L".heif") == 0 || _wcsicmp(ext, L".avif") == 0)) {
-        if (MessageBoxW(m_ctx.hWnd, L"HEIC and AVIF files cannot be natively overwritten. Would you like to save your edits as a PNG instead?", L"Save Edits", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+    if (ext && (_wcsicmp(ext, L".heic") == 0 || _wcsicmp(ext, L".heif") == 0 || _wcsicmp(ext, L".avif") == 0 || _wcsicmp(ext, L".webp") == 0)) {
+        if (MessageBoxW(m_ctx.hWnd, L"HEIC, AVIF, and WebP files cannot be natively overwritten. Would you like to save your edits as a PNG instead?", L"Save Edits", MB_YESNO | MB_ICONQUESTION) == IDYES) {
 
             wchar_t newPath[MAX_PATH];
             wcscpy_s(newPath, MAX_PATH, originalPath.c_str());
@@ -261,7 +261,7 @@ void ViewerApp::SaveImage() {
 
     GUID containerFormat{};
     {
-       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         containerFormat = m_ctx.originalContainerFormat;
     }
 
@@ -297,7 +297,7 @@ void ViewerApp::SaveImage() {
 void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& containerFormat, UINT newWidth, UINT newHeight) {
     ComPtr<IWICBitmapSource> source;
     {
-       std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+        std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
         if (m_ctx.isAnimated && m_ctx.currentAnimationFrame < m_ctx.animationFrameDelays.size()) {
             source = m_ctx.currentAnimatedConverter;
         }
@@ -435,7 +435,7 @@ void ViewerApp::ResizeImageAction() {
 
         GUID originalFormat = GUID_NULL;
         {
-           std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
+            std::lock_guard<std::recursive_mutex> lock(m_ctx.wicMutex);
             originalFormat = m_ctx.originalContainerFormat;
         }
 

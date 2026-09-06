@@ -237,14 +237,20 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
         AppendMenuW(menu, MF_STRING, id, label.c_str());
         };
 
-    AppendMenuW(hMenu, MF_STRING, IDM_OPEN, L"Open Image\tCtrl+O");
-    AppendMenuW(hMenu, MF_STRING, IDM_REFRESH, L"Refresh\tF5");
+    auto addRaw = [&](HMENU menu, UINT id, const wchar_t* text, const wchar_t* shortcut = nullptr) {
+        std::wstring label = text;
+        if (shortcut) label += std::wstring(L"\t") + shortcut;
+        AppendMenuW(menu, MF_STRING, id, label.c_str());
+        };
+
+    addRaw(hMenu, IDM_OPEN, Tr(StrId::OpenImage), L"Ctrl+O");
+    addRaw(hMenu, IDM_REFRESH, Tr(StrId::Refresh), L"F5");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, IDM_COPY, L"Copy\tCtrl+C");
-    AppendMenuW(hMenu, MF_STRING, IDM_PASTE, L"Paste\tCtrl+V");
+    addRaw(hMenu, IDM_COPY, Tr(StrId::Copy), L"Ctrl+C");
+    addRaw(hMenu, IDM_PASTE, Tr(StrId::Paste), L"Ctrl+V");
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    addAction(hMenu, IDM_NEXT_IMG, Act_Next, L"Next Image");
-    addAction(hMenu, IDM_PREV_IMG, Act_Prev, L"Previous Image");
+    addAction(hMenu, IDM_NEXT_IMG, Act_Next, Tr(StrId::NextImage));
+    addAction(hMenu, IDM_PREV_IMG, Act_Prev, Tr(StrId::PrevImage));
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
     HMENU hSortMenu = CreatePopupMenu();
@@ -252,52 +258,52 @@ void ViewerApp::OnContextMenu(HWND hWnd, POINT pt) {
         UINT flags = MF_STRING | ((m_ctx.currentSortCriteria == crit && m_ctx.isSortAscending == asc) ? MF_CHECKED : MF_UNCHECKED);
         AppendMenuW(hSortMenu, flags, id, text);
         };
-    addSortItem(IDM_SORT_BY_NAME_ASC, SortCriteria::ByName, true, L"Name (Ascending)");
-    addSortItem(IDM_SORT_BY_NAME_DESC, SortCriteria::ByName, false, L"Name (Descending)");
-    addSortItem(IDM_SORT_BY_DATE_ASC, SortCriteria::ByDateModified, true, L"Date Modified (Ascending)");
-    addSortItem(IDM_SORT_BY_DATE_DESC, SortCriteria::ByDateModified, false, L"Date Modified (Descending)");
-    addSortItem(IDM_SORT_BY_SIZE_ASC, SortCriteria::ByFileSize, true, L"File Size (Ascending)");
-    addSortItem(IDM_SORT_BY_SIZE_DESC, SortCriteria::ByFileSize, false, L"File Size (Descending)");
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSortMenu, L"Sort By");
+    addSortItem(IDM_SORT_BY_NAME_ASC, SortCriteria::ByName, true, Tr(StrId::SortNameAsc));
+    addSortItem(IDM_SORT_BY_NAME_DESC, SortCriteria::ByName, false, Tr(StrId::SortNameDesc));
+    addSortItem(IDM_SORT_BY_DATE_ASC, SortCriteria::ByDateModified, true, Tr(StrId::SortDateAsc));
+    addSortItem(IDM_SORT_BY_DATE_DESC, SortCriteria::ByDateModified, false, Tr(StrId::SortDateDesc));
+    addSortItem(IDM_SORT_BY_SIZE_ASC, SortCriteria::ByFileSize, true, Tr(StrId::SortSizeAsc));
+    addSortItem(IDM_SORT_BY_SIZE_DESC, SortCriteria::ByFileSize, false, Tr(StrId::SortSizeDesc));
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hSortMenu, Tr(StrId::SortBy));
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
     HMENU hEditMenu = CreatePopupMenu();
-    addAction(hEditMenu, IDM_ROTATE_CW, Act_RotateCW, L"Rotate Clockwise");
-    addAction(hEditMenu, IDM_ROTATE_CCW, Act_RotateCCW, L"Rotate Counter-Clockwise");
-    addAction(hEditMenu, IDM_FLIP, Act_Flip, L"Flip");
-    addAction(hEditMenu, IDM_CROP, Act_Crop, L"Crop");
-    AppendMenuW(hEditMenu, MF_STRING, IDM_RESIZE, L"Resize Image...");
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hEditMenu, L"Edit");
+    addAction(hEditMenu, IDM_ROTATE_CW, Act_RotateCW, Tr(StrId::RotateCW));
+    addAction(hEditMenu, IDM_ROTATE_CCW, Act_RotateCCW, Tr(StrId::RotateCCW));
+    addAction(hEditMenu, IDM_FLIP, Act_Flip, Tr(StrId::Flip));
+    addAction(hEditMenu, IDM_CROP, Act_Crop, Tr(StrId::Crop));
+    AppendMenuW(hEditMenu, MF_STRING, IDM_RESIZE, Tr(StrId::ResizeImage));
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hEditMenu, Tr(StrId::Edit));
 
     HMENU hViewMenu = CreatePopupMenu();
-    addAction(hViewMenu, IDM_ZOOM_IN, Act_ZoomIn, L"Zoom In");
-    addAction(hViewMenu, IDM_ZOOM_OUT, Act_ZoomOut, L"Zoom Out");
-    addAction(hViewMenu, IDM_ACTUAL_SIZE, Act_Actual, L"Actual Size (100%)");
-    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_200, L"Zoom 200%");
-    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_300, L"Zoom 300%");
-    addAction(hViewMenu, IDM_FIT_TO_WINDOW, Act_Fit, L"Fit to Window");
+    addAction(hViewMenu, IDM_ZOOM_IN, Act_ZoomIn, Tr(StrId::ZoomIn));
+    addAction(hViewMenu, IDM_ZOOM_OUT, Act_ZoomOut, Tr(StrId::ZoomOut));
+    addAction(hViewMenu, IDM_ACTUAL_SIZE, Act_Actual, Tr(StrId::ActualSize));
+    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_200, Tr(StrId::Zoom200));
+    AppendMenuW(hViewMenu, MF_STRING, IDM_ZOOM_300, Tr(StrId::Zoom300));
+    addAction(hViewMenu, IDM_FIT_TO_WINDOW, Act_Fit, Tr(StrId::FitToWindow));
     AppendMenuW(hViewMenu, MF_SEPARATOR, 0, nullptr);
-    addAction(hViewMenu, IDM_FULLSCREEN, Act_Fullscreen, L"Full Screen");
-    addAction(hViewMenu, IDM_SLIDESHOW, Act_Slideshow, L"Toggle Slideshow");
-    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hViewMenu, L"View");
+    addAction(hViewMenu, IDM_FULLSCREEN, Act_Fullscreen, Tr(StrId::FullScreen));
+    addAction(hViewMenu, IDM_SLIDESHOW, Act_Slideshow, Tr(StrId::ToggleSlideshow));
+    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hViewMenu, Tr(StrId::View));
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, IDM_SAVE, L"Save\tCtrl+S");
-    AppendMenuW(hMenu, MF_STRING, IDM_SAVE_AS, L"Save As\tCtrl+Shift+S");
-    AppendMenuW(hMenu, MF_STRING, IDM_SET_WALLPAPER, L"Set as Wallpaper");
+    addRaw(hMenu, IDM_SAVE, Tr(StrId::Save), L"Ctrl+S");
+    addRaw(hMenu, IDM_SAVE_AS, Tr(StrId::SaveAs), L"Ctrl+Shift+S");
+    AppendMenuW(hMenu, MF_STRING, IDM_SET_WALLPAPER, Tr(StrId::SetWallpaper));
 
     UINT locationFlags = (m_ctx.currentImageIndex != -1) ? MF_STRING : MF_STRING | MF_GRAYED;
-    AppendMenuW(hMenu, locationFlags, IDM_OPEN_LOCATION, L"Open File Location");
-    AppendMenuW(hMenu, locationFlags, IDM_PROPERTIES, L"Properties...");
+    AppendMenuW(hMenu, locationFlags, IDM_OPEN_LOCATION, Tr(StrId::OpenFileLocation));
+    AppendMenuW(hMenu, locationFlags, IDM_PROPERTIES, Tr(StrId::Properties));
 
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, IDM_PREFERENCES, L"Preferences...");
-    AppendMenuW(hMenu, MF_STRING, IDM_KEYBINDINGS, L"Keybindings...");
+    AppendMenuW(hMenu, MF_STRING, IDM_PREFERENCES, Tr(StrId::Preferences));
+    AppendMenuW(hMenu, MF_STRING, IDM_KEYBINDINGS, Tr(StrId::Keybindings));
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
 
-    AppendMenuW(hMenu, MF_STRING, IDM_DELETE_IMG, L"Delete Image\tDelete");
+    AppendMenuW(hMenu, locationFlags, IDM_DELETE_IMG, (std::wstring(Tr(StrId::DeleteImage)) + L"\tDelete").c_str());
     AppendMenuW(hMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(hMenu, MF_STRING, IDM_EXIT, L"Exit\tEsc");
+    AppendMenuW(hMenu, MF_STRING, IDM_EXIT, (std::wstring(Tr(StrId::Exit)) + L"\tEsc").c_str());
 
     if (m_ctx.isSlideshowActive) {
         CheckMenuItem(hMenu, IDM_SLIDESHOW, MF_BYCOMMAND | MF_CHECKED);

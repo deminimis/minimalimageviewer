@@ -38,6 +38,7 @@
 using Microsoft::WRL::ComPtr;
 #include <wil/resource.h>
 #include "resource.h"
+#include "translations.h"
 #include <compare>
 #include <ranges>
 
@@ -100,10 +101,13 @@ enum ActionID {
     Act_Count
 };
 
+extern int g_languageOverride;
+
 class ImageProperties {
 public:
     std::wstring filePath;
     std::wstring dimensions = L"N/A";
+    std::wstring aspectRatio = L"N/A";
     std::wstring fileSize = L"N/A";
     std::wstring createdDate = L"N/A";
     std::wstring modifiedDate = L"N/A";
@@ -403,6 +407,7 @@ public:
     void ReadSettings(const std::wstring& path, WINDOWPLACEMENT& wp, bool& fullscreen, bool& singleInstance, bool& alwaysOnTop);
     void WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& wp, bool fullscreen, bool singleInstance, bool alwaysOnTop);
     HRESULT CreateDecoderFromFile(const wchar_t* filePath, IWICBitmapDecoder** ppDecoder);
+    void RegisterFileAssociations();
     // Dialog Callbacks
     static INT_PTR CALLBACK PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
     static INT_PTR CALLBACK KeybindingsDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam);
