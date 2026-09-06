@@ -1,0 +1,76 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore MinimalImageViewer.sln
+
+      - name: Build x64 Release
+        run: msbuild src\MinimalImageViewer.vcxproj /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /m
+
+      - name: Create portable zip
+        run: |
+          Compress-Archive -Path "src\x64\Release\MinimalImageViewer.exe" -DestinationPath "MinimalImageViewer_Portable_x64.zip"
+
+      - name: Build x86 Release
+        run: msbuild src\MinimalImageViewer.vcxproj /p:Configuration=Release /p:Platform=Win32 /p:PlatformToolset=v143 /m
+
+      - name: Create portable zip (x86)
+        run: |
+          Compress-Archive -Path "src\Win32\Release\MinimalImageViewer.exe" -DestinationPath "MinimalImageViewer_Portable_x86.zip"
+
+      - name: Install Inno Setup
+        run: |
+          choco install innosetup -y
+
+      - name: Build Installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\installer.iss
+
+      - name: Get version from tag
+        id: version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $version = $tag -replace '^v', ''
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: MinimalImageViewer
+          path: |
+            MinimalImageViewer_Portable_x64.zip
+            MinimalImageViewer_Portable_x86.zip
+            installer_output\MinimalImageViewer_Setup.exe
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Minimal Image Viewer ${{ steps.version.outputs.version }}"
+          files: |
+            MinimalImageViewer_Portable_x64.zip
+            MinimalImageViewer_Portable_x86.zip
+            installer_output\MinimalImageViewer_Setup.exe
+          generate_release_notes: true

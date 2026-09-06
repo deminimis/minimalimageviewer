@@ -382,6 +382,7 @@ public:
     void HandlePaste();
     void HandleCopy();
     void OpenFileLocationAction();
+    void SetWallpaper();
     void ShowImageProperties();
     void OpenPreferencesDialog();
     void OpenKeybindingsDialog();

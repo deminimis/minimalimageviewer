@@ -184,3 +184,39 @@ void ViewerApp::OpenFileLocationAction() {
         ILFree(pidl);
     }
 }
+
+void ViewerApp::SetWallpaper() {
+    if (m_ctx.loadingFilePath.empty() || m_ctx.loadingFilePath == L"Clipboard Image") {
+        MessageBoxW(m_ctx.hWnd, L"No image loaded.", L"Set Wallpaper", MB_ICONINFORMATION);
+        return;
+    }
+
+    ComPtr<IWICBitmapSource> source = GetSaveSource(GUID_ContainerFormatBmp);
+    if (!source) {
+        MessageBoxW(m_ctx.hWnd, L"Could not get image source.", L"Set Wallpaper", MB_ICONERROR);
+        return;
+    }
+
+    PWSTR localAppDataPath = nullptr;
+    if (FAILED(SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, nullptr, &localAppDataPath))) {
+        MessageBoxW(m_ctx.hWnd, L"Could not get AppData path.", L"Set Wallpaper", MB_ICONERROR);
+        return;
+    }
+    std::wstring wallpaperDir = std::wstring(localAppDataPath) + L"\\MinimalImageViewer";
+    CoTaskMemFree(localAppDataPath);
+    SHCreateDirectoryExW(nullptr, wallpaperDir.c_str(), nullptr);
+
+    std::wstring wallpaperPath = wallpaperDir + L"\\wallpaper.bmp";
+    HRESULT hr = EncodeAndSaveImage(source, wallpaperPath, GUID_ContainerFormatBmp);
+    if (FAILED(hr)) {
+        MessageBoxW(m_ctx.hWnd, L"Failed to export image for wallpaper.", L"Set Wallpaper", MB_ICONERROR);
+        return;
+    }
+
+    if (SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, (void*)wallpaperPath.c_str(), SPIF_SENDCHANGE | SPIF_UPDATEINIFILE)) {
+        MessageBoxW(m_ctx.hWnd, L"Wallpaper set successfully.", L"Set Wallpaper", MB_OK | MB_ICONINFORMATION);
+    }
+    else {
+        MessageBoxW(m_ctx.hWnd, L"Failed to set wallpaper.", L"Set Wallpaper", MB_ICONERROR);
+    }
+}
