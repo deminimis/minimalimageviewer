@@ -223,6 +223,8 @@ void ViewerApp::SaveImageAs() {
     }
 }
 
+#include <map>
+
 void ViewerApp::SaveImage() {
     if (m_ctx.currentImageIndex < 0 || m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
         UINT imgWidth, imgHeight;
@@ -232,11 +234,15 @@ void ViewerApp::SaveImage() {
         return;
     }
 
-    const std::wstring& originalPath = m_ctx.imageFiles[m_ctx.currentImageIndex];
+    const std::wstring originalPath = m_ctx.imageFiles[m_ctx.currentImageIndex];
     if (m_ctx.rotationAngle == 0 && !m_ctx.isFlippedHorizontal && !m_ctx.isCropActive) {
         MessageBoxW(m_ctx.hWnd, Tr(StrId::NoChanges), Tr(StrId::Save), MB_OK | MB_ICONINFORMATION);
         return;
     }
+
+    // Track the latest save request for each file to allow superseding rapid saves
+    static std::map<std::wstring, uint64_t> s_pendingSaves;
+    static std::mutex s_savesMutex;
 
     // AVIF/HEIC/WebP save prompt
     const wchar_t* ext = PathFindExtensionW(originalPath.c_str());
@@ -248,16 +254,54 @@ void ViewerApp::SaveImage() {
             PathRenameExtensionW(newPath, L".png");
 
             ComPtr<IWICBitmapSource> source = GetSaveSource(GUID_ContainerFormatPng);
-            if (source && SUCCEEDED(EncodeAndSaveImage(source, newPath, GUID_ContainerFormatPng))) {
-                LoadImageFromFile(newPath);
+            if (!source) {
+                MessageBoxW(m_ctx.hWnd, L"Could not get image source to save.", L"Save Error", MB_ICONERROR);
+                return;
             }
-            else {
-                MessageBoxW(m_ctx.hWnd, L"Failed to save as PNG.", L"Save Error", MB_ICONERROR);
+
+            uint64_t saveId = GetTickCount64();
+            std::wstring finalPath = newPath;
+            std::wstring tempPath = finalPath + L"." + std::to_wstring(saveId) + L".tmp_save";
+
+            {
+                std::lock_guard<std::mutex> lock(s_savesMutex);
+                s_pendingSaves[finalPath] = saveId;
             }
+
+            // Capture the shared_ptr to keep the underlying file memory alive in the background
+            std::shared_ptr<BYTE[]> fileMemory = m_ctx.rawFileData.ptr;
+
+            m_ctx.RunBackgroundTask([this, source, fileMemory, finalPath, tempPath, saveId]() {
+                if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
+                wil::unique_couninitialize_call cleanupCOM;
+
+                {
+                    std::lock_guard<std::mutex> lock(s_savesMutex);
+                    if (s_pendingSaves[finalPath] != saveId) return; // Superseded before starting
+                }
+
+                if (SUCCEEDED(EncodeAndSaveImage(source, tempPath, GUID_ContainerFormatPng))) {
+                    {
+                        std::lock_guard<std::mutex> lock(s_savesMutex);
+                        if (s_pendingSaves[finalPath] != saveId) {
+                            DeleteFileW(tempPath.c_str());
+                            return; // Superseded during encoding
+                        }
+                    }
+                    if (MoveFileExW(tempPath.c_str(), finalPath.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+                        PostMessageW(m_ctx.hWnd, WM_COMMAND, IDM_REFRESH, 0);
+                    }
+                    else {
+                        DeleteFileW(tempPath.c_str());
+                    }
+                }
+                else {
+                    DeleteFileW(tempPath.c_str());
+                }
+                });
         }
         return;
     }
-
 
     GUID containerFormat{};
     {
@@ -276,22 +320,51 @@ void ViewerApp::SaveImage() {
         return;
     }
 
-    std::wstring tempPath = originalPath + L".tmp_save";
-    HRESULT hr = EncodeAndSaveImage(source, tempPath, containerFormat);
+    uint64_t saveId = GetTickCount64();
+    std::wstring tempPath = originalPath + L"." + std::to_wstring(saveId) + L".tmp_save";
 
-    if (SUCCEEDED(hr)) {
-        if (ReplaceFileW(originalPath.c_str(), tempPath.c_str(), nullptr, REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)) {
-            LoadImageFromFile(originalPath.c_str());
+    {
+        std::lock_guard<std::mutex> lock(s_savesMutex);
+        s_pendingSaves[originalPath] = saveId;
+    }
+
+    // Capture the shared_ptr to keep the underlying file memory alive in the background
+    std::shared_ptr<BYTE[]> fileMemory = m_ctx.rawFileData.ptr;
+
+    m_ctx.RunBackgroundTask([this, source, fileMemory, originalPath, tempPath, containerFormat, saveId]() {
+        if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) return;
+        wil::unique_couninitialize_call cleanupCOM;
+
+        {
+            std::lock_guard<std::mutex> lock(s_savesMutex);
+            if (s_pendingSaves[originalPath] != saveId) return; // Superseded before starting
+        }
+
+        HRESULT hr = EncodeAndSaveImage(source, tempPath, containerFormat);
+
+        {
+            std::lock_guard<std::mutex> lock(s_savesMutex);
+            if (s_pendingSaves[originalPath] != saveId) {
+                DeleteFileW(tempPath.c_str());
+                return; // Superseded while encoding 
+            }
+        }
+
+        if (SUCCEEDED(hr)) {
+            if (MoveFileExW(tempPath.c_str(), originalPath.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+                WIN32_FILE_ATTRIBUTE_DATA fad;
+                if (GetFileAttributesExW(originalPath.c_str(), GetFileExInfoStandard, &fad)) {
+                    m_ctx.lastWriteTime = fad.ftLastWriteTime; // Prevents AutoRefresh from wiping screen
+                }
+            }
+            else {
+                DeleteFileW(tempPath.c_str());
+            }
         }
         else {
             DeleteFileW(tempPath.c_str());
-            MessageBoxW(m_ctx.hWnd, L"Failed to replace the original file.", L"Save Error", MB_ICONERROR);
         }
-    }
-    else {
-        DeleteFileW(tempPath.c_str());
-        MessageBoxW(m_ctx.hWnd, L"Failed to save image to temporary file.", L"Save Error", MB_ICONERROR);
-    }
+        });
 }
 
 void ViewerApp::SaveImageWithResize(const std::wstring& filePath, const GUID& containerFormat, UINT newWidth, UINT newHeight) {

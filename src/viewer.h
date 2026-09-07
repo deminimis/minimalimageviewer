@@ -138,7 +138,7 @@ public:
 
 // Skip zero-initialization
 struct FastByteBuffer {
-    std::unique_ptr<BYTE[]> ptr;
+    std::shared_ptr<BYTE[]> ptr;
     size_t len = 0;
 
     FastByteBuffer() = default;
