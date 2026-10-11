@@ -978,7 +978,7 @@ void ViewerApp::OnImageReady(bool success, int seqId) {
         m_ctx.wicConverter = nullptr;
         m_ctx.wicConverterOriginal = nullptr;
         m_ctx.undoStack.clear();
-        SetWindowTextW(m_ctx.hWnd, L"Load Failed - Minimal Image Viewer v2.0.3");
+        SetWindowTextW(m_ctx.hWnd, L"Load Failed - Minimal Image Viewer v2.0.5");
     }
 
     InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
@@ -1014,7 +1014,7 @@ void ViewerApp::FinalizeImageLoad(bool success, int foundIndex) {
     }
     else {
         m_ctx.currentImageIndex = -1;
-        SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer v2.0.3");
+        SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer v2.0.5");
         CenterImage(true);
     }
 }

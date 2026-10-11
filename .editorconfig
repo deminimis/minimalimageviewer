@@ -1,0 +1,11 @@
+root = true
+
+[*.{h,hpp,c,cc,cpp,rc,txt}]
+charset = utf-8-bom
+end_of_line = crlf
+insert_final_newline = true
+
+[*.{vcxproj,vcxproj.filters,props,targets,xml,config}]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true

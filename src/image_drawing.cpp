@@ -1,4 +1,4 @@
-#include "viewer.h"
+﻿#include "viewer.h"
 #include <d2d1helper.h>
 #include <numbers>
 
@@ -87,7 +87,21 @@ void ViewerApp::CreateDeviceResources() {
         }
         if (SUCCEEDED(hr)) {
             float dpiScale = GetDpiForWindow(m_ctx.hWnd) / 96.0f;
-            hr = m_ctx.writeFactory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, 14.0f * dpiScale, L"en-us", &m_ctx.textFormat);
+            wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
+            if (!GetUserDefaultLocaleName(localeName, ARRAYSIZE(localeName))) {
+                wcscpy_s(localeName, L"en-US");
+            }
+
+            hr = m_ctx.writeFactory->CreateTextFormat(
+                L"Segoe UI",
+                nullptr,
+                DWRITE_FONT_WEIGHT_NORMAL,
+                DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL,
+                14.0f * dpiScale,
+                localeName,
+                &m_ctx.textFormat
+            );
         }
         if (SUCCEEDED(hr)) {
             m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);

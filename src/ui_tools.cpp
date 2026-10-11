@@ -3,7 +3,7 @@
 #include <format>
 
 void ViewerApp::UpdateWindowTitle() {
-    const std::wstring appNameAndVersion = L"Minimal Image Viewer v2.0.3";
+    const std::wstring appNameAndVersion = L"Minimal Image Viewer v2.0.5";
 
     if (m_ctx.loadingFilePath.empty()) {
         SetWindowTextW(m_ctx.hWnd, appNameAndVersion.c_str());

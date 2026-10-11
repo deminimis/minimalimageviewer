@@ -81,7 +81,7 @@ void ViewerApp::DeleteCurrentImage() {
                                     m_ctx.loadingFilePath = L"";
                                 }
                                 InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
-                                SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer v2.0.4");
+                                SetWindowTextW(m_ctx.hWnd, L"Minimal Image Viewer v2.0.5");
                             }
                             else {
                                 if (m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
@@ -186,7 +186,7 @@ void ViewerApp::HandlePaste() {
 
                         // stop animations
                         KillTimer(m_ctx.hWnd, ANIMATION_TIMER_ID);
-                        SetWindowTextW(m_ctx.hWnd, L"Clipboard Image - Minimal Image Viewer v2.0.3");
+                        SetWindowTextW(m_ctx.hWnd, L"Clipboard Image - Minimal Image Viewer v2.0.5");
                         InvalidateRect(m_ctx.hWnd, nullptr, FALSE);
                     }
                 }

@@ -1,4 +1,4 @@
-#include "viewer.h"
+﻿#include "viewer.h"
 #include "exif_utils.h"
 #include <string>
 #include <stdio.h>
@@ -38,7 +38,7 @@ void ViewerApp::HandleCommand(WORD cmd) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex + 1) % static_cast<int>(size);
             std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
-            title += L"  [Loading...] - Minimal Image Viewer v2.0.3";
+            title += L"  [Loading...] - Minimal Image Viewer v2.0.5";
             SetWindowTextW(m_ctx.hWnd, title.c_str());
             LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], false);
         }
@@ -48,7 +48,7 @@ void ViewerApp::HandleCommand(WORD cmd) {
             size_t size = m_ctx.imageFiles.size();
             m_ctx.currentImageIndex = (m_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
             std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
-            title += L"  [Loading...] - Minimal Image Viewer v2.0.3";
+            title += L"  [Loading...] - Minimal Image Viewer v2.0.5";
             SetWindowTextW(m_ctx.hWnd, title.c_str());
             LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], true);
         }
@@ -436,9 +436,20 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
             float dpiScale = HIWORD(wParam) / 96.0f;
             m_ctx.textFormat = nullptr;
 
+            wchar_t localeName[LOCALE_NAME_MAX_LENGTH] = {};
+            if (!GetUserDefaultLocaleName(localeName, ARRAYSIZE(localeName))) {
+                wcscpy_s(localeName, L"en-US");
+            }
+
             if (SUCCEEDED(m_ctx.writeFactory->CreateTextFormat(
-                L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-                DWRITE_FONT_STRETCH_NORMAL, 14.0f * dpiScale, L"en-us", &m_ctx.textFormat)))
+                L"Segoe UI",
+                nullptr,
+                DWRITE_FONT_WEIGHT_NORMAL,
+                DWRITE_FONT_STYLE_NORMAL,
+                DWRITE_FONT_STRETCH_NORMAL,
+                14.0f * dpiScale,
+                localeName,
+                &m_ctx.textFormat)))
             {
                 m_ctx.textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
                 m_ctx.textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);

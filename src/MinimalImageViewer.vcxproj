@@ -104,10 +104,11 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <Optimization>MaxSpeed</Optimization>
+		<LanguageStandard>stdcpp20</LanguageStandard>
+		<LanguageStandard_C>stdc17</LanguageStandard_C>
+		<AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+		<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+		<Optimization>Disabled</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -123,8 +124,9 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
+		<LanguageStandard>stdcpp20</LanguageStandard>
+		<LanguageStandard_C>stdc17</LanguageStandard_C>
+		<AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -139,10 +141,11 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
-      <Optimization>MaxSpeed</Optimization>
+		<LanguageStandard>stdcpp20</LanguageStandard>
+		<LanguageStandard_C>stdc17</LanguageStandard_C>
+		<AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+		<RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+		<Optimization>Disabled</Optimization>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -158,8 +161,9 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpp20</LanguageStandard>
-      <LanguageStandard_C>stdc17</LanguageStandard_C>
+		<LanguageStandard>stdcpp20</LanguageStandard>
+		<LanguageStandard_C>stdc17</LanguageStandard_C>
+		<AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>

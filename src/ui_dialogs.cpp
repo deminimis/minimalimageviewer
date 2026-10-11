@@ -1,4 +1,4 @@
-
+﻿
 #include "viewer.h"
 #include <commctrl.h>
 #include <stdio.h>
@@ -10,6 +10,37 @@ T* GetAppFromDialog(HWND hDlg, UINT message, LPARAM lParam) {
         return reinterpret_cast<T*>(lParam);
     }
     return reinterpret_cast<T*>(GetWindowLongPtr(hDlg, GWLP_USERDATA));
+}
+
+static void ApplyPreferencesTranslations(HWND hDlg) {
+    SetWindowTextW(hDlg, Tr(StrId::PreferencesTitle));
+
+    SetDlgItemTextW(hDlg, IDC_STATIC_BG_GROUP, Tr(StrId::BackgroundColor));
+    SetDlgItemTextW(hDlg, IDC_RADIO_BG_GREY, Tr(StrId::GreyDefault));
+    SetDlgItemTextW(hDlg, IDC_RADIO_BG_BLACK, Tr(StrId::Black));
+    SetDlgItemTextW(hDlg, IDC_RADIO_BG_WHITE, Tr(StrId::White));
+    SetDlgItemTextW(hDlg, IDC_RADIO_BG_TRANSPARENT, Tr(StrId::Transparent));
+
+    SetDlgItemTextW(hDlg, IDC_STATIC_APP_GROUP, Tr(StrId::ApplicationSettings));
+    SetDlgItemTextW(hDlg, IDC_CHECK_ALWAYS_ON_TOP, Tr(StrId::AlwaysOnTop));
+    SetDlgItemTextW(hDlg, IDC_CHECK_START_FULLSCREEN, Tr(StrId::StartFullscreen));
+    SetDlgItemTextW(hDlg, IDC_CHECK_SINGLE_INSTANCE, Tr(StrId::SingleInstance));
+    SetDlgItemTextW(hDlg, IDC_CHECK_AUTO_REFRESH, Tr(StrId::AutoRefresh));
+    SetDlgItemTextW(hDlg, IDC_CHECK_SMOOTH_SCALING, Tr(StrId::SmoothScaling));
+    SetDlgItemTextW(hDlg, IDC_CHECK_FADE_ANIMATION, Tr(StrId::FadeAnimation));
+    SetDlgItemTextW(hDlg, IDC_CHECK_SHOW_OSD, Tr(StrId::ShowOsd));
+    SetDlgItemTextW(hDlg, IDC_CHECK_ASK_DELETE, Tr(StrId::AskBeforeDelete));
+    SetDlgItemTextW(hDlg, IDC_CHECK_PRESERVE_ZOOM, Tr(StrId::PreserveZoom));
+    SetDlgItemTextW(hDlg, IDC_BTN_REGISTER_ASSOC, Tr(StrId::RegisterDefaultApp));
+
+    SetDlgItemTextW(hDlg, IDC_STATIC_LANGUAGE, Tr(StrId::Language));
+
+    SetDlgItemTextW(hDlg, IDC_STATIC_ZOOM_GROUP, Tr(StrId::DefaultZoomMode));
+    SetDlgItemTextW(hDlg, IDC_RADIO_ZOOM_FIT, Tr(StrId::FitToWindow));
+    SetDlgItemTextW(hDlg, IDC_RADIO_ZOOM_ACTUAL, Tr(StrId::ActualSize));
+
+    SetDlgItemTextW(hDlg, IDOK, Tr(StrId::Ok));
+    SetDlgItemTextW(hDlg, IDCANCEL, Tr(StrId::Cancel));
 }
 
 INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -36,24 +67,36 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
         }
 
         int bgRadio = IDC_RADIO_BG_GREY + static_cast<int>(ctx.bgColor);
-        CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, bgRadio);
-        CheckDlgButton(hDlg, IDC_CHECK_ALWAYS_ON_TOP, ctx.alwaysOnTop ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_START_FULLSCREEN, ctx.startFullScreen ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_SINGLE_INSTANCE, ctx.enforceSingleInstance ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_AUTO_REFRESH, ctx.isAutoRefresh ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_SMOOTH_SCALING, ctx.smoothScaling ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_FADE_ANIMATION, ctx.enableFadeAnimation ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_SHOW_OSD, ctx.isOsdVisible ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_ASK_DELETE, ctx.askToDelete ? BST_CHECKED : BST_UNCHECKED);
-        CheckDlgButton(hDlg, IDC_CHECK_PRESERVE_ZOOM, ctx.preserveZoomOnResize ? BST_CHECKED : BST_UNCHECKED);
+        CheckRadioButton(
+            hDlg,
+            IDC_RADIO_ZOOM_FIT,
+            IDC_RADIO_ZOOM_ACTUAL,
+            ctx.defaultZoomMode == DefaultZoomMode::Fit
+            ? IDC_RADIO_ZOOM_FIT
+            : IDC_RADIO_ZOOM_ACTUAL
+        );
 
-        CheckRadioButton(hDlg, IDC_RADIO_ZOOM_FIT, IDC_RADIO_ZOOM_ACTUAL,
-            ctx.defaultZoomMode == DefaultZoomMode::Fit ? IDC_RADIO_ZOOM_FIT : IDC_RADIO_ZOOM_ACTUAL);
+        ApplyPreferencesTranslations(hDlg);
 
-        SetDlgItemTextW(hDlg, IDC_STATIC_LANGUAGE, Tr(StrId::Language));
         HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_LANGUAGE);
         SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)Tr(StrId::SystemDefault));
-        const wchar_t* langs[] = { L"English", L"Español", L"中文", L"Français", L"Deutsch", L"Português", L"日本語", L"Русский", L"Italiano", L"한국어", L"Українська", L"Tiếng Việt", L"العربية", L"हिन्दी", L"Polski" };
+        const wchar_t* langs[] = {
+    L"English",
+    L"Español",
+    L"简体中文",
+    L"Français",
+    L"Deutsch",
+    L"Português",
+    L"日本語",
+    L"Русский",
+    L"Italiano",
+    L"한국어",
+    L"Українська",
+    L"Tiếng Việt",
+    L"العربية",
+    L"हिन्दी",
+    L"Polski"
+};
         for (const auto& lang : langs) {
             SendMessageW(hCombo, CB_ADDSTRING, 0, (LPARAM)lang);
         }
@@ -65,6 +108,20 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
         return (INT_PTR)TRUE;
     }
     case WM_COMMAND:
+        if (LOWORD(wParam) == IDC_COMBO_LANGUAGE &&
+            HIWORD(wParam) == CBN_SELCHANGE) {
+            HWND hCombo = GetDlgItem(hDlg, IDC_COMBO_LANGUAGE);
+            int selIdx = static_cast<int>(
+                SendMessageW(hCombo, CB_GETCURSEL, 0, 0)
+                );
+
+            extern int g_languageOverride;
+            g_languageOverride = (selIdx > 0) ? (selIdx - 1) : -1;
+
+            ApplyPreferencesTranslations(hDlg);
+            return (INT_PTR)TRUE;
+        }
+
         if (LOWORD(wParam) == IDC_BTN_REGISTER_ASSOC) {
             pApp->RegisterFileAssociations();
             MessageBoxW(hDlg, L"File associations successfully registered! You can now find Minimal Image Viewer in the Windows 'Default Apps' settings menu.", L"Success", MB_OK | MB_ICONINFORMATION);
