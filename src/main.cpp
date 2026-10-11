@@ -1,4 +1,4 @@
-#include "viewer.h"
+﻿#include "viewer.h"
 
 int g_languageOverride = -1;
 
@@ -143,7 +143,7 @@ int ViewerApp::Run(HINSTANCE hInstance, int nCmdShow, LPWSTR lpCmdLine) {
     m_ctx.hWnd = CreateWindowExW(
         exStyle,
         wcex.lpszClassName,
-        L"Minimal Image Viewer v2.0.5",
+        L"Minimal Image Viewer v2.0.6",
         WS_OVERLAPPEDWINDOW,
         x, y, w, h,
         nullptr, nullptr, hInstance, this

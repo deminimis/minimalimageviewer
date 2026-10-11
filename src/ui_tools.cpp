@@ -1,9 +1,9 @@
-#include "viewer.h"
+﻿#include "viewer.h"
 #include <stdio.h>
 #include <format>
 
 void ViewerApp::UpdateWindowTitle() {
-    const std::wstring appNameAndVersion = L"Minimal Image Viewer v2.0.5";
+    const std::wstring appNameAndVersion = L"Minimal Image Viewer v2.0.6";
 
     if (m_ctx.loadingFilePath.empty()) {
         SetWindowTextW(m_ctx.hWnd, appNameAndVersion.c_str());
