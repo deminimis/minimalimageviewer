@@ -116,7 +116,7 @@ void ViewerApp::HandleCopy() {
         // Copy as CF_HDROP (File Path Only)
         if (!m_ctx.loadingFilePath.empty() && m_ctx.loadingFilePath != L"Clipboard Image") {
             size_t size = (m_ctx.loadingFilePath.length() + 1) * sizeof(wchar_t);
-            HGLOBAL hMemDrop = GlobalAlloc(GMEM_MOVEABLE, sizeof(DROPFILES) + size + sizeof(wchar_t));
+            HGLOBAL hMemDrop = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, sizeof(DROPFILES) + size + sizeof(wchar_t));
             if (hMemDrop) {
                 BYTE* pData = static_cast<BYTE*>(GlobalLock(hMemDrop));
                 if (pData) {
