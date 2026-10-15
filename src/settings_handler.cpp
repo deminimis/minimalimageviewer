@@ -15,6 +15,7 @@ void ViewerApp::ReadSettings(const std::wstring& path, WINDOWPLACEMENT& wp, bool
     m_ctx.isOsdVisible = getInt(L"Settings", L"ShowOSD", 0) == 1;
     m_ctx.askToDelete = getInt(L"Settings", L"AskToDelete", 1) == 1;
     m_ctx.preserveZoomOnResize = getInt(L"Settings", L"PreserveZoomOnResize", 0) == 1;
+    m_ctx.wrapAroundNavigation = getInt(L"Settings", L"WrapAround", 1) == 1;
     m_ctx.isAutoRefresh = getInt(L"Settings", L"AutoRefresh", 0) == 1;
     m_ctx.slideshowIntervalSeconds = getInt(L"Settings", L"SlideshowInterval", 3);
 
@@ -74,6 +75,7 @@ void ViewerApp::WriteSettings(const std::wstring& path, const WINDOWPLACEMENT& w
     writeInt(L"Settings", L"ShowOSD", m_ctx.isOsdVisible ? 1 : 0);
     writeInt(L"Settings", L"AskToDelete", m_ctx.askToDelete ? 1 : 0);
     writeInt(L"Settings", L"PreserveZoomOnResize", m_ctx.preserveZoomOnResize ? 1 : 0);
+    writeInt(L"Settings", L"WrapAround", m_ctx.wrapAroundNavigation ? 1 : 0);
     writeInt(L"Settings", L"AutoRefresh", m_ctx.isAutoRefresh ? 1 : 0);
     writeInt(L"Settings", L"SlideshowInterval", m_ctx.slideshowIntervalSeconds);
 

@@ -85,7 +85,9 @@ void ViewerApp::DeleteCurrentImage() {
                             }
                             else {
                                 if (m_ctx.currentImageIndex >= static_cast<int>(m_ctx.imageFiles.size())) {
-                                    m_ctx.currentImageIndex = 0;
+                                    m_ctx.currentImageIndex = m_ctx.wrapAroundNavigation
+                                        ? 0
+                                        : static_cast<int>(m_ctx.imageFiles.size()) - 1;
                                 }
                                 LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex]);
                             }

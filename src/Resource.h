@@ -80,5 +80,6 @@
 #define IDC_BTN_REGISTER_ASSOC      2033
 #define IDC_STATIC_LANGUAGE         2034
 #define IDC_COMBO_LANGUAGE          2035
+#define IDC_CHECK_WRAP_AROUND       2036
 
 #define IDC_STATIC                  -1
