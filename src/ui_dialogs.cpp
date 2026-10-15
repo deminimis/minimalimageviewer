@@ -1,4 +1,4 @@
-﻿
+
 #include "viewer.h"
 #include <commctrl.h>
 #include <stdio.h>
@@ -67,6 +67,21 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
         }
 
         int bgRadio = IDC_RADIO_BG_GREY + static_cast<int>(ctx.bgColor);
+        CheckRadioButton(hDlg, IDC_RADIO_BG_GREY, IDC_RADIO_BG_TRANSPARENT, bgRadio);
+
+        auto setCheck = [&](int id, bool on) {
+            CheckDlgButton(hDlg, id, on ? BST_CHECKED : BST_UNCHECKED);
+        };
+        setCheck(IDC_CHECK_ALWAYS_ON_TOP, ctx.alwaysOnTop);
+        setCheck(IDC_CHECK_START_FULLSCREEN, ctx.startFullScreen);
+        setCheck(IDC_CHECK_SINGLE_INSTANCE, ctx.enforceSingleInstance);
+        setCheck(IDC_CHECK_AUTO_REFRESH, ctx.isAutoRefresh);
+        setCheck(IDC_CHECK_SMOOTH_SCALING, ctx.smoothScaling);
+        setCheck(IDC_CHECK_FADE_ANIMATION, ctx.enableFadeAnimation);
+        setCheck(IDC_CHECK_SHOW_OSD, ctx.isOsdVisible);
+        setCheck(IDC_CHECK_ASK_DELETE, ctx.askToDelete);
+        setCheck(IDC_CHECK_PRESERVE_ZOOM, ctx.preserveZoomOnResize);
+
         CheckRadioButton(
             hDlg,
             IDC_RADIO_ZOOM_FIT,
