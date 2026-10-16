@@ -21,6 +21,27 @@ void ViewerApp::OnPaint(HWND hWnd) {
     EndPaint(hWnd, &ps);
 }
 
+void ViewerApp::NavigateImage(int direction, bool allowWrap) {
+    if (m_ctx.imageFiles.empty() || m_ctx.currentImageIndex == -1) {
+        return;
+    }
+
+    int size = static_cast<int>(m_ctx.imageFiles.size());
+    int targetIndex = m_ctx.currentImageIndex + direction;
+    if (targetIndex < 0 || targetIndex >= size) {
+        if (!allowWrap) {
+            return;
+        }
+        targetIndex = (targetIndex + size) % size;
+    }
+
+    m_ctx.currentImageIndex = targetIndex;
+    std::wstring title = PathFindFileNameW(m_ctx.imageFiles[targetIndex].c_str());
+    title += L"  [Loading...] - Minimal Image Viewer v2.0.6";
+    SetWindowTextW(m_ctx.hWnd, title.c_str());
+    LoadImageFromFile(m_ctx.imageFiles[targetIndex], direction < 0);
+}
+
 void ViewerApp::HandleCommand(WORD cmd) {
     switch (cmd) {
     case IDM_OPEN:          OpenFileAction(); break;
@@ -33,26 +54,8 @@ void ViewerApp::HandleCommand(WORD cmd) {
         break;
     case IDM_COPY:          HandleCopy(); break;
     case IDM_PASTE:         HandlePaste(); break;
-    case IDM_NEXT_IMG:
-        if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
-            size_t size = m_ctx.imageFiles.size();
-            m_ctx.currentImageIndex = (m_ctx.currentImageIndex + 1) % static_cast<int>(size);
-            std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
-            title += L"  [Loading...] - Minimal Image Viewer v2.0.6";
-            SetWindowTextW(m_ctx.hWnd, title.c_str());
-            LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], false);
-        }
-        break;
-    case IDM_PREV_IMG:
-        if (!m_ctx.imageFiles.empty() && m_ctx.currentImageIndex != -1) {
-            size_t size = m_ctx.imageFiles.size();
-            m_ctx.currentImageIndex = (m_ctx.currentImageIndex - 1 + static_cast<int>(size)) % static_cast<int>(size);
-            std::wstring title = PathFindFileNameW(m_ctx.imageFiles[m_ctx.currentImageIndex].c_str());
-            title += L"  [Loading...] - Minimal Image Viewer v2.0.6";
-            SetWindowTextW(m_ctx.hWnd, title.c_str());
-            LoadImageFromFile(m_ctx.imageFiles[m_ctx.currentImageIndex], true);
-        }
-        break;
+    case IDM_NEXT_IMG:      NavigateImage(1, m_ctx.wrapAroundNavigation); break;
+    case IDM_PREV_IMG:      NavigateImage(-1, m_ctx.wrapAroundNavigation); break;
     case IDM_ZOOM_IN: {
         RECT cr; GetClientRect(m_ctx.hWnd, &cr);
         POINT centerPt = { (cr.right - cr.left) / 2, (cr.bottom - cr.top) / 2 };
@@ -400,7 +403,7 @@ LRESULT ViewerApp::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam
         }
         else if (wParam == SLIDESHOW_TIMER_ID) {
             if (m_ctx.isSlideshowActive) {
-                HandleCommand(IDM_NEXT_IMG);
+                NavigateImage(1, true);
             }
         }
         

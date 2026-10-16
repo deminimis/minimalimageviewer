@@ -310,6 +310,7 @@ struct AppContext {
     bool enableFadeAnimation = true;
     bool askToDelete = true;
     bool preserveZoomOnResize = false;
+    bool wrapAroundNavigation = true;
     FILETIME lastWriteTime = { 0 };
     bool preserveView = false;
     float renderScale = 1.0f;
@@ -427,6 +428,7 @@ private:
     // UI Handlers
     void OnPaint(HWND hWnd);
     void HandleCommand(WORD cmd);
+    void NavigateImage(int direction, bool allowWrap);
     void UpdateAcceleratorTable();
     void OnContextMenu(HWND hWnd, POINT pt);
 

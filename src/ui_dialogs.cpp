@@ -31,6 +31,7 @@ static void ApplyPreferencesTranslations(HWND hDlg) {
     SetDlgItemTextW(hDlg, IDC_CHECK_SHOW_OSD, Tr(StrId::ShowOsd));
     SetDlgItemTextW(hDlg, IDC_CHECK_ASK_DELETE, Tr(StrId::AskBeforeDelete));
     SetDlgItemTextW(hDlg, IDC_CHECK_PRESERVE_ZOOM, Tr(StrId::PreserveZoom));
+    SetDlgItemTextW(hDlg, IDC_CHECK_WRAP_AROUND, Tr(StrId::WrapAround));
     SetDlgItemTextW(hDlg, IDC_BTN_REGISTER_ASSOC, Tr(StrId::RegisterDefaultApp));
 
     SetDlgItemTextW(hDlg, IDC_STATIC_LANGUAGE, Tr(StrId::Language));
@@ -81,6 +82,7 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
         setCheck(IDC_CHECK_SHOW_OSD, ctx.isOsdVisible);
         setCheck(IDC_CHECK_ASK_DELETE, ctx.askToDelete);
         setCheck(IDC_CHECK_PRESERVE_ZOOM, ctx.preserveZoomOnResize);
+        setCheck(IDC_CHECK_WRAP_AROUND, ctx.wrapAroundNavigation);
 
         CheckRadioButton(
             hDlg,
@@ -176,6 +178,7 @@ INT_PTR CALLBACK ViewerApp::PreferencesDialogProc(HWND hDlg, UINT message, WPARA
             ctx.isOsdVisible = (IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_OSD) == BST_CHECKED);
             ctx.askToDelete = (IsDlgButtonChecked(hDlg, IDC_CHECK_ASK_DELETE) == BST_CHECKED);
             ctx.preserveZoomOnResize = (IsDlgButtonChecked(hDlg, IDC_CHECK_PRESERVE_ZOOM) == BST_CHECKED);
+            ctx.wrapAroundNavigation = (IsDlgButtonChecked(hDlg, IDC_CHECK_WRAP_AROUND) == BST_CHECKED);
 
             if (IsDlgButtonChecked(hDlg, IDC_RADIO_ZOOM_FIT)) {
                 ctx.defaultZoomMode = DefaultZoomMode::Fit;
