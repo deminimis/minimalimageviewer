@@ -21,6 +21,52 @@
 
 #pragma warning(pop)
 
+#if defined(__MINGW32__) && !defined(__IWICBitmapSourceTransform_INTERFACE_DEFINED__)
+#define __IWICBitmapSourceTransform_INTERFACE_DEFINED__
+#include <unknwn.h>
+#include <wincodec.h>
+
+// Explicitly provide the missing WIC transform interface for MinGW
+MIDL_INTERFACE("3B16EC7F-EF66-4E74-8417-643B8C4A0F90")
+IWICBitmapSourceTransform : public IUnknown
+{
+public:
+    virtual HRESULT STDMETHODCALLTYPE DoesSupportTransform(
+        WICBitmapTransformOptions dstTransform,
+        BOOL *pfIsSupported) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE CopyPixels(
+        const WICRect *prc,
+        UINT uiWidth,
+        UINT uiHeight,
+        WICPixelFormatGUID *pguidDstFormat,
+        WICBitmapTransformOptions dstTransform,
+        UINT nStride,
+        UINT cbBufferSize,
+        BYTE *pbBuffer) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE GetClosestSize(
+        UINT *puiWidth,
+        UINT *puiHeight) = 0;
+
+    virtual HRESULT STDMETHODCALLTYPE GetClosestPixelFormat(
+        WICPixelFormatGUID *pguidDstFormat) = 0;
+};
+
+extern "C" const GUID IID_IWICBitmapSourceTransform =
+    {0x3B16EC7F, 0xEF66, 0x4E74, {0x84, 0x17, 0x64, 0x3B, 0x8C, 0x4A, 0x0F, 0x90}};
+
+template<>
+inline const GUID& __mingw_uuidof<IWICBitmapSourceTransform>() {
+    return IID_IWICBitmapSourceTransform;
+}
+
+template<>
+inline const GUID& __mingw_uuidof<IWICBitmapSourceTransform*>() {
+    return IID_IWICBitmapSourceTransform;
+}
+
+#endif
 
 
 static bool IsImageFile(const wchar_t* filePath) {

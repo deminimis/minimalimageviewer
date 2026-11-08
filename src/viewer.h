@@ -36,11 +36,18 @@
 #include <atomic>
 #include <wrl/client.h>
 using Microsoft::WRL::ComPtr;
+
+#ifdef __MINGW32__
+// Required for wil::unique_prop_variant
+#define _MSC_EXTENSIONS
+#endif
 #include <wil/resource.h>
-#include "resource.h"
+
+#include "Resource.h"
 #include "translations.h"
 #include <compare>
 #include <ranges>
+#include <memory>
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "gdi32.lib")
